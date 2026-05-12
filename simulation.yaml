@@ -1,8 +1,9 @@
 ros_distro: humble
 ros_domain_id: 0
 registry: localhost:5000
-image_prefix: mod101_sim_cuda
-base_image_override: nvidia/cuda:12.6.1-base-ubuntu22.04
+ros_distro: jazzy                                                                                                                                                                                                                                                                                                            
+base_image_override: nvidia/cuda:12.6.1-base-ubuntu24.04   # 24.04 for jazzy      
+image_prefix: mod101-local
 
 rmw_implementation: zenoh
 zenoh:

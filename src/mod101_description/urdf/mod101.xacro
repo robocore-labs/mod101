@@ -11,6 +11,15 @@
   <xacro:include filename="$(find mod101_description)/urdf/mod101.ros2control" />
   <xacro:include filename="$(find mod101_description)/urdf/mod101.gazebo" />
 </xacro:if>
+
+<!-- Anchor base_link to the world so the arm doesn't tip over under gravity. -->
+<link name="world"/>
+<joint name="world_to_base" type="fixed">
+  <parent link="world"/>
+  <child link="base_link"/>
+  <origin xyz="0 0 0" rpy="0 0 0"/>
+</joint>
+
 <link name="base_link">
   <inertial>
     <origin xyz="-0.01099401981130007 1.3821647392049386e-05 0.013450739285809572" rpy="0 0 0"/>

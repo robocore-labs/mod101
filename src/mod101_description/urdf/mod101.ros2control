@@ -44,14 +44,14 @@
       <state_interface name="velocity"/>
     </joint>
 
-    <!-- Mimic follower. ONLY the mimic/multiplier params — no command_interface
-         or state_interface tags. Humble's gz_ros2_control populates the
-         follower's interfaces automatically from the master; declaring them
-         here allocates write slots that never get a command and segfaults in
-         write() with a null deref. -->
+    <!-- Mimic follower. Pattern matches gz_ros2_control's humble
+         gripper_mimic_joint_position example: state interfaces only, NO
+         command interface. The follower-leader relationship is taken from the
+         URDF <mimic> tag on this joint — do NOT duplicate it here as
+         <param name="mimic">. -->
     <joint name="right_jaw_slider">
-      <param name="mimic">6</param>
-      <param name="multiplier">-1.0</param>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
     </joint>
 
   </ros2_control>
