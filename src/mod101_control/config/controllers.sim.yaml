@@ -7,40 +7,43 @@ controller_manager:
     joint_state_broadcaster:
       type: joint_state_broadcaster/JointStateBroadcaster
 
-    # Simple position-command controller (active by default).
-    # Send std_msgs/Float64MultiArray on /arm_controller/commands.
+    # Active by default. position_controllers takes Float64MultiArray on
+    # /<controller>/commands (same wire format as ForwardCommandController).
     arm_controller:
-      type: forward_command_controller/ForwardCommandController
+      type: position_controllers/JointGroupPositionController
 
-    # Trajectory controller for MoveIt (loaded inactive — switch via
-    #   ros2 control switch_controllers \
-    #     --activate arm_trajectory_controller --deactivate arm_controller
+    gripper_controller:
+      type: position_controllers/JointGroupPositionController
+
+    # JTC retained for MoveIt — DO NOT spawn from the gazebo launch on this
+    # Jazzy stack: gz_ros2_control + JTC currently segfaults in on_init
+    # because gz_ros2_control predates the Resource Manager constructor
+    # change (ros2_control issue #2400). Spawn from MoveIt's launch:
+    #   ros2 run controller_manager spawner arm_trajectory_controller --inactive
     arm_trajectory_controller:
       type: joint_trajectory_controller/JointTrajectoryController
 
-    gripper_controller:
-      type: joint_trajectory_controller/JointTrajectoryController
-
 arm_controller:
-  ros__parameters:
-    joints: ["1", "2", "3", "4", "5"]
-    interface_name: position
-
-arm_trajectory_controller:
   ros__parameters:
     joints: ["1", "2", "3", "4", "5"]
     command_interfaces:
       - position
     state_interfaces:
       - position
-      - velocity
     open_loop_control: true
-    allow_partial_joints_goal: false
-    allow_integration_in_goal_trajectories: true
 
 gripper_controller:
   ros__parameters:
     joints: ["6"]
+    command_interfaces:
+      - position
+    state_interfaces:
+      - position
+    open_loop_control: true
+
+arm_trajectory_controller:
+  ros__parameters:
+    joints: ["1", "2", "3", "4", "5"]
     command_interfaces:
       - position
     state_interfaces:

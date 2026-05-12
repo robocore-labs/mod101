@@ -165,6 +165,26 @@
   <mu1>0.2</mu1>
   <mu2>0.2</mu2>
   <self_collide>true</self_collide>
+
+  <sensor name="wrist_camera" type="camera">
+    <topic>wrist_camera/image_raw</topic>
+    <gz_frame_id>wrist_camera_pcb_1</gz_frame_id>
+    <update_rate>30</update_rate>
+    <always_on>1</always_on>
+    <visualize>true</visualize>
+    <camera>
+      <horizontal_fov>1.047</horizontal_fov> <!-- ~60 deg -->
+      <image>
+        <width>640</width>
+        <height>480</height>
+        <format>R8G8B8</format>
+      </image>
+      <clip>
+        <near>0.01</near>
+        <far>10.0</far>
+      </clip>
+    </camera>
+  </sensor>
 </gazebo>
 
 <gazebo reference="Parallel_gripper_assembly_v1_1">

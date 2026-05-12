@@ -3,3 +3,10 @@
   ros_type_name: "rosgraph_msgs/msg/Clock"
   gz_type_name: "gz.msgs.Clock"
   direction: GZ_TO_ROS
+
+# Wrist camera info (image stream is handled by ros_gz_image bridge in the launch).
+- ros_topic_name: "/wrist_camera/camera_info"
+  gz_topic_name: "/wrist_camera/camera_info"
+  ros_type_name: "sensor_msgs/msg/CameraInfo"
+  gz_type_name: "gz.msgs.CameraInfo"
+  direction: GZ_TO_ROS

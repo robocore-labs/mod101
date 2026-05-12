@@ -70,6 +70,17 @@ def generate_launch_description():
         output='screen',
     )
 
+    # Dedicated image bridge: gz publishes the raw image on
+    # wrist_camera/image_raw; this republishes it as a ROS sensor_msgs/Image.
+    wrist_camera_image_bridge = Node(
+        package='ros_gz_image',
+        executable='image_bridge',
+        name='wrist_camera_image_bridge',
+        arguments=['/wrist_camera/image_raw'],
+        parameters=[{'use_sim_time': True}],
+        output='screen',
+    )
+
     spawn_robot = Node(
         package='ros_gz_sim',
         executable='create',
@@ -93,13 +104,14 @@ def generate_launch_description():
             )],
         )
 
-    # Time-staged spawners; let the controller_manager come up before we hit it.
-    # arm_trajectory_controller is loaded inactive — MoveIt (or a manual
-    # switch_controllers call) activates it and deactivates arm_controller.
+    # Time-staged spawners. JTC (arm_trajectory_controller) is intentionally
+    # NOT spawned here — gz_ros2_control on Jazzy segfaults in JTC::on_init
+    # due to the Resource Manager constructor change (issue #2400). When you
+    # bring up MoveIt, spawn JTC from there in a separate process so the
+    # crash, if it still happens, doesn't take down the whole gazebo launch.
     spawn_jsb = spawner('joint_state_broadcaster', delay=3.0)
     spawn_arm = spawner('arm_controller', delay=5.0)
-    spawn_arm_traj = spawner('arm_trajectory_controller', '--inactive', delay=7.0)
-    spawn_gripper = spawner('gripper_controller', delay=9.0)
+    spawn_gripper = spawner('gripper_controller', delay=7.0)
 
     return LaunchDescription([
         gz_resource_path,
@@ -107,9 +119,9 @@ def generate_launch_description():
         gz_sim,
         clock_bridge,
         bridge,
+        wrist_camera_image_bridge,
         spawn_robot,
         spawn_jsb,
         spawn_arm,
-        spawn_arm_traj,
         spawn_gripper,
     ])

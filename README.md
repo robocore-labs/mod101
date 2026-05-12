@@ -18,18 +18,6 @@ The SO-101 is a great starting point for hobby robotics, but its all-3D-printed 
 | BOM cost | ~$85 | ~$134 | ~$211 | ~$1,200 |
 | License | Apache 2.0 | MIT | MIT | CC BY-NC-SA |
 
-The mod101 PRO exceeds the reBot B601's payload at every reach percentage, at 18% of the cost.
-
-## Architecture
-
-The arm is built from standardized, swappable components.
-
-**Structure:** Dual 2020 T-slot aluminum extrusion rails with a 15mm gap. The dual-rail design provides torsion resistance at the bracket mounting points (8.5× safety factor vs doubled servo torque) and a natural cable routing channel between the rails. Link lengths are configurable — cut extrusion to length.
-
-**Brackets:** PLA-CF (carbon fiber filled PLA), 6mm wall thickness. Exceeds the strength and stiffness of the 2mm aluminum brackets that ship with STS3250 servos (1.43× strength, 1.38× stiffness). Print flat, 4+ perimeters, 0.2mm layer height.
-
-**Servos:** Feetech STS3215 (30 kg·cm, ~$16.50) or STS3250 (50 kg·cm, ~$55). Same form factor, same TTL bus, same brackets. Drop-in upgrade. The shoulder and elbow joints are doubled (two servos per joint) for increased torque and redundancy.
-
 
 ## Configurations
 
@@ -110,19 +98,21 @@ Controllers loaded on gazebo launch:
 | Controller | Type | Joints | State at boot |
 |---|---|---|---|
 | `joint_state_broadcaster` | broadcaster | — | active |
-| `arm_controller` | `forward_command_controller/ForwardCommandController` (position) | 1-5 | **active** (default) |
-| `arm_trajectory_controller` | `joint_trajectory_controller/JointTrajectoryController` | 1-5 | inactive (for MoveIt) |
-| `gripper_controller` | `joint_trajectory_controller/JointTrajectoryController` | 6 | active |
+| `arm_controller` | `position_controllers/JointGroupPositionController` | 1-5 | **active** (default) |
+| `gripper_controller` | `position_controllers/JointGroupPositionController` | 6 | active |
+| `arm_trajectory_controller` | `joint_trajectory_controller/JointTrajectoryController` (JTC) | 1-5 | defined in YAML, **not spawned** — see note below |
 
-Send a position command to the arm:
+Send a position command:
 
 ```bash
 ros2 topic pub /arm_controller/commands std_msgs/msg/Float64MultiArray "{data: [0.0, 0.5, -0.5, 0.0, 0.0]}"
+ros2 topic pub /gripper_controller/commands std_msgs/msg/Float64MultiArray "{data: [0.013]}"
 ```
 
-Switch to trajectory control (e.g. when MoveIt comes up):
+**JTC is intentionally NOT spawned from `gazebo.launch.py`.** The current Jazzy stack (`gz_ros2_control` + `joint_trajectory_controller`) segfaults in `JTC::on_init()` because `gz_ros2_control` predates the Resource Manager constructor change ([ros2_control issue #2400](https://github.com/ros-controls/ros2_control/issues/2400)) — the hardware's executor isn't set, JTC dereferences a null at offset `0x18`. When you bring up MoveIt, spawn JTC from there in a separate launch and swap it in:
 
 ```bash
+ros2 run controller_manager spawner arm_trajectory_controller --inactive
 ros2 control switch_controllers \
   --activate arm_trajectory_controller --deactivate arm_controller
 ```
@@ -166,9 +156,8 @@ Replace 2× STS3215 shoulder servos with 2× STS3250 ($55 each). Everything else
 - **[vision-factory](https://github.com/robocore-dev/vision-factory)** — Plug-and-play computer vision pipeline generator
 
 ## Acknowledgments
-
-Derived from the [SO-101](https://github.com/TheRobotStudio/SO-ARM100) by The Robot Studio. Gripper inspired by the [PathOn 6DOF symmetric gripper](https://github.com/PathOn-AI/pathon_opensource).
+* Derived from the [SO-101](https://github.com/TheRobotStudio/SO-ARM100) by The Robot Studio. 
+* Gripper is the [PathOn 6DOF symmetric gripper](https://github.com/PathOn-AI/pathon_opensource).
 
 ## License
-
 MIT
