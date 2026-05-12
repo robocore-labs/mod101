@@ -1,0 +1,55 @@
+<?xml version="1.0"?>
+<!--
+  Real-hardware overlay for mod101. Pulls in the description with use_sim=false
+  (so the Gazebo ros2_control plugin and per-link gazebo extensions are skipped)
+  and declares its own ros2_control block with whichever hardware plugin the
+  bring-up uses. The plugin name below is a placeholder — swap it for the real
+  servo bus driver once that lands.
+-->
+<robot name="mod101_hardware" xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <xacro:arg name="use_sim" default="false"/>
+
+  <xacro:include filename="$(find mod101_description)/urdf/mod101.xacro"/>
+
+  <ros2_control name="mod101_hardware" type="system">
+    <hardware>
+      <!-- TODO: replace with the actual hardware_interface plugin. -->
+      <plugin>mock_components/GenericSystem</plugin>
+    </hardware>
+
+    <joint name="1">
+      <command_interface name="position"/>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+    <joint name="2">
+      <command_interface name="position"/>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+    <joint name="3">
+      <command_interface name="position"/>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+    <joint name="4">
+      <command_interface name="position"/>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+    <joint name="5">
+      <command_interface name="position"/>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+
+    <joint name="6">
+      <command_interface name="position"/>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+
+  </ros2_control>
+
+</robot>

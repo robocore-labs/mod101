@@ -1,0 +1,48 @@
+# Claude Code artifacts
+.claude/
+
+# Forge / pixi
+.forge/
+.pixi/*
+!.pixi/config.toml
+docker-compose.*.yaml
+
+# ROS 2 build artifacts (mod101 keeps packages directly under src/, no ros/ prefix)
+build/
+install/
+log/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.cproject
+.settings/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+.pytest_cache/
+.coverage
+*.cover
+
+# Environment files
+.env
+.env.local
+*.env
+
+# Windows
+**/*:Zone.Identifier

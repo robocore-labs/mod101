@@ -1,0 +1,19 @@
+<?xml version="1.0" ?>
+<robot name="mod101" xmlns:xacro="http://www.ros.org/wiki/xacro" >
+
+  <!-- Motor housings (all servo bodies). -->
+  <material name="motor_black">
+    <color rgba="0.050 0.050 0.050 1.0"/>
+  </material>
+
+  <!-- Structural arm parts (everything that isn't a motor). -->
+  <material name="body_darkgrey">
+    <color rgba="0.200 0.200 0.200 1.0"/>
+  </material>
+
+  <!-- Legacy name retained for compatibility. -->
+  <material name="silver">
+    <color rgba="0.700 0.700 0.700 1.0"/>
+  </material>
+
+</robot>
