@@ -2,6 +2,9 @@
 
 A modular, open-source 5+1 DOF robot arm derived from the SO-101. Built around dual 2020 aluminum extrusion links, PLA-CF printed brackets, and Feetech STS32xx serial bus servos.
 
+![](img/imagine.jpg)
+
+
 ## Why mod101?
 
 The SO-101 is a great starting point for hobby robotics, but its all-3D-printed structure is fragile, non-parametric, and the gripper is permanently integrated. The mod101 fixes all of that.

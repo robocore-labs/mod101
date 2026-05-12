@@ -37,12 +37,21 @@
       <state_interface name="velocity"/>
     </joint>
 
-    <!-- Gripper (prismatic). right_jaw_slider follows via URDF <mimic>;
-         requires a physics engine that honors mimic (bullet-featherstone). -->
+    <!-- Gripper master (prismatic). -->
     <joint name="6">
       <command_interface name="position"/>
       <state_interface name="position"/>
       <state_interface name="velocity"/>
+    </joint>
+
+    <!-- Mimic follower. ONLY the mimic/multiplier params — no command_interface
+         or state_interface tags. Humble's gz_ros2_control populates the
+         follower's interfaces automatically from the master; declaring them
+         here allocates write slots that never get a command and segfaults in
+         write() with a null deref. -->
+    <joint name="right_jaw_slider">
+      <param name="mimic">6</param>
+      <param name="multiplier">-1.0</param>
     </joint>
 
   </ros2_control>
