@@ -1,28 +1,39 @@
 #!/usr/bin/env python3
-"""Bring up the mod101 arm in Gazebo Sim with ros2_control wired through the
-gz_ros2_control plugin. Spawns the robot, then loads controllers via the
-controller_manager spawner Node (the canonical path — `ros2 control
-load_controller` has historically tripped JTC's parameter library on Jazzy).
-arm_trajectory_controller is loaded inactive for MoveIt to activate on demand.
+"""Bring up mod101 in Gazebo Sim with ros2_control. The tool layer is
+decoupled: this launch only knows how to bring up the arm + sim plumbing,
+then defers to `mod101_tool_<tool>/launch/tool.launch.py` to spawn any
+tool-specific controllers / nodes (image bridges, suction-pump drivers, etc.).
+
+Launch arg:
+    tool   default "parallel"   matches a package named mod101_tool_<tool>
 """
 
 import os
-from ament_index_python.packages import get_package_prefix, get_package_share_directory
+from ament_index_python.packages import (
+    get_package_prefix,
+    get_package_share_directory,
+    PackageNotFoundError,
+)
 from launch import LaunchDescription
 from launch.actions import (
+    DeclareLaunchArgument,
     IncludeLaunchDescription,
+    OpaqueFunction,
     SetEnvironmentVariable,
     TimerAction,
 )
 from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 import xacro
 
 
-def generate_launch_description():
+def _build(context):
+    tool = LaunchConfiguration('tool').perform(context)
+
     pkg_description = get_package_share_directory('mod101_description')
-    pkg_gazebo = get_package_share_directory('mod101_gazebo')
-    pkg_ros_gz_sim = get_package_share_directory('ros_gz_sim')
+    pkg_gazebo      = get_package_share_directory('mod101_gazebo')
+    pkg_ros_gz_sim  = get_package_share_directory('ros_gz_sim')
 
     install_prefix = get_package_prefix('mod101_description')
     gz_resource_path = SetEnvironmentVariable(
@@ -30,11 +41,15 @@ def generate_launch_description():
         value=os.path.join(install_prefix, 'share'),
     )
 
-    world_file = os.path.join(pkg_gazebo, 'worlds', 'empty.sdf')
-    urdf_file = os.path.join(pkg_description, 'urdf', 'mod101.xacro')
+    world_file    = os.path.join(pkg_gazebo, 'worlds', 'empty.sdf')
+    urdf_file     = os.path.join(pkg_description, 'urdf', 'mod101.xacro')
     bridge_config = os.path.join(pkg_gazebo, 'config', 'gz_ros_bridge.yaml')
 
-    robot_description = xacro.process_file(urdf_file).toxml()
+    # Expand the URDF with the chosen tool so the tool's links/joints/blocks
+    # come along inside robot_description.
+    robot_description = xacro.process_file(
+        urdf_file, mappings={'tool': tool}
+    ).toxml()
 
     robot_state_publisher = Node(
         package='robot_state_publisher',
@@ -70,8 +85,8 @@ def generate_launch_description():
         output='screen',
     )
 
-    # Dedicated image bridge: gz publishes the raw image on
-    # wrist_camera/image_raw; this republishes it as a ROS sensor_msgs/Image.
+    # Wrist camera lives on the arm (between elbow and wrist flange), not in
+    # a tool — bridge it here.
     wrist_camera_image_bridge = Node(
         package='ros_gz_image',
         executable='image_bridge',
@@ -104,16 +119,28 @@ def generate_launch_description():
             )],
         )
 
-    # Time-staged spawners. JTC (arm_trajectory_controller) is intentionally
-    # NOT spawned here — gz_ros2_control on Jazzy segfaults in JTC::on_init
-    # due to the Resource Manager constructor change (issue #2400). When you
-    # bring up MoveIt, spawn JTC from there in a separate process so the
-    # crash, if it still happens, doesn't take down the whole gazebo launch.
+    # Arm spawners only. JTC stays out of the launch (segfaults on Jazzy —
+    # see ros2_control issue #2400). The tool brings up its own controllers
+    # via its own launch fragment below.
     spawn_jsb = spawner('joint_state_broadcaster', delay=3.0)
     spawn_arm = spawner('arm_controller', delay=5.0)
-    spawn_gripper = spawner('gripper_controller', delay=7.0)
 
-    return LaunchDescription([
+    # Defer to the active tool's launch — spawns gripper/vacuum controllers,
+    # tool-specific bridges, anything else the tool needs at runtime.
+    tool_launch_actions = []
+    tool_pkg = f'mod101_tool_{tool}'
+    try:
+        tool_launch_file = os.path.join(
+            get_package_share_directory(tool_pkg), 'launch', 'tool.launch.py'
+        )
+        tool_launch_actions.append(IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(tool_launch_file)
+        ))
+    except PackageNotFoundError:
+        print(f'[mod101_gazebo] warning: tool package "{tool_pkg}" not found; '
+              f'continuing without tool-side launch.')
+
+    return [
         gz_resource_path,
         robot_state_publisher,
         gz_sim,
@@ -123,5 +150,16 @@ def generate_launch_description():
         spawn_robot,
         spawn_jsb,
         spawn_arm,
-        spawn_gripper,
+        *tool_launch_actions,
+    ]
+
+
+def generate_launch_description():
+    return LaunchDescription([
+        DeclareLaunchArgument(
+            'tool',
+            default_value='parallel',
+            description='End-effector package suffix (matches mod101_tool_<tool>).',
+        ),
+        OpaqueFunction(function=_build),
     ])

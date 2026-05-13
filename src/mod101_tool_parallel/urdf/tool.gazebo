@@ -1,0 +1,25 @@
+<?xml version="1.0" ?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <gazebo reference="Parallel_gripper_assembly_v1_1">
+    <material>Gazebo/DarkGrey</material>
+    <mu1>0.2</mu1>
+    <mu2>0.2</mu2>
+    <self_collide>true</self_collide>
+  </gazebo>
+
+  <gazebo reference="left_jaw">
+    <material>Gazebo/DarkGrey</material>
+    <mu1>0.2</mu1>
+    <mu2>0.2</mu2>
+    <self_collide>true</self_collide>
+  </gazebo>
+
+  <gazebo reference="right_jaw">
+    <material>Gazebo/DarkGrey</material>
+    <mu1>0.2</mu1>
+    <mu2>0.2</mu2>
+    <self_collide>true</self_collide>
+  </gazebo>
+
+</robot>

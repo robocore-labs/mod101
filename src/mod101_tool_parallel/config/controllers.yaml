@@ -1,0 +1,17 @@
+# Controllers contributed by the parallel-jaw tool. Loaded by the gz_ros2_control
+# plugin alongside the arm's controllers.sim.yaml — both end up in the same
+# controller_manager namespace. Don't redeclare controller_manager.update_rate
+# here; the arm yaml owns that.
+controller_manager:
+  ros__parameters:
+    gripper_controller:
+      type: position_controllers/JointGroupPositionController
+
+gripper_controller:
+  ros__parameters:
+    joints: ["6"]
+    command_interfaces:
+      - position
+    state_interfaces:
+      - position
+    open_loop_control: true

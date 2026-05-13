@@ -6,11 +6,38 @@
      to false. -->
 <xacro:arg name="use_sim" default="true"/>
 
+<!-- tool: which end-effector package to pull in. The arm terminates at
+     `wrist_flange`; the selected tool's URDF attaches via a fixed joint at
+     that link and contributes its own joints, ros2_control hardware block,
+     gazebo extensions, controllers, and (separately, via the gazebo launch)
+     its own launch fragment. Must match a package named
+     `mod101_tool_<tool>` that ships urdf/tool.urdf.xacro. -->
+<xacro:arg name="tool" default="parallel"/>
+
 <xacro:include filename="$(find mod101_description)/urdf/materials.xacro" />
 <xacro:if value="$(arg use_sim)">
   <xacro:include filename="$(find mod101_description)/urdf/mod101.ros2control" />
   <xacro:include filename="$(find mod101_description)/urdf/mod101.gazebo" />
 </xacro:if>
+
+<!-- ============================================================
+     Configurable 2020 aluminum extrusion lengths.
+     The web app edits ONLY these two property values; every dependent
+     quantity (joint offsets, box visuals, masses, inertias) recomputes.
+
+       shoulder_ext_length  - upper-arm rails (L and R, single 2020 each)
+       elbow_ext_length     - forearm dual-rail segment (one URDF link)
+
+     extrusion_density is the linear mass of one 2020 rail (kg/m).
+     The elbow link covers two parallel rails, so its mass is 2× density × L.
+     ============================================================ -->
+<xacro:property name="shoulder_ext_length" value="0.0800"/>
+<xacro:property name="elbow_ext_length"    value="0.0800"/>
+<xacro:property name="extrusion_density"   value="0.46"/>
+<xacro:property name="ext_cross"           value="0.020"/>  <!-- 20x20 mm profile -->
+<xacro:property name="ext_angle"           value="${pi/4}"/> <!-- both rails mount at 45 deg -->
+<xacro:property name="cos_a"               value="${cos(ext_angle)}"/>
+<xacro:property name="sin_a"               value="${sin(ext_angle)}"/>
 
 <!-- Anchor base_link to the world so the arm doesn't tip over under gravity. -->
 <link name="world"/>
@@ -23,8 +50,8 @@
 <link name="base_link">
   <inertial>
     <origin xyz="-0.01099401981130007 1.3821647392049386e-05 0.013450739285809572" rpy="0 0 0"/>
-    <mass value="0.6574246074497966"/>
-    <inertia ixx="0.000587" iyy="0.000496" izz="0.000744" ixy="-0.0" iyz="-0.0" ixz="0.000103"/>
+    <mass value="0.03628"/>
+    <inertia ixx="3.23936e-05" iyy="2.73718e-05" izz="4.10577e-05" ixy="0.0" iyz="0.0" ixz="5.68406e-06"/>
   </inertial>
   <visual>
     <origin xyz="0 0 0" rpy="0 0 0"/>
@@ -44,8 +71,8 @@
 <link name="servo_base_rotation_1">
   <inertial>
     <origin xyz="0.016199027563209848 0.010250000006755487 -0.015772935075263637" rpy="0 0 0"/>
-    <mass value="0.2843033831904074"/>
-    <inertia ixx="4e-05" iyy="7.3e-05" izz="6.2e-05" ixy="0.0" iyz="0.0" ixz="-1e-06"/>
+    <mass value="0.056"/>
+    <inertia ixx="7.87891e-06" iyy="1.4379e-05" izz="1.22123e-05" ixy="0.0" iyz="0.0" ixz="-1.96973e-07"/>
   </inertial>
   <visual>
     <origin xyz="0.0166 0.01025 -0.05" rpy="0 0 0"/>
@@ -65,8 +92,8 @@
 <link name="base_cover_1">
   <inertial>
     <origin xyz="0.02230032288194256 0.015943258220063473 1.6681447889688172e-12" rpy="0 0 0"/>
-    <mass value="0.18813748995031676"/>
-    <inertia ixx="6e-05" iyy="0.000108" izz="0.000142" ixy="1e-06" iyz="-0.0" ixz="0.0"/>
+    <mass value="0.01496"/>
+    <inertia ixx="4.77098e-06" iyy="8.58776e-06" izz="1.12913e-05" ixy="7.95163e-08" iyz="0.0" ixz="0.0"/>
   </inertial>
   <visual>
     <origin xyz="0.028504 0.01555 -0.0338" rpy="0 0 0"/>
@@ -86,8 +113,8 @@
 <link name="base_rotation_body_1">
   <inertial>
     <origin xyz="0.035322745794806994 1.0118106741288103e-05 -0.025518978505968827" rpy="0 0 0"/>
-    <mass value="0.704676770090136"/>
-    <inertia ixx="0.000503" iyy="0.000236" izz="0.000505" ixy="-0.0" iyz="-0.0" ixz="6e-06"/>
+    <mass value="0.03606"/>
+    <inertia ixx="2.57397e-05" iyy="1.20767e-05" izz="2.58421e-05" ixy="0.0" iyz="0.0" ixz="3.07034e-07"/>
   </inertial>
   <visual>
     <origin xyz="-0.0124 -0.0 -0.0528" rpy="0 0 0"/>
@@ -107,8 +134,8 @@
 <link name="servo_elbow_L_1">
   <inertial>
     <origin xyz="0.021389115640943528 -0.016027534864448984 0.006893671638235566" rpy="0 0 0"/>
-    <mass value="0.2843033831904074"/>
-    <inertia ixx="5.7e-05" iyy="6.2e-05" izz="5.7e-05" ixy="0.0" iyz="0.0" ixz="-1.7e-05"/>
+    <mass value="0.056"/>
+    <inertia ixx="1.12274e-05" iyy="1.22123e-05" izz="1.12274e-05" ixy="0.0" iyz="0.0" ixz="-3.34854e-06"/>
   </inertial>
   <visual>
     <origin xyz="0.080166 -0.038392 -0.213311" rpy="0 0 0"/>
@@ -125,23 +152,30 @@
   </collision>
 </link>
 
+<!-- Elbow extrusion: dual 2020 rail (single URDF link representing both).
+     Geometry derives from elbow_ext_length and the fixed +45 deg mount angle. -->
 <link name="elbow_extrusion_1">
+  <xacro:property name="L" value="${elbow_ext_length}"/>
+  <xacro:property name="m" value="${2 * extrusion_density * L}"/>
   <inertial>
-    <origin xyz="0.049497180996340276 -4.707636547932509e-07 0.0494977374716771" rpy="0 0 0"/>
-    <mass value="0.19070879526638077"/>
-    <inertia ixx="0.000168" iyy="0.00032" izz="0.000168" ixy="-0.0" iyz="-0.0" ixz="-0.000152"/>
+    <origin xyz="${L/2*cos_a} 0 ${L/2*sin_a}" rpy="0 ${ext_angle} 0"/>
+    <mass value="${m}"/>
+    <inertia ixx="${m*(ext_cross*ext_cross + L*L)/12}"
+             iyy="${m*(ext_cross*ext_cross + L*L)/12}"
+             izz="${m*(ext_cross*ext_cross + ext_cross*ext_cross)/12}"
+             ixy="0" iyz="0" ixz="0"/>
   </inertial>
   <visual>
-    <origin xyz="0.031623 0.000108 -0.247358" rpy="0 0 0"/>
+    <origin xyz="${L/2*cos_a} 0 ${L/2*sin_a}" rpy="0 ${ext_angle} 0"/>
     <geometry>
-      <mesh filename="file://$(find mod101_description)/meshes/elbow_extrusion_1.stl" scale="0.001 0.001 0.001"/>
+      <box size="${ext_cross} ${ext_cross} ${L}"/>
     </geometry>
     <material name="silver"/>
   </visual>
   <collision>
-    <origin xyz="0.031623 0.000108 -0.247358" rpy="0 0 0"/>
+    <origin xyz="${L/2*cos_a} 0 ${L/2*sin_a}" rpy="0 ${ext_angle} 0"/>
     <geometry>
-      <mesh filename="file://$(find mod101_description)/meshes/elbow_extrusion_1.stl" scale="0.001 0.001 0.001"/>
+      <box size="${ext_cross} ${ext_cross} ${L}"/>
     </geometry>
   </collision>
 </link>
@@ -149,8 +183,8 @@
 <link name="elbow_wrist_body_1">
   <inertial>
     <origin xyz="-0.0016612281041332028 0.00030497152583617594 -0.0016596828945049658" rpy="0 0 0"/>
-    <mass value="0.15177979663876204"/>
-    <inertia ixx="3.6e-05" iyy="1.9e-05" izz="3.6e-05" ixy="-0.0" iyz="-0.0" ixz="2e-06"/>
+    <mass value="0.01"/>
+    <inertia ixx="2.37186e-06" iyy="1.25181e-06" izz="2.37186e-06" ixy="0.0" iyz="0.0" ixz="1.3177e-07"/>
   </inertial>
   <visual>
     <origin xyz="-0.067372 0.000108 -0.346353" rpy="0 0 0"/>
@@ -170,8 +204,8 @@
 <link name="servo_wrist_tilt_1">
   <inertial>
     <origin xyz="0.018702326137297595 -0.015773405015014702 0.004206882115486588" rpy="0 0 0"/>
-    <mass value="0.2843033831904074"/>
-    <inertia ixx="5.7e-05" iyy="6.2e-05" izz="5.7e-05" ixy="-0.0" iyz="-0.0" ixz="-1.7e-05"/>
+    <mass value="0.056"/>
+    <inertia ixx="1.12274e-05" iyy="1.22123e-05" izz="1.12274e-05" ixy="0.0" iyz="0.0" ixz="-3.34854e-06"/>
   </inertial>
   <visual>
     <origin xyz="-0.069599 -0.015892 -0.363076" rpy="0 0 0"/>
@@ -191,8 +225,8 @@
 <link name="wrist_tilt_body_1">
   <inertial>
     <origin xyz="0.02524119619320095 -0.018651053893336624 0.01828846906369841" rpy="0 0 0"/>
-    <mass value="0.1813743601635659"/>
-    <inertia ixx="0.000105" iyy="0.000119" izz="8.1e-05" ixy="0.0" iyz="0.0" ixz="-4.1e-05"/>
+    <mass value="0.01421"/>
+    <inertia ixx="8.22636e-06" iyy="9.3232e-06" izz="6.34605e-06" ixy="0.0" iyz="0.0" ixz="-3.2122e-06"/>
   </inertial>
   <visual>
     <origin xyz="-0.097353 -0.018592 -0.376335" rpy="0 0 0"/>
@@ -212,8 +246,8 @@
 <link name="servo_base_rotation__1__1">
   <inertial>
     <origin xyz="0.016027045473077706 0.010249530067015771 -0.019999491027092475" rpy="0 0 0"/>
-    <mass value="0.2843033831904074"/>
-    <inertia ixx="6.2e-05" iyy="7.3e-05" izz="4e-05" ixy="0.0" iyz="-0.0" ixz="1e-06"/>
+    <mass value="0.056"/>
+    <inertia ixx="1.22123e-05" iyy="1.4379e-05" izz="7.87891e-06" ixy="0.0" iyz="0.0" ixz="1.96973e-07"/>
   </inertial>
   <visual>
     <origin xyz="-0.124753 0.010308 -0.409085" rpy="0 0 0"/>
@@ -233,8 +267,8 @@
 <link name="shoulder_thingy_R_1">
   <inertial>
     <origin xyz="-8.767897172190509e-10 0.012838206577361115 0.004551181846450855" rpy="0 0 0"/>
-    <mass value="0.07147698490220597"/>
-    <inertia ixx="1.2e-05" iyy="5e-06" izz="1.6e-05" ixy="-0.0" iyz="-0.0" ixz="-0.0"/>
+    <mass value="0.005"/>
+    <inertia ixx="8.39431e-07" iyy="3.49763e-07" izz="1.11924e-06" ixy="0.0" iyz="0.0" ixz="0.0"/>
   </inertial>
   <visual>
     <origin xyz="-0.0504 0.035245 -0.0346" rpy="0 0 0"/>
@@ -254,8 +288,8 @@
 <link name="shoulder_thingy_L_1">
   <inertial>
     <origin xyz="-9.9631208838602e-10 -0.012838206577359481 0.004551181846451098" rpy="0 0 0"/>
-    <mass value="0.07147698490220597"/>
-    <inertia ixx="1.2e-05" iyy="5e-06" izz="1.6e-05" ixy="-0.0" iyz="0.0" ixz="0.0"/>
+    <mass value="0.005"/>
+    <inertia ixx="8.39431e-07" iyy="3.49763e-07" izz="1.11924e-06" ixy="0.0" iyz="0.0" ixz="0.0"/>
   </inertial>
   <visual>
     <origin xyz="-0.0504 -0.035245 -0.0346" rpy="0 0 0"/>
@@ -275,8 +309,8 @@
 <link name="servo_shoulder_L_1">
   <inertial>
     <origin xyz="-0.010250001879856738 0.01577339742512835 0.01619857022441154" rpy="0 0 0"/>
-    <mass value="0.2843033831904074"/>
-    <inertia ixx="7.3e-05" iyy="6.2e-05" izz="4e-05" ixy="0.0" iyz="1e-06" ixz="-0.0"/>
+    <mass value="0.056"/>
+    <inertia ixx="1.4379e-05" iyy="1.22123e-05" izz="7.87891e-06" ixy="0.0" iyz="1.96973e-07" ixz="0.0"/>
   </inertial>
   <visual>
     <origin xyz="-0.06065 -0.006247 -0.048652" rpy="0 0 0"/>
@@ -296,8 +330,8 @@
 <link name="servo_shoulder_R_1">
   <inertial>
     <origin xyz="-0.010249999993244191 0.016026997214310577 0.019998570224410886" rpy="0 0 0"/>
-    <mass value="0.2843033831904074"/>
-    <inertia ixx="7.3e-05" iyy="6.2e-05" izz="4e-05" ixy="0.0" iyz="-1e-06" ixz="0.0"/>
+    <mass value="0.056"/>
+    <inertia ixx="1.4379e-05" iyy="1.22123e-05" izz="7.87891e-06" ixy="0.0" iyz="-1.96973e-07" ixz="0.0"/>
   </inertial>
   <visual>
     <origin xyz="-0.06065 0.038244 -0.044902" rpy="0 0 0"/>
@@ -317,8 +351,8 @@
 <link name="shoulder_fork_1">
   <inertial>
     <origin xyz="-0.017328700920341188 -0.04029953765013844 0.017328241708440162" rpy="0 0 0"/>
-    <mass value="0.33965096841258696"/>
-    <inertia ixx="0.000275" iyy="6.9e-05" izz="0.000275" ixy="0.0" iyz="-0.0" ixz="1.5e-05"/>
+    <mass value="0.022"/>
+    <inertia ixx="1.78124e-05" iyy="4.46929e-06" izz="1.78124e-05" ixy="0.0" iyz="0.0" ixz="9.71586e-07"/>
   </inertial>
   <visual>
     <origin xyz="-0.0504 -0.040447 -0.077652" rpy="0 0 0"/>
@@ -335,44 +369,56 @@
   </collision>
 </link>
 
+<!-- Shoulder extrusions: two parallel single 2020 rails, modeled as separate
+     URDF links. Rail direction (-1, 0, 1)/sqrt(2) in each rail's local frame. -->
 <link name="shoulder_extrusion_R_1">
+  <xacro:property name="L" value="${shoulder_ext_length}"/>
+  <xacro:property name="m" value="${extrusion_density * L}"/>
   <inertial>
-    <origin xyz="-0.04808319517233016 4.6150291116084374e-07 0.048083736553109435" rpy="0 0 0"/>
-    <mass value="0.18525996505938427"/>
-    <inertia ixx="0.000155" iyy="0.000293" izz="0.000155" ixy="-0.0" iyz="0.0" ixz="0.000139"/>
+    <origin xyz="${-L/2*cos_a} 0 ${L/2*sin_a}" rpy="0 ${-ext_angle} 0"/>
+    <mass value="${m}"/>
+    <inertia ixx="${m*(ext_cross*ext_cross + L*L)/12}"
+             iyy="${m*(ext_cross*ext_cross + L*L)/12}"
+             izz="${m*(ext_cross*ext_cross + ext_cross*ext_cross)/12}"
+             ixy="0" iyz="0" ixz="0"/>
   </inertial>
   <visual>
-    <origin xyz="-0.032298 -0.021797 -0.095753" rpy="0 0 0"/>
+    <origin xyz="${-L/2*cos_a} 0 ${L/2*sin_a}" rpy="0 ${-ext_angle} 0"/>
     <geometry>
-      <mesh filename="file://$(find mod101_description)/meshes/shoulder_extrusion_R_1.stl" scale="0.001 0.001 0.001"/>
+      <box size="${ext_cross} ${ext_cross} ${L}"/>
     </geometry>
     <material name="silver"/>
   </visual>
   <collision>
-    <origin xyz="-0.032298 -0.021797 -0.095753" rpy="0 0 0"/>
+    <origin xyz="${-L/2*cos_a} 0 ${L/2*sin_a}" rpy="0 ${-ext_angle} 0"/>
     <geometry>
-      <mesh filename="file://$(find mod101_description)/meshes/shoulder_extrusion_R_1.stl" scale="0.001 0.001 0.001"/>
+      <box size="${ext_cross} ${ext_cross} ${L}"/>
     </geometry>
   </collision>
 </link>
 
 <link name="shoulder_extrusion_L_1">
+  <xacro:property name="L" value="${shoulder_ext_length}"/>
+  <xacro:property name="m" value="${extrusion_density * L}"/>
   <inertial>
-    <origin xyz="-0.04808319517233136 4.6150291132390775e-07 0.04808373655311343" rpy="0 0 0"/>
-    <mass value="0.185259965059384"/>
-    <inertia ixx="0.000155" iyy="0.000293" izz="0.000155" ixy="-0.0" iyz="0.0" ixz="0.000139"/>
+    <origin xyz="${-L/2*cos_a} 0 ${L/2*sin_a}" rpy="0 ${-ext_angle} 0"/>
+    <mass value="${m}"/>
+    <inertia ixx="${m*(ext_cross*ext_cross + L*L)/12}"
+             iyy="${m*(ext_cross*ext_cross + L*L)/12}"
+             izz="${m*(ext_cross*ext_cross + ext_cross*ext_cross)/12}"
+             ixy="0" iyz="0" ixz="0"/>
   </inertial>
   <visual>
-    <origin xyz="-0.032298 0.021503 -0.095753" rpy="0 0 0"/>
+    <origin xyz="${-L/2*cos_a} 0 ${L/2*sin_a}" rpy="0 ${-ext_angle} 0"/>
     <geometry>
-      <mesh filename="file://$(find mod101_description)/meshes/shoulder_extrusion_L_1.stl" scale="0.001 0.001 0.001"/>
+      <box size="${ext_cross} ${ext_cross} ${L}"/>
     </geometry>
     <material name="silver"/>
   </visual>
   <collision>
-    <origin xyz="-0.032298 0.021503 -0.095753" rpy="0 0 0"/>
+    <origin xyz="${-L/2*cos_a} 0 ${L/2*sin_a}" rpy="0 ${-ext_angle} 0"/>
     <geometry>
-      <mesh filename="file://$(find mod101_description)/meshes/shoulder_extrusion_L_1.stl" scale="0.001 0.001 0.001"/>
+      <box size="${ext_cross} ${ext_cross} ${L}"/>
     </geometry>
   </collision>
 </link>
@@ -380,8 +426,8 @@
 <link name="servo_elbow_R_1">
   <inertial>
     <origin xyz="0.004206760311437227 -0.015772935075269688 0.018702316289626986" rpy="0 0 0"/>
-    <mass value="0.2843033831904074"/>
-    <inertia ixx="5.7e-05" iyy="6.2e-05" izz="5.7e-05" ixy="-0.0" iyz="-0.0" ixz="-1.7e-05"/>
+    <mass value="0.056"/>
+    <inertia ixx="1.12274e-05" iyy="1.22123e-05" izz="1.12274e-05" ixy="0.0" iyz="0.0" ixz="-3.34854e-06"/>
   </inertial>
   <visual>
     <origin xyz="0.063019 0.0061 -0.201467" rpy="0 0 0"/>
@@ -401,8 +447,8 @@
 <link name="shoulder_elbow_body_1">
   <inertial>
     <origin xyz="-0.0019992665841001706 -0.021656534987030827 -0.005303555607661298" rpy="0 0 0"/>
-    <mass value="1.018958347133993"/>
-    <inertia ixx="0.00082" iyy="0.000474" izz="0.000902" ixy="-0.0" iyz="0.0" ixz="9.9e-05"/>
+    <mass value="0.048"/>
+    <inertia ixx="3.86277e-05" iyy="2.23287e-05" izz="4.24905e-05" ixy="0.0" iyz="0.0" ixz="4.66359e-06"/>
   </inertial>
   <visual>
     <origin xyz="0.063868 -0.021797 -0.19192" rpy="0 0 0"/>
@@ -422,8 +468,8 @@
 <link name="camera_tilter_1">
   <inertial>
     <origin xyz="0.009999980548356519 -0.01000046993973492 0.004506480984489913" rpy="0 0 0"/>
-    <mass value="0.03940096810311941"/>
-    <inertia ixx="8e-06" iyy="3e-06" izz="9e-06" ixy="0.0" iyz="0.0" ixz="0.0"/>
+    <mass value="0.004"/>
+    <inertia ixx="8.12163e-07" iyy="3.04561e-07" izz="9.13683e-07" ixy="0.0" iyz="0.0" ixz="0.0"/>
   </inertial>
   <visual>
     <origin xyz="-0.132353 -0.009942 -0.422735" rpy="0 0 0"/>
@@ -443,8 +489,8 @@
 <link name="camera_mount_1">
   <inertial>
     <origin xyz="-0.007288325877458535 -0.015423933596013567 0.016997892303908857" rpy="0 0 0"/>
-    <mass value="0.06632884156356776"/>
-    <inertia ixx="2.7e-05" iyy="2.5e-05" izz="9e-06" ixy="0.0" iyz="-0.0" ixz="5e-06"/>
+    <mass value="0.006"/>
+    <inertia ixx="2.44238e-06" iyy="2.26146e-06" izz="8.14125e-07" ixy="0.0" iyz="0.0" ixz="4.52292e-07"/>
   </inertial>
   <visual>
     <origin xyz="-0.142353 -0.015442 -0.433735" rpy="0 0 0"/>
@@ -482,32 +528,22 @@
   </collision>
 </link>
 
-<link name="Parallel_gripper_assembly_v1_1">
+<!-- Wrist flange: standard mount contract for tool packages. The active tool
+     (selected via the `tool` xacro arg) attaches its root link here via a
+     fixed joint at this origin. Z points out from the flange, X up. -->
+<link name="wrist_flange">
   <inertial>
-    <origin xyz="0.037342654208552234 -2.71910236137967e-05 0.002477280757497813" rpy="0 0 0"/>
-    <mass value="0.2052487208695061"/>
-    <inertia ixx="0.000143" iyy="9.4e-05" izz="0.000137" ixy="-0.0" iyz="-0.0" ixz="3e-06"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <mass value="0.001"/>
+    <inertia ixx="1e-06" iyy="1e-06" izz="1e-06" ixy="0" iyz="0" ixz="0"/>
   </inertial>
-  <visual>
-    <origin xyz="-0.159253 5.8e-05 -0.375845" rpy="0 0 0"/>
-    <geometry>
-      <mesh filename="file://$(find mod101_description)/meshes/Parallel_gripper_assembly_v1_1.stl" scale="0.001 0.001 0.001"/>
-    </geometry>
-    <material name="body_darkgrey"/>
-  </visual>
-  <collision>
-    <origin xyz="-0.159253 5.8e-05 -0.375845" rpy="0 0 0"/>
-    <geometry>
-      <mesh filename="file://$(find mod101_description)/meshes/Parallel_gripper_assembly_v1_1.stl" scale="0.001 0.001 0.001"/>
-    </geometry>
-  </collision>
 </link>
 
 <link name="elbow_servo_adapter_L_1">
   <inertial>
     <origin xyz="0.0032185478922750616 0.01220725577249973 0.0032181051199828836" rpy="0 0 0"/>
-    <mass value="0.07147698490220597"/>
-    <inertia ixx="1.4e-05" iyy="5e-06" izz="1.4e-05" ixy="0.0" iyz="0.0" ixz="2e-06"/>
+    <mass value="0.005"/>
+    <inertia ixx="9.79336e-07" iyy="3.49763e-07" izz="9.79336e-07" ixy="0.0" iyz="0.0" ixz="1.39905e-07"/>
   </inertial>
   <visual>
     <origin xyz="0.080203 -0.010347 -0.198779" rpy="0 0 0"/>
@@ -527,8 +563,8 @@
 <link name="elbow_servo_adapter_R_1">
   <inertial>
     <origin xyz="0.003218547892274659 0.012838668927221533 0.0032181051199852984" rpy="0 0 0"/>
-    <mass value="0.07147698490220597"/>
-    <inertia ixx="1.4e-05" iyy="5e-06" izz="1.4e-05" ixy="-0.0" iyz="-0.0" ixz="2e-06"/>
+    <mass value="0.005"/>
+    <inertia ixx="9.79336e-07" iyy="3.49763e-07" izz="9.79336e-07" ixy="0.0" iyz="0.0" ixz="1.39905e-07"/>
   </inertial>
   <visual>
     <origin xyz="0.080203 0.035098 -0.198779" rpy="0 0 0"/>
@@ -548,8 +584,8 @@
 <link name="elbow_fork_1">
   <inertial>
     <origin xyz="0.019838012429013507 -0.04030046988921287 0.019838568416752494" rpy="0 0 0"/>
-    <mass value="0.44091930022442544"/>
-    <inertia ixx="0.000369" iyy="9.6e-05" izz="0.000369" ixy="-0.0" iyz="-0.0" ixz="-2.4e-05"/>
+    <mass value="0.025"/>
+    <inertia ixx="2.09222e-05" iyy="5.44317e-06" izz="2.09222e-05" ixy="0.0" iyz="0.0" ixz="-1.36079e-06"/>
   </inertial>
   <visual>
     <origin xyz="0.049725 -0.040192 -0.229256" rpy="0 0 0"/>
@@ -598,7 +634,7 @@
 </joint>
 
 <joint name="Rigid 20" type="fixed">
-  <origin xyz="0.098995 0.0 0.098995" rpy="0 0 0"/>
+  <origin xyz="${elbow_ext_length*cos_a} 0 ${elbow_ext_length*sin_a}" rpy="0 0 0"/>
   <parent link="elbow_extrusion_1"/>
   <child link="elbow_wrist_body_1"/>
 </joint>
@@ -672,7 +708,7 @@
 </joint>
 
 <joint name="Rigid 45" type="fixed">
-  <origin xyz="-0.096166 0.0 0.096167" rpy="0 0 0"/>
+  <origin xyz="${-shoulder_ext_length*cos_a} 0 ${shoulder_ext_length*sin_a}" rpy="0 0 0"/>
   <parent link="shoulder_extrusion_R_1"/>
   <child link="shoulder_elbow_body_1"/>
 </joint>
@@ -698,7 +734,7 @@
 <joint name="5" type="continuous">
   <origin xyz="0.0345 0.01025 -0.03324" rpy="0 0 0"/>
   <parent link="servo_base_rotation__1__1"/>
-  <child link="Parallel_gripper_assembly_v1_1"/>
+  <child link="wrist_flange"/>
   <axis xyz="1.0 -0.0 0.0"/>
 </joint>
 
@@ -721,63 +757,14 @@
   <axis xyz="0.0 1.0 -0.0"/>
 </joint>
 
-<link name="left_jaw">
-  <inertial>
-    <origin xyz="0.023806479253455026 -0.0016996718789872856 -0.019446683209120547" rpy="0 0 0"/>
-    <mass value="0.016624081834698816"/>
-    <inertia ixx="4e-06" iyy="8e-06" izz="6e-06" ixy="-0.0" iyz="0.0" ixz="1e-06"/>
-  </inertial>
-  <visual>
-    <origin xyz="-0.347749 -0.040991 -0.254594" rpy="0 0 0"/>
-    <geometry>
-      <mesh filename="file://$(find mod101_description)/meshes/left_jaw_v1_1.stl" scale="0.001 0.001 0.001"/>
-    </geometry>
-    <material name="body_darkgrey"/>
-  </visual>
-  <collision>
-    <origin xyz="-0.347749 -0.040991 -0.254594" rpy="0 0 0"/>
-    <geometry>
-      <mesh filename="file://$(find mod101_description)/meshes/left_jaw_v1_1.stl" scale="0.001 0.001 0.001"/>
-    </geometry>
-  </collision>
-</link>
-
-<link name="right_jaw">
-  <inertial>
-    <origin xyz="0.023808169064152396 0.0016409164921040156 -0.02262577329786908" rpy="0 0 0"/>
-    <mass value="0.016623969125743532"/>
-    <inertia ixx="4e-06" iyy="8e-06" izz="6e-06" ixy="0.0" iyz="0.0" ixz="-0.0"/>
-  </inertial>
-  <visual>
-    <origin xyz="-0.34739 -0.000594 -0.254245" rpy="0 0 0"/>
-    <geometry>
-      <mesh filename="file://$(find mod101_description)/meshes/right_jaw_v1_1.stl" scale="0.001 0.001 0.001"/>
-    </geometry>
-    <material name="body_darkgrey"/>
-  </visual>
-  <collision>
-    <origin xyz="-0.34739 -0.000594 -0.254245" rpy="0 0 0"/>
-    <geometry>
-      <mesh filename="file://$(find mod101_description)/meshes/right_jaw_v1_1.stl" scale="0.001 0.001 0.001"/>
-    </geometry>
-  </collision>
-</link>
-
-<joint name="6" type="prismatic">
-  <origin xyz="0.04361 0.021616 0.020519" rpy="0 0 0"/>
-  <parent link="Parallel_gripper_assembly_v1_1"/>
-  <child link="left_jaw"/>
-  <axis xyz="0.008881 0.999923 0.008649"/>
-  <limit effort="100" lower="-0.013" upper="0.013" velocity="100"/>
-</joint>
-
-<joint name="right_jaw_slider" type="prismatic">
-  <origin xyz="0.043251 -0.022781 0.02017" rpy="0 0 0"/>
-  <parent link="Parallel_gripper_assembly_v1_1"/>
-  <child link="right_jaw"/>
-  <axis xyz="0.008881 0.999923 0.008649"/>
-  <limit effort="100" lower="-0.013" upper="0.013" velocity="100"/>
-  <mimic joint="6" multiplier="-1" offset="0"/>
-</joint>
+<!-- Pull in the active tool. xacro doesn't support nesting $(arg) inside
+     $(find), so we list each known tool as its own conditional include.
+     Add a new tool: drop in mod101_tool_<name>/ and append a branch here. -->
+<xacro:if value="${'$(arg tool)' == 'parallel'}">
+  <xacro:include filename="$(find mod101_tool_parallel)/urdf/tool.urdf.xacro"/>
+</xacro:if>
+<xacro:if value="${'$(arg tool)' == 'none'}">
+  <xacro:include filename="$(find mod101_tool_none)/urdf/tool.urdf.xacro"/>
+</xacro:if>
 
 </robot>

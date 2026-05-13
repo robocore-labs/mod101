@@ -1,3 +1,5 @@
+# Arm-only controllers. End-effector controllers live in
+# mod101_tool_<tool>/config/controllers.yaml — gz_ros2_control loads both files.
 controller_manager:
   ros__parameters:
     update_rate: 100  # Hz — must be int (Jazzy crashes on `100.0`)
@@ -8,17 +10,13 @@ controller_manager:
       type: joint_state_broadcaster/JointStateBroadcaster
 
     # Active by default. position_controllers takes Float64MultiArray on
-    # /<controller>/commands (same wire format as ForwardCommandController).
+    # /<controller>/commands.
     arm_controller:
       type: position_controllers/JointGroupPositionController
 
-    gripper_controller:
-      type: position_controllers/JointGroupPositionController
-
-    # JTC retained for MoveIt — DO NOT spawn from the gazebo launch on this
-    # Jazzy stack: gz_ros2_control + JTC currently segfaults in on_init
-    # because gz_ros2_control predates the Resource Manager constructor
-    # change (ros2_control issue #2400). Spawn from MoveIt's launch:
+    # JTC retained for MoveIt — not spawned from the gazebo launch (segfaults
+    # in on_init on Jazzy; ros2_control issue #2400). Spawn from MoveIt's
+    # launch when needed:
     #   ros2 run controller_manager spawner arm_trajectory_controller --inactive
     arm_trajectory_controller:
       type: joint_trajectory_controller/JointTrajectoryController
@@ -26,15 +24,6 @@ controller_manager:
 arm_controller:
   ros__parameters:
     joints: ["1", "2", "3", "4", "5"]
-    command_interfaces:
-      - position
-    state_interfaces:
-      - position
-    open_loop_control: true
-
-gripper_controller:
-  ros__parameters:
-    joints: ["6"]
     command_interfaces:
       - position
     state_interfaces:

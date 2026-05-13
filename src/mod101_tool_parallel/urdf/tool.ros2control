@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<!--
+  Parallel-gripper hardware block. Registered as its own ros2_control system
+  alongside the arm's block — gz_ros2_control treats them as independent
+  hardware components sharing the model's controller_manager.
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <ros2_control name="mod101_tool_parallel_sim_system" type="system">
+    <hardware>
+      <plugin>gz_ros2_control/GazeboSimSystem</plugin>
+    </hardware>
+
+    <joint name="6">
+      <command_interface name="position"/>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+
+    <!-- Mimic follower: state interfaces only, no command. -->
+    <joint name="right_jaw_slider">
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+
+  </ros2_control>
+
+</robot>

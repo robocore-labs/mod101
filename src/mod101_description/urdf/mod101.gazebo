@@ -1,10 +1,20 @@
 <?xml version="1.0" ?>
 <robot name="mod101" xmlns:xacro="http://www.ros.org/wiki/xacro" >
 
-<!-- ros2_control plugin for Gazebo Sim -->
+<!-- ros2_control plugin for Gazebo Sim. Loads BOTH the arm's controller
+     yaml and the active tool's yaml — gz_ros2_control merges multiple
+     <parameters> files into the model's single controller_manager namespace,
+     so the tool can contribute its own controllers without touching this file.
+
+     Tools that don't have a yaml (e.g. mod101_tool_none) ship a passive
+     stub; if the file is absent gz_ros2_control silently skips it.  -->
 <gazebo>
   <plugin filename="gz_ros2_control-system" name="gz_ros2_control::GazeboSimROS2ControlPlugin">
     <parameters>$(find mod101_control)/config/controllers.sim.yaml</parameters>
+    <!-- Tool-specific controllers yaml. mod101_tool_none has none. -->
+    <xacro:if value="${'$(arg tool)' == 'parallel'}">
+      <parameters>$(find mod101_tool_parallel)/config/controllers.yaml</parameters>
+    </xacro:if>
   </plugin>
 </gazebo>
 
@@ -187,13 +197,6 @@
   </sensor>
 </gazebo>
 
-<gazebo reference="Parallel_gripper_assembly_v1_1">
-  <material>${body_color}</material>
-  <mu1>0.2</mu1>
-  <mu2>0.2</mu2>
-  <self_collide>true</self_collide>
-</gazebo>
-
 <gazebo reference="elbow_servo_adapter_L_1">
   <material>${body_color}</material>
   <mu1>0.2</mu1>
@@ -209,20 +212,6 @@
 </gazebo>
 
 <gazebo reference="elbow_fork_1">
-  <material>${body_color}</material>
-  <mu1>0.2</mu1>
-  <mu2>0.2</mu2>
-  <self_collide>true</self_collide>
-</gazebo>
-
-<gazebo reference="left_jaw">
-  <material>${body_color}</material>
-  <mu1>0.2</mu1>
-  <mu2>0.2</mu2>
-  <self_collide>true</self_collide>
-</gazebo>
-
-<gazebo reference="right_jaw">
   <material>${body_color}</material>
   <mu1>0.2</mu1>
   <mu2>0.2</mu2>

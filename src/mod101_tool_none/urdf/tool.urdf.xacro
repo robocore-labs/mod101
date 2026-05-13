@@ -1,0 +1,43 @@
+<?xml version="1.0" ?>
+<!--
+  Passive end effector. Just a thin sealing cap on the wrist flange so the
+  arm runs cleanly without a gripper. No joints, no ros2_control hardware,
+  no controllers, no launch.
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <link name="end_cap">
+    <inertial>
+      <origin xyz="0 0 0.005" rpy="0 0 0"/>
+      <mass value="0.010"/>
+      <inertia ixx="1e-06" iyy="1e-06" izz="1e-06" ixy="0" iyz="0" ixz="0"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0.005" rpy="0 0 0"/>
+      <geometry>
+        <cylinder radius="0.025" length="0.010"/>
+      </geometry>
+      <material name="body_darkgrey"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0.005" rpy="0 0 0"/>
+      <geometry>
+        <cylinder radius="0.025" length="0.010"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <joint name="end_cap_mount" type="fixed">
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <parent link="wrist_flange"/>
+    <child link="end_cap"/>
+  </joint>
+
+  <gazebo reference="end_cap">
+    <material>Gazebo/DarkGrey</material>
+    <mu1>0.2</mu1>
+    <mu2>0.2</mu2>
+    <self_collide>false</self_collide>
+  </gazebo>
+
+</robot>

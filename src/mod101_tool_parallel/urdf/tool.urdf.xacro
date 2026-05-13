@@ -1,0 +1,110 @@
+<?xml version="1.0" ?>
+<!--
+  Parallel-jaw gripper tool. Mounts to the standard mod101 `wrist_flange`
+  contract: bolts on as a fixed child at the flange origin (Z out, X up).
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!-- ============================================================
+       Gripper body + jaws
+       ============================================================ -->
+
+  <link name="Parallel_gripper_assembly_v1_1">
+    <inertial>
+      <origin xyz="0.037342654208552234 -2.71910236137967e-05 0.002477280757497813" rpy="0 0 0"/>
+      <mass value="0.078"/>
+      <inertia ixx="5.43441e-05" iyy="3.57288e-05" izz="5.20688e-05" ixy="-0.0" iyz="-0.0" ixz="1.14025e-06"/>
+    </inertial>
+    <visual>
+      <origin xyz="-0.159253 5.8e-05 -0.375845" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://mod101_tool_parallel/meshes/Parallel_gripper_assembly_v1_1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="body_darkgrey"/>
+    </visual>
+    <collision>
+      <origin xyz="-0.159253 5.8e-05 -0.375845" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://mod101_tool_parallel/meshes/Parallel_gripper_assembly_v1_1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="left_jaw">
+    <inertial>
+      <origin xyz="0.023806479253455026 -0.0016996718789872856 -0.019446683209120547" rpy="0 0 0"/>
+      <mass value="0.012"/>
+      <inertia ixx="2.88928e-06" iyy="5.77856e-06" izz="4.33392e-06" ixy="-0.0" iyz="0.0" ixz="7.22321e-07"/>
+    </inertial>
+    <visual>
+      <origin xyz="-0.347749 -0.040991 -0.254594" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://mod101_tool_parallel/meshes/left_jaw_v1_1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="body_darkgrey"/>
+    </visual>
+    <collision>
+      <origin xyz="-0.347749 -0.040991 -0.254594" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://mod101_tool_parallel/meshes/left_jaw_v1_1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="right_jaw">
+    <inertial>
+      <origin xyz="0.023808169064152396 0.0016409164921040156 -0.02262577329786908" rpy="0 0 0"/>
+      <mass value="0.012"/>
+      <inertia ixx="2.88928e-06" iyy="5.77856e-06" izz="4.33392e-06" ixy="0.0" iyz="0.0" ixz="-0.0"/>
+    </inertial>
+    <visual>
+      <origin xyz="-0.34739 -0.000594 -0.254245" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://mod101_tool_parallel/meshes/right_jaw_v1_1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="body_darkgrey"/>
+    </visual>
+    <collision>
+      <origin xyz="-0.34739 -0.000594 -0.254245" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://mod101_tool_parallel/meshes/right_jaw_v1_1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <!-- ============================================================
+       Joints
+       ============================================================ -->
+
+  <!-- Fixed mount: gripper body bolts to the wrist flange contract. -->
+  <joint name="parallel_gripper_mount" type="fixed">
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <parent link="wrist_flange"/>
+    <child link="Parallel_gripper_assembly_v1_1"/>
+  </joint>
+
+  <joint name="6" type="prismatic">
+    <origin xyz="0.04361 0.021616 0.020519" rpy="0 0 0"/>
+    <parent link="Parallel_gripper_assembly_v1_1"/>
+    <child link="left_jaw"/>
+    <axis xyz="0.008881 0.999923 0.008649"/>
+    <limit effort="100" lower="-0.013" upper="0.013" velocity="100"/>
+  </joint>
+
+  <joint name="right_jaw_slider" type="prismatic">
+    <origin xyz="0.043251 -0.022781 0.02017" rpy="0 0 0"/>
+    <parent link="Parallel_gripper_assembly_v1_1"/>
+    <child link="right_jaw"/>
+    <axis xyz="0.008881 0.999923 0.008649"/>
+    <limit effort="100" lower="-0.013" upper="0.013" velocity="100"/>
+    <mimic joint="6" multiplier="-1" offset="0"/>
+  </joint>
+
+  <!-- ============================================================
+       ros2_control + gazebo extensions
+       ============================================================ -->
+
+  <xacro:include filename="$(find mod101_tool_parallel)/urdf/tool.ros2control"/>
+  <xacro:include filename="$(find mod101_tool_parallel)/urdf/tool.gazebo"/>
+
+</robot>

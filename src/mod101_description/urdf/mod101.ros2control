@@ -37,22 +37,8 @@
       <state_interface name="velocity"/>
     </joint>
 
-    <!-- Gripper master (prismatic). -->
-    <joint name="6">
-      <command_interface name="position"/>
-      <state_interface name="position"/>
-      <state_interface name="velocity"/>
-    </joint>
-
-    <!-- Mimic follower. Pattern matches gz_ros2_control's humble
-         gripper_mimic_joint_position example: state interfaces only, NO
-         command interface. The follower-leader relationship is taken from the
-         URDF <mimic> tag on this joint — do NOT duplicate it here as
-         <param name="mimic">. -->
-    <joint name="right_jaw_slider">
-      <state_interface name="position"/>
-      <state_interface name="velocity"/>
-    </joint>
+    <!-- End-effector joints live in $(arg tool)'s own <ros2_control> block;
+         see mod101_tool_<tool>/urdf/tool.ros2control. -->
 
   </ros2_control>
 
