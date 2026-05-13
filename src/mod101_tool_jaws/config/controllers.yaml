@@ -1,0 +1,18 @@
+# Controllers contributed by the SO-101 jaws tool. Loaded by gz_ros2_control
+# alongside the arm's controllers.sim.yaml. Named `gripper_controller` for
+# topic-parity with the other tools so downstream code can stay tool-agnostic.
+#
+# Range: 0 rad (closed) to 2.14 rad (open).
+controller_manager:
+  ros__parameters:
+    gripper_controller:
+      type: position_controllers/JointGroupPositionController
+
+gripper_controller:
+  ros__parameters:
+    joints: ["6"]
+    command_interfaces:
+      - position
+    state_interfaces:
+      - position
+    open_loop_control: true

@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <title>mod101 configurator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Tomorrow:wght@500;600&display=swap" rel="stylesheet">
 <script type="importmap">
 {
   "imports": {
@@ -13,108 +16,264 @@
 }
 </script>
 <style>
+  /* Ported from /home/cdr/Work/robocore-studio/core/frontend/styles.css */
   :root {
-    --bg: #0f1115;
-    --panel: #161a22;
-    --border: #262b36;
-    --text: #e6e8ee;
-    --muted: #8a92a3;
-    --accent: #7ec6ff;
-    --ok: #6fd692;
-    --warn: #f0b656;
-    --bad: #f06a6a;
+    color-scheme: dark;
+    --bg: hsl(0, 0%, 7%);
+    --bg-2: hsl(0, 0%, 5%);
+    --bg-3: hsl(0, 0%, 10%);
+    --bg-input: hsl(0, 0%, 12%);
+    --border: hsl(0, 0%, 20%);
+    --border-soft: hsl(0, 0%, 14%);
+    --fg: hsl(0, 0%, 100%);
+    --fg-dim: hsl(0, 0%, 60%);
+    --fg-mute: hsl(0, 0%, 40%);
+    --accent: hsl(173, 72%, 36%);
+    --accent-hover: hsl(173, 72%, 42%);
+    --accent-soft: hsla(173, 72%, 36%, 0.12);
+    --accent-fg: hsl(0, 0%, 0%);
+    --warn: hsl(28, 90%, 55%);
+    --error: hsl(0, 85%, 60%);
+    --error-soft: hsla(0, 85%, 60%, 0.1);
+    --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --font-display: "Tomorrow", "Inter", sans-serif;
+    --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   }
+
+  * { box-sizing: border-box; }
+
   body {
     margin: 0;
     padding: 2rem;
     background: var(--bg);
-    color: var(--text);
-    font-family: ui-monospace, 'JetBrains Mono', 'Fira Code', monospace;
+    color: var(--fg);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    letter-spacing: 0.02em;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
     line-height: 1.5;
   }
-  h1 { margin-top: 0; font-weight: 500; letter-spacing: 0.5px; }
-  h2 { font-weight: 500; font-size: 1.05rem; color: var(--accent); margin-top: 1.5rem; }
+
+  .wrap { max-width: 1400px; margin: 0 auto; }
+
+  h1 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 22px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin: 0 0 4px;
+  }
+
+  h2 {
+    font-family: var(--font-sans);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    font-weight: 600;
+    color: var(--fg-dim);
+    margin: 18px 0 8px;
+  }
+  .panel > h2:first-child { margin-top: 0; }
+
   .grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1.5rem;
-    max-width: 1100px;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 16px;
   }
+  .viewer-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.4fr) minmax(360px, 1fr);
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+  @media (max-width: 900px) {
+    .viewer-grid { grid-template-columns: 1fr; }
+  }
+
   .panel {
-    background: var(--panel);
+    background: var(--bg-2);
     border: 1px solid var(--border);
     border-radius: 6px;
-    padding: 1.25rem 1.5rem;
+    padding: 16px 20px;
   }
+
   .input-row {
     display: flex;
     align-items: center;
-    gap: 1rem;
-    margin: 0.75rem 0;
+    gap: 12px;
+    margin: 6px 0;
   }
-  .input-row label { min-width: 180px; color: var(--muted); }
-  .input-row input[type=range] { flex: 1; }
-  .input-row input[type=number] {
-    width: 70px;
-    background: #0a0d12;
-    color: var(--text);
+  .input-row label {
+    min-width: 140px;
+    color: var(--fg-dim);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    font-weight: 600;
+  }
+  .input-row input[type=range] {
+    flex: 1;
+    accent-color: var(--accent);
+  }
+  .input-row input[type=number],
+  #tool-select {
+    background: var(--bg-input);
+    color: var(--fg);
     border: 1px solid var(--border);
     border-radius: 3px;
     padding: 4px 6px;
-    font-family: inherit;
+    font-family: var(--font-mono);
+    font-size: 12px;
   }
-  table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
-  th, td { padding: 6px 8px; text-align: right; border-bottom: 1px solid var(--border); }
-  th { color: var(--muted); font-weight: 500; text-align: right; }
-  th:first-child, td:first-child { text-align: left; color: var(--muted); }
-  td.num { font-variant-numeric: tabular-nums; }
-  pre {
-    background: #0a0d12;
-    border: 1px solid var(--border);
-    padding: 1rem;
-    border-radius: 4px;
-    overflow-x: auto;
-    font-size: 0.85rem;
-    color: var(--text);
+  .input-row input[type=number] { width: 72px; }
+  #tool-select { flex: 1; min-width: 0; }
+  .input-row > span { color: var(--fg-mute); font-size: 11px; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
   }
-  button {
-    background: var(--accent);
-    color: #0a0d12;
-    border: none;
-    padding: 6px 14px;
-    border-radius: 3px;
-    font-family: inherit;
-    cursor: pointer;
+  th, td {
+    padding: 6px 8px;
+    text-align: right;
+    border-bottom: 1px solid var(--border-soft);
+    font-family: var(--font-mono);
+  }
+  th {
+    color: var(--fg-dim);
+    font-family: var(--font-sans);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
     font-weight: 600;
   }
-  button:hover { filter: brightness(1.1); }
-  .footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
-  .note { color: var(--muted); font-size: 0.85rem; margin-top: 0.5rem; }
-  .ok { color: var(--ok); }
-  .warn { color: var(--warn); }
-  .bad { color: var(--bad); }
+  th:first-child, td:first-child {
+    text-align: left;
+    color: var(--fg-dim);
+    font-family: var(--font-sans);
+    font-size: 12px;
+    letter-spacing: 0.02em;
+  }
+  td.num, .readout {
+    font-variant-numeric: tabular-nums;
+    color: var(--fg);
+  }
+
+  pre {
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    padding: 12px 14px;
+    border-radius: 4px;
+    overflow-x: auto;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--fg);
+    line-height: 1.5;
+  }
+
+  button {
+    font: inherit;
+    cursor: pointer;
+    background: var(--accent);
+    color: var(--accent-fg);
+    border: none;
+    padding: 6px 14px;
+    border-radius: 4px;
+    font-family: var(--font-sans);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    transition: background 120ms ease;
+  }
+  button:hover { background: var(--accent-hover); }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* Secondary / "ghost" buttons (Copy, Home) — match robocore-studio's
+     .urdf-btn-ghost. */
+  button.ghost {
+    background: var(--bg-3);
+    color: var(--fg-dim);
+    border: 1px solid var(--border);
+  }
+  button.ghost:hover {
+    color: var(--fg);
+    border-color: var(--fg-mute);
+    background: var(--bg-input);
+  }
+
+  .note {
+    color: var(--fg-mute);
+    font-size: 11px;
+    margin-top: 6px;
+    letter-spacing: 0.02em;
+  }
+  .note code, p code {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    background: var(--bg-3);
+    border: 1px solid var(--border-soft);
+    padding: 1px 4px;
+    border-radius: 2px;
+    color: var(--fg);
+  }
+
+  .ok    { color: var(--accent); }
+  .warn  { color: var(--warn); }
+  .bad   { color: var(--error); }
+
+  .footer {
+    color: var(--fg-mute);
+    font-size: 11px;
+    margin-top: 2rem;
+    letter-spacing: 0.02em;
+  }
+
   #viewer {
     width: 100%;
-    height: 520px;
-    background: #0a0d12;
+    height: clamp(280px, 55vh, 560px);
+    background: hsl(0, 0%, 4%);
     border: 1px solid var(--border);
     border-radius: 4px;
   }
   #viewer canvas { display: block; width: 100%; height: 100%; }
+
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border: 2px solid var(--bg-2); }
+  ::-webkit-scrollbar-thumb:hover { background: var(--fg-mute); }
+
+  @media (max-width: 640px) {
+    body { padding: 1rem; }
+    .panel { padding: 12px 14px; }
+    .input-row { flex-wrap: wrap; gap: 6px; }
+    .input-row label { min-width: 100%; }
+    h1 { font-size: 18px; }
+    button { padding: 8px 14px; }
+  }
 </style>
 </head>
 <body>
 
+<div class="wrap">
+
 <h1>mod101 — arm configurator</h1>
 <p class="note">Edit the two extrusion lengths. Range and payload recompute live. Copy the xacro snippet at the bottom back into <code>mod101_description/urdf/mod101.xacro</code>.</p>
 
-<div class="grid">
-
+<div class="viewer-grid">
+  <div class="panel">
+    <h2>Live preview</h2>
+    <div id="viewer"></div>
+    <p class="note" id="viewer-status">Loading URDF…</p>
+  </div>
   <div class="panel">
     <h2>Configuration</h2>
     <div class="input-row">
       <label>end-effector tool</label>
-      <select id="tool-select" style="flex: 1; background: #0a0d12; color: var(--text); border: 1px solid var(--border); padding: 4px 6px; font-family: inherit; border-radius: 3px;"></select>
+      <select id="tool-select"></select>
     </div>
     <div class="input-row">
       <label>shoulder length</label>
@@ -130,6 +289,17 @@
     </div>
     <p class="note">Practical bounds are ~80–280 mm per segment. Below 80 the brackets collide; above 280 the shoulder servo stalls under arm weight alone.</p>
 
+    <h2>Joint pose</h2>
+    <div id="joint-sliders">
+      <p class="note" id="joint-empty">Joints appear once the URDF loads.</p>
+    </div>
+    <button id="home" class="ghost" style="margin-top: 8px;">Home (ready pose)</button>
+  </div>
+</div>
+
+<div class="grid">
+
+  <div class="panel">
     <h2>Mass breakdown</h2>
     <table>
       <tr><td>Fixed parts (printed + camera + jaws)</td>           <td class="num" id="m-fixed"></td></tr>
@@ -167,22 +337,18 @@
 
 </div>
 
-<div class="panel" style="max-width: 1100px; margin-top: 1.5rem;">
-  <h2>Live preview</h2>
-  <div id="viewer"></div>
-  <p class="note" id="viewer-status">Loading URDF…</p>
-</div>
-
-<div class="panel" style="max-width: 1100px; margin-top: 1.5rem;">
+<div class="panel" style="margin-top: 16px;">
   <h2>xacro values</h2>
   <pre id="snippet"></pre>
   <button id="save">Save to mod101.xacro</button>
-  <button id="copy" style="margin-left: 0.5rem; background: #555; color: var(--text);">Copy snippet</button>
+  <button id="copy" class="ghost" style="margin-left: 8px;">Copy snippet</button>
   <p class="note" id="copy-feedback"></p>
   <p class="note">When the page is served by <code>configurator/server.py</code>, "Save" writes the new property values directly to <code>src/mod101_description/urdf/mod101.xacro</code>. Without the server, only the snippet is editable (use Copy).</p>
 </div>
 
 <p class="footer">All math is first-order. Real servo torque drops with temperature, voltage, and duty cycle — derate accordingly. The 70 %-stall continuous figure is the manufacturer's safe-load rating, not a thermal limit.</p>
+
+</div><!-- .wrap -->
 
 <script>
 'use strict';
@@ -452,6 +618,94 @@ scene.add(robotRoot);
 let currentRobot = null;
 const loader = new URDFLoader();
 
+// "Ready" home pose — matches the initial_value's in mod101.ros2control so
+// the viewer and Gazebo wake up looking the same. Joints not listed here
+// default to 0.
+const HOME_POSE = {
+  '2': -Math.PI / 4,   // shoulder pitch back, -45°
+  '3':  Math.PI / 2,   // elbow up, +90°
+  '4': -Math.PI / 4,   // wrist tilt back, -45°
+};
+
+// --- joint sliders -----------------------------------------------------------
+// Built dynamically from the URDF so we pick up whichever tool is loaded
+// (each tool can add its own actuated joints). Mimic followers are skipped:
+// they're driven by the master via setJointValue automatically.
+function buildJointSliders() {
+  const container = document.getElementById('joint-sliders');
+  container.innerHTML = '';
+  if (!currentRobot) return;
+
+  const entries = Object.entries(currentRobot.joints)
+    .filter(([_, j]) => j.jointType !== 'fixed' && !j.mimicJoint);
+
+  // Sort active arm joints (numeric names 1..6) first, then alphabetically.
+  entries.sort(([a], [b]) => {
+    const na = /^\d+$/.test(a), nb = /^\d+$/.test(b);
+    if (na && nb) return Number(a) - Number(b);
+    if (na) return -1;
+    if (nb) return 1;
+    return a.localeCompare(b);
+  });
+
+  if (entries.length === 0) {
+    const p = document.createElement('p');
+    p.className = 'note';
+    p.textContent = 'No actuated joints (the `none` tool has nothing to pose).';
+    container.appendChild(p);
+    return;
+  }
+
+  for (const [name, joint] of entries) {
+    let lower = joint.limit ? Number(joint.limit.lower) : -Math.PI;
+    let upper = joint.limit ? Number(joint.limit.upper) : Math.PI;
+    // Continuous joints store lower==upper==0; replace with ±π for a usable range.
+    if (joint.jointType === 'continuous' || lower === upper) {
+      lower = -Math.PI; upper = Math.PI;
+    }
+    const isLinear = joint.jointType === 'prismatic';
+    const step     = (upper - lower) / 400;
+    const home     = HOME_POSE[name] ?? 0;
+    const initial  = Math.max(lower, Math.min(upper, home));
+    currentRobot.setJointValue(name, initial);
+
+    const row = document.createElement('div');
+    row.className = 'input-row';
+    row.dataset.joint = name;
+    const labelText = isLinear
+      ? `joint ${name} (mm)`
+      : `joint ${name} (rad)`;
+    row.innerHTML = `
+      <label style="min-width: 130px;">${labelText}</label>
+      <input type="range" min="${lower}" max="${upper}" step="${step}" value="${initial}">
+      <span class="readout" style="min-width: 3.5em; text-align: right; font-variant-numeric: tabular-nums;"></span>
+    `;
+    const slider  = row.querySelector('input');
+    const readout = row.querySelector('.readout');
+    const render  = v => readout.textContent = isLinear
+      ? (v * 1000).toFixed(1)
+      : v.toFixed(2);
+    slider.addEventListener('input', () => {
+      const v = Number(slider.value);
+      currentRobot.setJointValue(name, v);
+      render(v);
+    });
+    render(initial);
+    container.appendChild(row);
+  }
+}
+
+document.getElementById('home').addEventListener('click', () => {
+  if (!currentRobot) return;
+  for (const slider of document.querySelectorAll('#joint-sliders input[type=range]')) {
+    const row  = slider.closest('.input-row');
+    const name = row.dataset.joint;
+    const v    = HOME_POSE[name] ?? 0;
+    slider.value = v;
+    slider.dispatchEvent(new Event('input'));
+  }
+});
+
 async function loadUrdf() {
   status.textContent = 'Loading URDF…';
   status.className = 'note';
@@ -471,6 +725,7 @@ async function loadUrdf() {
     }
     currentRobot = loader.parse(text);
     robotRoot.add(currentRobot);
+    buildJointSliders();
     status.textContent = 'URDF loaded.';
     status.className = 'note ok';
   } catch (e) {

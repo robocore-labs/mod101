@@ -60,9 +60,10 @@ Every end-effector is a standalone ROS 2 package (`mod101_tool_<name>`) carrying
 |---|---|---|---|
 | `parallel` | ![](img/tools/parallel.png) | Parallel-jaw gripper, single prismatic joint with a mimic'd right jaw. Default. | `6` (prismatic, ±13 mm) |
 | `pincopen` | ![](img/tools/pincopen.png) | [PincOpen](https://github.com/CNURobotics/pinc_open_driver) pincer gripper (Pollen Robotics). Single revolute drive + 4-bar linkage. | `6` (revolute, −2.44…0 rad) |
+| `jaws` | ![](img/tools/jaws.png) | SO-101 single-jaw gripper — moving jaw rotates against the fixed wrist-roll body. Cheapest tool, just one extra servo. | `6` (revolute, 0…2.14 rad) |
 | `none` | ![](img/tools/none.png) | Blank end-cap. No actuators — useful as a baseline or a template for a new tool. | — |
 
-Adding your own is a one-package job (URDF + ros2_control + launch). See [`docs/ros-architecture.md`](docs/ros-architecture.md#adding-a-new-tool) for the contract.
+Adding your own is a one-package job (URDF + ros2_control + launch). See [`docs/tool-convention.md`](docs/tool-convention.md) for the coordinate convention every tool follows, and [`docs/ros-architecture.md`](docs/ros-architecture.md#adding-a-new-tool) for the package contract.
 
 
 ## Getting started
@@ -77,7 +78,7 @@ cd ~/Work/mod101
 # 2. Build the arm + the tools you want
 colcon build --packages-select \
   mod101_description mod101_control mod101_gazebo \
-  mod101_tool_parallel mod101_tool_pincopen mod101_tool_none
+  mod101_tool_parallel mod101_tool_pincopen mod101_tool_jaws mod101_tool_none
 source install/setup.bash
 
 # 3. Launch sim — pick a tool with the `tool:=` arg
@@ -92,6 +93,7 @@ python3 configurator/server.py  # http://localhost:8000/
 
 ### Deeper docs
 
+- **[docs/tool-convention.md](docs/tool-convention.md)** — coordinate convention for tool URDFs (mount joint identity, `+X` outward, `+Z` up, bolt pattern at origin)
 - **[docs/ros-architecture.md](docs/ros-architecture.md)** — package layout, the tool contract, controllers, joints, MoveIt + JTC notes, real-hardware wiring, known gotchas
 - **[docs/configurator.md](docs/configurator.md)** — endpoint reference, how the live xacro edit works
 

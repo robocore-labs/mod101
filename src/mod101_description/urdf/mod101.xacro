@@ -12,7 +12,7 @@
      gazebo extensions, controllers, and (separately, via the gazebo launch)
      its own launch fragment. Must match a package named
      `mod101_tool_<tool>` that ships urdf/tool.urdf.xacro. -->
-<xacro:arg name="tool" default="parallel"/>
+<xacro:arg name="tool" default="jaws"/>
 
 <xacro:include filename="$(find mod101_description)/urdf/materials.xacro" />
 <xacro:if value="$(arg use_sim)">
@@ -31,8 +31,8 @@
      extrusion_density is the linear mass of one 2020 rail (kg/m).
      The elbow link covers two parallel rails, so its mass is 2× density × L.
      ============================================================ -->
-<xacro:property name="shoulder_ext_length" value="0.0800"/>
-<xacro:property name="elbow_ext_length"    value="0.0800"/>
+<xacro:property name="shoulder_ext_length" value="0.1360"/>
+<xacro:property name="elbow_ext_length"    value="0.1400"/>
 <xacro:property name="extrusion_density"   value="0.46"/>
 <xacro:property name="ext_cross"           value="0.020"/>  <!-- 20x20 mm profile -->
 <xacro:property name="ext_angle"           value="${pi/4}"/> <!-- both rails mount at 45 deg -->
@@ -100,7 +100,7 @@
     <geometry>
       <mesh filename="file://$(find mod101_description)/meshes/base_cover_1.stl" scale="0.001 0.001 0.001"/>
     </geometry>
-    <material name="body_darkgrey"/>
+    <material name="accent_green"/>
   </visual>
   <collision>
     <origin xyz="0.028504 0.01555 -0.0338" rpy="0 0 0"/>
@@ -455,7 +455,7 @@
     <geometry>
       <mesh filename="file://$(find mod101_description)/meshes/shoulder_elbow_body_1.stl" scale="0.001 0.001 0.001"/>
     </geometry>
-    <material name="body_darkgrey"/>
+    <material name="accent_green"/>
   </visual>
   <collision>
     <origin xyz="0.063868 -0.021797 -0.19192" rpy="0 0 0"/>
@@ -476,7 +476,7 @@
     <geometry>
       <mesh filename="file://$(find mod101_description)/meshes/camera_tilter_1.stl" scale="0.001 0.001 0.001"/>
     </geometry>
-    <material name="body_darkgrey"/>
+    <material name="accent_green"/>
   </visual>
   <collision>
     <origin xyz="-0.132353 -0.009942 -0.422735" rpy="0 0 0"/>
@@ -497,7 +497,7 @@
     <geometry>
       <mesh filename="file://$(find mod101_description)/meshes/camera_mount_1.stl" scale="0.001 0.001 0.001"/>
     </geometry>
-    <material name="body_darkgrey"/>
+    <material name="accent_green"/>
   </visual>
   <collision>
     <origin xyz="-0.142353 -0.015442 -0.433735" rpy="0 0 0"/>
@@ -592,7 +592,7 @@
     <geometry>
       <mesh filename="file://$(find mod101_description)/meshes/elbow_fork_1.stl" scale="0.001 0.001 0.001"/>
     </geometry>
-    <material name="body_darkgrey"/>
+    <material name="accent_green"/>
   </visual>
   <collision>
     <origin xyz="0.049725 -0.040192 -0.229256" rpy="0 0 0"/>
@@ -765,6 +765,9 @@
 </xacro:if>
 <xacro:if value="${'$(arg tool)' == 'pincopen'}">
   <xacro:include filename="$(find mod101_tool_pincopen)/urdf/tool.urdf.xacro"/>
+</xacro:if>
+<xacro:if value="${'$(arg tool)' == 'jaws'}">
+  <xacro:include filename="$(find mod101_tool_jaws)/urdf/tool.urdf.xacro"/>
 </xacro:if>
 <xacro:if value="${'$(arg tool)' == 'none'}">
   <xacro:include filename="$(find mod101_tool_none)/urdf/tool.urdf.xacro"/>

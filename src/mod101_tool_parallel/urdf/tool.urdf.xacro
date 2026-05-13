@@ -1,12 +1,45 @@
 <?xml version="1.0" ?>
 <!--
-  Parallel-jaw gripper tool. Mounts to the standard mod101 `wrist_flange`
-  contract: bolts on as a fixed child at the flange origin (Z out, X up).
+  Parallel-jaw gripper tool. Follows docs/tool-convention.md:
+
+    wrist_flange
+      └─[parallel_mount, identity]──> parallel_root
+           └─[parallel_cad_to_root, identity]──> Parallel_gripper_assembly_v1_1
+                 ├─[6, prismatic]──> left_jaw
+                 └─[right_jaw_slider, prismatic <mimic>]──> right_jaw
+
+  The vendored CAD sub-tree was authored such that its link origin already
+  coincides with the bolt pattern, so parallel_cad_to_root is identity —
+  parallel_root and Parallel_gripper_assembly_v1_1 are colocated.
 -->
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
 
   <!-- ============================================================
-       Gripper body + jaws
+       Convention root: at the bolt pattern, +X outward, +Z up.
+       ============================================================ -->
+
+  <link name="parallel_root">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="0.001"/>
+      <inertia ixx="1e-7" iyy="1e-7" izz="1e-7" ixy="0" iyz="0" ixz="0"/>
+    </inertial>
+  </link>
+
+  <joint name="parallel_mount" type="fixed">
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <parent link="wrist_flange"/>
+    <child  link="parallel_root"/>
+  </joint>
+
+  <joint name="parallel_cad_to_root" type="fixed">
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <parent link="parallel_root"/>
+    <child  link="Parallel_gripper_assembly_v1_1"/>
+  </joint>
+
+  <!-- ============================================================
+       Gripper body + jaws (vendored CAD sub-tree)
        ============================================================ -->
 
   <link name="Parallel_gripper_assembly_v1_1">
@@ -20,7 +53,7 @@
       <geometry>
         <mesh filename="package://mod101_tool_parallel/meshes/Parallel_gripper_assembly_v1_1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
-      <material name="body_darkgrey"/>
+      <material name="accent_green"/>
     </visual>
     <collision>
       <origin xyz="-0.159253 5.8e-05 -0.375845" rpy="0 0 0"/>
@@ -41,7 +74,7 @@
       <geometry>
         <mesh filename="package://mod101_tool_parallel/meshes/left_jaw_v1_1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
-      <material name="body_darkgrey"/>
+      <material name="accent_green"/>
     </visual>
     <collision>
       <origin xyz="-0.347749 -0.040991 -0.254594" rpy="0 0 0"/>
@@ -62,7 +95,7 @@
       <geometry>
         <mesh filename="package://mod101_tool_parallel/meshes/right_jaw_v1_1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
-      <material name="body_darkgrey"/>
+      <material name="accent_green"/>
     </visual>
     <collision>
       <origin xyz="-0.34739 -0.000594 -0.254245" rpy="0 0 0"/>
@@ -75,13 +108,6 @@
   <!-- ============================================================
        Joints
        ============================================================ -->
-
-  <!-- Fixed mount: gripper body bolts to the wrist flange contract. -->
-  <joint name="parallel_gripper_mount" type="fixed">
-    <origin xyz="0 0 0" rpy="0 0 0"/>
-    <parent link="wrist_flange"/>
-    <child link="Parallel_gripper_assembly_v1_1"/>
-  </joint>
 
   <joint name="6" type="prismatic">
     <origin xyz="0.04361 0.021616 0.020519" rpy="0 0 0"/>

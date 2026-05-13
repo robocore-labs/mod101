@@ -9,8 +9,11 @@
       convention (arm uses 1-5, tool uses 6).
     * single-active-joint design preserved: `6` is revolute, the four arm/
       finger joints follow via URDF <mimic> (works under bullet-featherstone).
-    * fixed-joint mount from `wrist_flange` -> `pincopen_base_link`. The
-      transform below is a placeholder — measure the adapter bracket and tune.
+    * mount layered per docs/tool-convention.md:
+        wrist_flange ─[pincopen_mount, identity]─> pincopen_root
+                     ─[pincopen_cad_to_root, identity]─> pincopen_base_link
+      (PincOpen's CAD frame already follows the convention so cad_to_root
+      is identity; tune that joint if reorientation becomes needed.)
     * minimal inertials added (upstream has none; gz_ros2_control needs them).
 -->
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
@@ -18,7 +21,36 @@
   <xacro:property name="mesh_scale" value="0.001 0.001 0.001"/>
 
   <!-- ============================================================
-       Links
+       Convention root: at the bolt pattern, +X outward, +Z up.
+       The vendored sub-tree starts at `pincopen_base_link`; PincOpen's CAD
+       frame happens to match the convention already (link origins coincide
+       with the wrist mount, mesh visual_origins are zero) so the
+       cad-to-root joint is identity. Tune rpy here if you need to reorient
+       the gripper.
+       ============================================================ -->
+
+  <link name="pincopen_root">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="0.001"/>
+      <inertia ixx="1e-7" iyy="1e-7" izz="1e-7" ixy="0" iyz="0" ixz="0"/>
+    </inertial>
+  </link>
+
+  <joint name="pincopen_mount" type="fixed">
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <parent link="wrist_flange"/>
+    <child  link="pincopen_root"/>
+  </joint>
+
+  <joint name="pincopen_cad_to_root" type="fixed">
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <parent link="pincopen_root"/>
+    <child  link="pincopen_base_link"/>
+  </joint>
+
+  <!-- ============================================================
+       Vendored PincOpen sub-tree
        ============================================================ -->
 
   <link name="pincopen_base_link">
@@ -32,7 +64,7 @@
       <geometry>
         <mesh filename="package://mod101_tool_pincopen/meshes/Gripper_Palm_Shell_w_motor_v1.stl" scale="${mesh_scale}"/>
       </geometry>
-      <material name="body_darkgrey"/>
+      <material name="accent_green"/>
     </visual>
     <collision>
       <origin xyz="0.029 0 0.0033" rpy="0 0 0"/>
@@ -68,7 +100,7 @@
       <geometry>
         <mesh filename="package://mod101_tool_pincopen/meshes/gripper_right_arm.stl" scale="${mesh_scale}"/>
       </geometry>
-      <material name="body_darkgrey"/>
+      <material name="accent_green"/>
     </visual>
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0"/>
@@ -89,7 +121,7 @@
       <geometry>
         <mesh filename="package://mod101_tool_pincopen/meshes/gripper_left_arm.stl" scale="${mesh_scale}"/>
       </geometry>
-      <material name="body_darkgrey"/>
+      <material name="accent_green"/>
     </visual>
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0"/>
@@ -144,17 +176,6 @@
   <!-- ============================================================
        Joints
        ============================================================ -->
-
-  <!-- Mount: gripper palm fixed to the wrist flange.
-       wrist_flange's +X is the wrist-roll axis = "outward" from the wrist.
-       PincOpen's local +X (from base_link toward the coupler at xyz=0.0535)
-       is the fingers-outward direction. Identity rpy aligns them so the
-       gripper projects straight out of the wrist with the motor on +Z. -->
-  <joint name="pincopen_mount" type="fixed">
-    <origin xyz="0 0 0" rpy="0 0 0"/>
-    <parent link="wrist_flange"/>
-    <child link="pincopen_base_link"/>
-  </joint>
 
   <!-- Single active joint. Named "6" to match the mod101 numbering. -->
   <joint name="6" type="revolute">

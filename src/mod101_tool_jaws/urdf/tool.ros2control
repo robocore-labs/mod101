@@ -1,0 +1,38 @@
+<?xml version="1.0"?>
+<!--
+  SO-101 jaws hardware block. Single revolute joint, no mimics. In sim runs
+  under gz_ros2_control; on real hardware swap for whichever Feetech serial
+  bus driver is wired up to the arm (jaw servo lives on the same bus).
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <ros2_control name="mod101_tool_jaws_system" type="system">
+
+    <xacro:if value="$(arg use_sim)">
+      <hardware>
+        <plugin>gz_ros2_control/GazeboSimSystem</plugin>
+      </hardware>
+    </xacro:if>
+    <xacro:unless value="$(arg use_sim)">
+      <hardware>
+        <!-- Placeholder: replace with the real bus driver once wired up. -->
+        <plugin>mock_components/GenericSystem</plugin>
+      </hardware>
+    </xacro:unless>
+
+    <joint name="6">
+      <command_interface name="position">
+        <param name="min">0.0</param>
+        <param name="max">2.14</param>
+      </command_interface>
+      <state_interface name="position">
+        <param name="initial_value">0.0</param>
+      </state_interface>
+      <state_interface name="velocity">
+        <param name="initial_value">0.0</param>
+      </state_interface>
+    </joint>
+
+  </ros2_control>
+
+</robot>

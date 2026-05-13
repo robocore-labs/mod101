@@ -16,4 +16,10 @@
     <color rgba="0.700 0.700 0.700 1.0"/>
   </material>
 
+  <!-- Accent colour used on the base cover, the elbow_shoulder body, the elbow
+       fork, the camera mount/tilter, and every active tool's body links. -->
+  <material name="accent_green">
+    <color rgba="0.180 0.580 0.270 1.0"/>
+  </material>
+
 </robot>

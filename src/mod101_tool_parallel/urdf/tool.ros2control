@@ -3,13 +3,26 @@
   Parallel-gripper hardware block. Registered as its own ros2_control system
   alongside the arm's block — gz_ros2_control treats them as independent
   hardware components sharing the model's controller_manager.
+
+  Sim vs. real-hw switch on the arm's `use_sim` xacro arg, per the tool
+  convention.
 -->
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
 
-  <ros2_control name="mod101_tool_parallel_sim_system" type="system">
-    <hardware>
-      <plugin>gz_ros2_control/GazeboSimSystem</plugin>
-    </hardware>
+  <ros2_control name="mod101_tool_parallel_system" type="system">
+
+    <xacro:if value="$(arg use_sim)">
+      <hardware>
+        <plugin>gz_ros2_control/GazeboSimSystem</plugin>
+      </hardware>
+    </xacro:if>
+    <xacro:unless value="$(arg use_sim)">
+      <!-- Placeholder: replace with the real Feetech bus driver once wired
+           up. mock_components/GenericSystem just echoes commands to state. -->
+      <hardware>
+        <plugin>mock_components/GenericSystem</plugin>
+      </hardware>
+    </xacro:unless>
 
     <joint name="6">
       <command_interface name="position"/>

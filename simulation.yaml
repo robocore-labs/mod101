@@ -32,9 +32,10 @@ components:
       - src/mod101_gazebo
       - src/mod101_tool_parallel
       - src/mod101_tool_pincopen
+      - src/mod101_tool_jaws
       - src/mod101_tool_none
     runs_on: localhost
-    entrypoint: ros2 launch mod101_gazebo gazebo.launch.py tool:=pincopen
+    entrypoint: ros2 launch mod101_gazebo gazebo.launch.py tool:=jaws
 
   - name: rosboard
     runs_on: localhost

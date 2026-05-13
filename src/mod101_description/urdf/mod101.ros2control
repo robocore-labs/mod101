@@ -13,21 +13,32 @@
       <state_interface name="velocity"/>
     </joint>
 
+    <!-- Initial poses (radians) put the arm in a "ready" stance:
+           joint 2 = -45°  (shoulder pitch back)
+           joint 3 = +90°  (elbow up)
+           joint 4 = -45°  (wrist tilt back)
+         so the arm wakes up roughly vertical with the wrist forward. -->
     <joint name="2">
       <command_interface name="position"/>
-      <state_interface name="position"/>
+      <state_interface name="position">
+        <param name="initial_value">-0.7853981633974483</param>
+      </state_interface>
       <state_interface name="velocity"/>
     </joint>
 
     <joint name="3">
       <command_interface name="position"/>
-      <state_interface name="position"/>
+      <state_interface name="position">
+        <param name="initial_value">1.5707963267948966</param>
+      </state_interface>
       <state_interface name="velocity"/>
     </joint>
 
     <joint name="4">
       <command_interface name="position"/>
-      <state_interface name="position"/>
+      <state_interface name="position">
+        <param name="initial_value">-0.7853981633974483</param>
+      </state_interface>
       <state_interface name="velocity"/>
     </joint>
 

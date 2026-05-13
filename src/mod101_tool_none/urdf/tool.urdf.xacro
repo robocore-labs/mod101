@@ -17,7 +17,7 @@
       <geometry>
         <cylinder radius="0.025" length="0.010"/>
       </geometry>
-      <material name="body_darkgrey"/>
+      <material name="accent_green"/>
     </visual>
     <collision>
       <origin xyz="0 0 0.005" rpy="0 0 0"/>
@@ -34,7 +34,7 @@
   </joint>
 
   <gazebo reference="end_cap">
-    <material>Gazebo/DarkGrey</material>
+    <material>Gazebo/Green</material>
     <mu1>0.2</mu1>
     <mu2>0.2</mu2>
     <self_collide>false</self_collide>

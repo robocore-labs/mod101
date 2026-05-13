@@ -18,12 +18,16 @@
     <xacro:if value="${'$(arg tool)' == 'pincopen'}">
       <parameters>$(find mod101_tool_pincopen)/config/controllers.yaml</parameters>
     </xacro:if>
+    <xacro:if value="${'$(arg tool)' == 'jaws'}">
+      <parameters>$(find mod101_tool_jaws)/config/controllers.yaml</parameters>
+    </xacro:if>
   </plugin>
 </gazebo>
 
 <xacro:property name="body_color" value="Gazebo/DarkGrey" />
 <xacro:property name="motor_color" value="Gazebo/Black" />
 <xacro:property name="silver_color" value="Gazebo/Silver" />
+<xacro:property name="accent_color" value="Gazebo/Green" />
 
 <gazebo reference="base_link">
   <material>${body_color}</material>
@@ -41,7 +45,7 @@
 </gazebo>
 
 <gazebo reference="base_cover_1">
-  <material>${body_color}</material>
+  <material>${accent_color}</material>
   <mu1>0.2</mu1>
   <mu2>0.2</mu2>
   <self_collide>true</self_collide>
@@ -153,21 +157,21 @@
 </gazebo>
 
 <gazebo reference="shoulder_elbow_body_1">
-  <material>${body_color}</material>
+  <material>${accent_color}</material>
   <mu1>0.2</mu1>
   <mu2>0.2</mu2>
   <self_collide>true</self_collide>
 </gazebo>
 
 <gazebo reference="camera_tilter_1">
-  <material>${body_color}</material>
+  <material>${accent_color}</material>
   <mu1>0.2</mu1>
   <mu2>0.2</mu2>
   <self_collide>true</self_collide>
 </gazebo>
 
 <gazebo reference="camera_mount_1">
-  <material>${body_color}</material>
+  <material>${accent_color}</material>
   <mu1>0.2</mu1>
   <mu2>0.2</mu2>
   <self_collide>true</self_collide>
@@ -215,7 +219,7 @@
 </gazebo>
 
 <gazebo reference="elbow_fork_1">
-  <material>${body_color}</material>
+  <material>${accent_color}</material>
   <mu1>0.2</mu1>
   <mu2>0.2</mu2>
   <self_collide>true</self_collide>

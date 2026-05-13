@@ -1,0 +1,155 @@
+<?xml version="1.0" ?>
+<!--
+  SO-101 "jaws" gripper. Single-DOF revolute jaw rotating against the fixed
+  wrist-roll body. URDF + meshes vendored from llmy_description (LLMy/SO-ARM100
+  lineage).
+
+  Structure (see docs/tool-convention.md):
+
+    wrist_flange
+      └─[jaws_mount, identity]─> jaws_root              (CONVENTION ORIGIN
+      |                                                  bolt-pattern center,
+      |                                                  +X outward, +Z up)
+      └─[jaws_cad_to_root, fixed]─> jaws_body           (SO-101 CAD frame)
+          ├─[jaws_servo_mount, fixed]─> jaws_servo
+          └─[6, revolute, 0..2.14 rad]─> jaws_moving
+
+  Visual <origin>s on jaws_body / jaws_servo / jaws_moving are kept verbatim
+  from LLMy so the three SO-101 meshes stay correctly aligned with each
+  other and joint 6 rotates around the right physical pivot. The whole
+  vendored sub-tree gets repositioned by `jaws_cad_to_root`.
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!-- ============================================================
+       Convention root: a tiny link at the bolt pattern.
+       ============================================================ -->
+
+  <link name="jaws_root">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="0.001"/>
+      <inertia ixx="1e-7" iyy="1e-7" izz="1e-7" ixy="0" iyz="0" ixz="0"/>
+    </inertial>
+  </link>
+
+  <joint name="jaws_mount" type="fixed">
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <parent link="wrist_flange"/>
+    <child  link="jaws_root"/>
+  </joint>
+
+  <!-- ============================================================
+       SO-101 CAD-frame sub-tree.
+
+       In the LLMy URDF, every mesh has visual_origin ≈ (-0.181, -0.005,
+       -0.189) — the meshes are all authored at LLMy's CAD-assembly origin,
+       and that offset brings them back to the wrist mount point. So the
+       SO-101 bolt pattern (in the vendored sub-tree's "jaws_body" frame)
+       sits at the link origin, but the SO-101 wrist-roll axis points along
+       LLMy's (-0.637, 0, 0.771) instead of mod101's wrist_flange +X.
+
+       jaws_cad_to_root encodes that rotation. Pitch ≈ 2.262 rad aligns the
+       SO-101 wrist-roll axis onto wrist_flange's +X; the extra yaw of π
+       flips the gripper around so it actually projects outward (the wrist-
+       roll axis is symmetric, so the math alone couldn't tell which end
+       was "front") instead of facing back into the wrist.
+       ============================================================ -->
+
+  <joint name="jaws_cad_to_root" type="fixed">
+    <origin xyz="0 0 0" rpy="0 2.262 3.14159"/>
+    <parent link="jaws_root"/>
+    <child  link="jaws_body"/>
+  </joint>
+
+  <link name="jaws_body">
+    <inertial>
+      <origin xyz="0.018214 -0.013763 -0.022966" rpy="0 0 0"/>
+      <mass value="0.447"/>
+      <inertia ixx="0.000264" iyy="0.000301" izz="0.000235" ixy="3.9e-05" iyz="-4e-05" ixz="8.2e-05"/>
+    </inertial>
+    <visual>
+      <origin xyz="-0.181143 -0.004550 -0.189344" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://mod101_tool_jaws/meshes/Wrist_Roll_08c_v1_1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="accent_green"/>
+    </visual>
+    <collision>
+      <origin xyz="-0.181143 -0.004550 -0.189344" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://mod101_tool_jaws/meshes/Wrist_Roll_08c_v1_1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="jaws_servo">
+    <inertial>
+      <origin xyz="-0.005824 -0.004501 -0.018111" rpy="0 0 0"/>
+      <mass value="0.284"/>
+      <inertia ixx="6.6e-05" iyy="4e-05" izz="6.9e-05" ixy="0.0" iyz="0.0" ixz="-6e-06"/>
+    </inertial>
+    <visual>
+      <origin xyz="-0.201679 -0.016450 -0.189613" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://mod101_tool_jaws/meshes/arm_gripper_servo_1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="motor_black"/>
+    </visual>
+    <collision>
+      <origin xyz="-0.201679 -0.016450 -0.189613" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://mod101_tool_jaws/meshes/arm_gripper_servo_1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="jaws_moving">
+    <inertial>
+      <origin xyz="0.035386 -0.001620 -0.010188" rpy="0 0 0"/>
+      <mass value="0.159"/>
+      <inertia ixx="5.3e-05" iyy="8.7e-05" izz="4.1e-05" ixy="3e-06" iyz="-3e-06" ixz="2.3e-05"/>
+    </inertial>
+    <visual>
+      <origin xyz="-0.181539 -0.024750 -0.159670" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://mod101_tool_jaws/meshes/Moving_Jaw_08d_v1_1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="accent_green"/>
+    </visual>
+    <collision>
+      <origin xyz="-0.181539 -0.024750 -0.159670" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://mod101_tool_jaws/meshes/Moving_Jaw_08d_v1_1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <!-- ============================================================
+       Joints inside the SO-101 sub-tree
+       (verbatim from LLMy so the three meshes stay registered)
+       ============================================================ -->
+
+  <joint name="jaws_servo_mount" type="fixed">
+    <origin xyz="0.020536 0.011900 0.000269" rpy="0 0 0"/>
+    <parent link="jaws_body"/>
+    <child  link="jaws_servo"/>
+  </joint>
+
+  <joint name="6" type="revolute">
+    <origin xyz="-0.020140 0.008300 -0.029943" rpy="0 0 0"/>
+    <parent link="jaws_servo"/>
+    <child  link="jaws_moving"/>
+    <axis xyz="0.770795 0.000000 0.637083"/>
+    <limit lower="0.0" upper="2.14" effort="20.0" velocity="5.0"/>
+    <dynamics damping="1.0" friction="0.5"/>
+  </joint>
+
+  <!-- ============================================================
+       ros2_control + gazebo extensions
+       ============================================================ -->
+
+  <xacro:include filename="$(find mod101_tool_jaws)/urdf/tool.ros2control"/>
+  <xacro:include filename="$(find mod101_tool_jaws)/urdf/tool.gazebo"/>
+
+</robot>

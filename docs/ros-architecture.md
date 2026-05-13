@@ -13,6 +13,7 @@ Target distro: **Jazzy** (Ubuntu 24.04, Python 3.12, Gazebo Harmonic).
 | `mod101_gazebo` | `ament_cmake` | World (`empty.sdf`, bullet-featherstone physics), bridge config, `gazebo.launch.py` (accepts `tool:=<name>`) |
 | `mod101_tool_parallel` | `ament_cmake` | Parallel-jaw gripper |
 | `mod101_tool_pincopen` | `ament_cmake` | PincOpen pincer gripper (vendored from [CNURobotics/pinc_open_driver](https://github.com/CNURobotics/pinc_open_driver)) |
+| `mod101_tool_jaws` | `ament_cmake` | SO-101 single-jaw gripper (URDF + meshes adapted from the SO-101 lineage) |
 | `mod101_tool_none` | `ament_cmake` | Empty end-cap. No actuators, no controllers — useful as a baseline / template |
 
 ## Tool layer
@@ -44,7 +45,7 @@ Then add one `<xacro:if>` branch in `mod101.xacro` (include the tool's xacro) an
 cd ~/Work/mod101
 colcon build --packages-select \
   mod101_description mod101_control mod101_gazebo \
-  mod101_tool_parallel mod101_tool_pincopen mod101_tool_none
+  mod101_tool_parallel mod101_tool_pincopen mod101_tool_jaws mod101_tool_none
 source install/setup.bash
 ```
 
@@ -61,6 +62,7 @@ Gazebo sim with ros2_control:
 ```bash
 ros2 launch mod101_gazebo gazebo.launch.py                 # tool:=parallel (default)
 ros2 launch mod101_gazebo gazebo.launch.py tool:=pincopen
+ros2 launch mod101_gazebo gazebo.launch.py tool:=jaws
 ros2 launch mod101_gazebo gazebo.launch.py tool:=none
 ```
 
