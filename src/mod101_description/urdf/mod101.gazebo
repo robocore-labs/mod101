@@ -15,6 +15,9 @@
     <xacro:if value="${'$(arg tool)' == 'parallel'}">
       <parameters>$(find mod101_tool_parallel)/config/controllers.yaml</parameters>
     </xacro:if>
+    <xacro:if value="${'$(arg tool)' == 'pincopen'}">
+      <parameters>$(find mod101_tool_pincopen)/config/controllers.yaml</parameters>
+    </xacro:if>
   </plugin>
 </gazebo>
 

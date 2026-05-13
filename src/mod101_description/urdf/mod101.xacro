@@ -763,6 +763,9 @@
 <xacro:if value="${'$(arg tool)' == 'parallel'}">
   <xacro:include filename="$(find mod101_tool_parallel)/urdf/tool.urdf.xacro"/>
 </xacro:if>
+<xacro:if value="${'$(arg tool)' == 'pincopen'}">
+  <xacro:include filename="$(find mod101_tool_pincopen)/urdf/tool.urdf.xacro"/>
+</xacro:if>
 <xacro:if value="${'$(arg tool)' == 'none'}">
   <xacro:include filename="$(find mod101_tool_none)/urdf/tool.urdf.xacro"/>
 </xacro:if>

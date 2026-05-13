@@ -1,0 +1,66 @@
+<?xml version="1.0"?>
+<!--
+  PincOpen hardware block. Toggle between sim (gz_ros2_control) and real
+  hardware (pinc_open_driver/PincOpenDriver loaded via pluginlib) based on the
+  arm's `use_sim` xacro arg. Mimic followers expose state interfaces only — no
+  command — because the 4-bar linkage is driven by the single `6` joint.
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <ros2_control name="mod101_tool_pincopen_system" type="system">
+
+    <xacro:if value="$(arg use_sim)">
+      <hardware>
+        <plugin>gz_ros2_control/GazeboSimSystem</plugin>
+      </hardware>
+    </xacro:if>
+    <xacro:unless value="$(arg use_sim)">
+      <!-- Real hardware: needs the pinc_open_driver package built in the
+           workspace (clone CNURobotics/pinc_open_driver into src/). Override
+           baud / port / servo_id by re-running xacro with the corresponding
+           args, or edit defaults here. -->
+      <hardware>
+        <plugin>pinc_open_driver/PincOpenDriver</plugin>
+        <param name="baud_rate">1000000</param>
+        <param name="comm_config_delay_ms">100</param>
+        <param name="servo_id">6</param>
+        <param name="serial_port">/dev/pinc-gripper</param>
+        <param name="serial_timeout">20</param>
+      </hardware>
+    </xacro:unless>
+
+    <joint name="6">
+      <command_interface name="position">
+        <param name="min">-2.44</param>
+        <param name="max">0.0</param>
+      </command_interface>
+      <state_interface name="position">
+        <param name="initial_value">0.0</param>
+      </state_interface>
+      <state_interface name="velocity">
+        <param name="initial_value">0.0</param>
+      </state_interface>
+    </joint>
+
+    <!-- Mimic followers: state-only registration so gz_ros2_control publishes
+         their feedback but the controller_manager won't try to command them. -->
+    <joint name="pincopen_base_to_right_arm">
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+    <joint name="pincopen_base_to_left_arm">
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+    <joint name="pincopen_right_arm_to_right_finger">
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+    <joint name="pincopen_left_arm_to_left_finger">
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+
+  </ros2_control>
+
+</robot>

@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>mod101_tool_pincopen</name>
+  <version>0.0.0</version>
+  <description>PincOpen pincer gripper end effector for mod101. Vendored URDF + meshes from CNURobotics/pinc_open_driver, wrapped to mount on the wrist_flange contract and run under gz_ros2_control in sim (or pinc_open_driver/PincOpenDriver on real hardware).</description>
+  <maintainer email="todo@todo.com">author</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <exec_depend>controller_manager</exec_depend>
+  <exec_depend>position_controllers</exec_depend>
+  <exec_depend>ros2_control</exec_depend>
+  <exec_depend>ros2_controllers</exec_depend>
+  <exec_depend>gz_ros2_control</exec_depend>
+  <exec_depend>xacro</exec_depend>
+  <!-- Real-hardware-only dep, intentionally NOT declared here so the package
+       builds with just `colcon build` even when pinc_open_driver isn't in the
+       workspace. Clone CNURobotics/pinc_open_driver into src/ before running
+       on real hardware so pluginlib can resolve `pinc_open_driver/PincOpenDriver`. -->
+  <!-- <exec_depend>pinc_open_driver</exec_depend> -->
+
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

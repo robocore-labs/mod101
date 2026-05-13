@@ -1,0 +1,211 @@
+<?xml version="1.0" ?>
+<!--
+  PincOpen pincer gripper, wrapped as a mod101 tool. Geometry vendored from
+  CNURobotics/pinc_open_driver (MIT). Differences vs upstream:
+
+    * link names prefixed `pincopen_` to avoid collision with mod101's own
+      `base_link` and to keep namespaces tidy.
+    * active joint renamed from `gripper` -> `6` to match mod101's joint-id
+      convention (arm uses 1-5, tool uses 6).
+    * single-active-joint design preserved: `6` is revolute, the four arm/
+      finger joints follow via URDF <mimic> (works under bullet-featherstone).
+    * fixed-joint mount from `wrist_flange` -> `pincopen_base_link`. The
+      transform below is a placeholder — measure the adapter bracket and tune.
+    * minimal inertials added (upstream has none; gz_ros2_control needs them).
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <xacro:property name="mesh_scale" value="0.001 0.001 0.001"/>
+
+  <!-- ============================================================
+       Links
+       ============================================================ -->
+
+  <link name="pincopen_base_link">
+    <inertial>
+      <origin xyz="0.029 0 0.005" rpy="0 0 0"/>
+      <mass value="0.080"/>
+      <inertia ixx="3.0e-05" iyy="6.0e-05" izz="6.0e-05" ixy="0" iyz="0" ixz="0"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://mod101_tool_pincopen/meshes/Gripper_Palm_Shell_w_motor_v1.stl" scale="${mesh_scale}"/>
+      </geometry>
+      <material name="body_darkgrey"/>
+    </visual>
+    <collision>
+      <origin xyz="0.029 0 0.0033" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.06 0.1 0.0323"/>
+      </geometry>
+    </collision>
+    <collision>
+      <origin xyz="0.024 0 0.03" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.048 0.025 0.025"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <!-- Coupler is the driven link; mass kept tiny since it carries no geometry. -->
+  <link name="pincopen_coupler">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="0.001"/>
+      <inertia ixx="1e-07" iyy="1e-07" izz="1e-07" ixy="0" iyz="0" ixz="0"/>
+    </inertial>
+  </link>
+
+  <link name="pincopen_right_arm">
+    <inertial>
+      <origin xyz="0.017 0 0" rpy="0 0 0"/>
+      <mass value="0.008"/>
+      <inertia ixx="3e-06" iyy="3e-06" izz="3e-06" ixy="0" iyz="0" ixz="0"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://mod101_tool_pincopen/meshes/gripper_right_arm.stl" scale="${mesh_scale}"/>
+      </geometry>
+      <material name="body_darkgrey"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://mod101_tool_pincopen/meshes/gripper_right_arm_simple.stl" scale="${mesh_scale}"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="pincopen_left_arm">
+    <inertial>
+      <origin xyz="0.017 0 0" rpy="0 0 0"/>
+      <mass value="0.008"/>
+      <inertia ixx="3e-06" iyy="3e-06" izz="3e-06" ixy="0" iyz="0" ixz="0"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://mod101_tool_pincopen/meshes/gripper_left_arm.stl" scale="${mesh_scale}"/>
+      </geometry>
+      <material name="body_darkgrey"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://mod101_tool_pincopen/meshes/gripper_left_arm_simple.stl" scale="${mesh_scale}"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="pincopen_right_finger">
+    <inertial>
+      <origin xyz="0.012 0 0" rpy="0 0 0"/>
+      <mass value="0.006"/>
+      <inertia ixx="2e-06" iyy="2e-06" izz="2e-06" ixy="0" iyz="0" ixz="0"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://mod101_tool_pincopen/meshes/gripper_right_finger.stl" scale="${mesh_scale}"/>
+      </geometry>
+      <material name="silver"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://mod101_tool_pincopen/meshes/gripper_right_finger_simple.stl" scale="${mesh_scale}"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="pincopen_left_finger">
+    <inertial>
+      <origin xyz="0.012 0 0" rpy="0 0 0"/>
+      <mass value="0.006"/>
+      <inertia ixx="2e-06" iyy="2e-06" izz="2e-06" ixy="0" iyz="0" ixz="0"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://mod101_tool_pincopen/meshes/gripper_left_finger.stl" scale="${mesh_scale}"/>
+      </geometry>
+      <material name="silver"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://mod101_tool_pincopen/meshes/gripper_left_finger_simple.stl" scale="${mesh_scale}"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <!-- ============================================================
+       Joints
+       ============================================================ -->
+
+  <!-- Mount: gripper palm fixed to the wrist flange.
+       wrist_flange's +X is the wrist-roll axis = "outward" from the wrist.
+       PincOpen's local +X (from base_link toward the coupler at xyz=0.0535)
+       is the fingers-outward direction. Identity rpy aligns them so the
+       gripper projects straight out of the wrist with the motor on +Z. -->
+  <joint name="pincopen_mount" type="fixed">
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <parent link="wrist_flange"/>
+    <child link="pincopen_base_link"/>
+  </joint>
+
+  <!-- Single active joint. Named "6" to match the mod101 numbering. -->
+  <joint name="6" type="revolute">
+    <parent link="pincopen_base_link"/>
+    <child link="pincopen_coupler"/>
+    <origin xyz="0.053492 0 0.0" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-2.44" upper="0.0" effort="5" velocity="1"/>
+  </joint>
+
+  <joint name="pincopen_base_to_right_arm" type="revolute">
+    <parent link="pincopen_base_link"/>
+    <child link="pincopen_right_arm"/>
+    <origin xyz="0.053492 -0.03250 -0.008" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-1.22" upper="0.0" effort="5" velocity="1"/>
+    <mimic joint="6" multiplier="0.5" offset="0.0"/>
+  </joint>
+
+  <joint name="pincopen_base_to_left_arm" type="revolute">
+    <parent link="pincopen_base_link"/>
+    <child link="pincopen_left_arm"/>
+    <origin xyz="0.053492 0.03250 -0.008" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="0.0" upper="1.22" effort="5" velocity="1"/>
+    <mimic joint="6" multiplier="-0.5" offset="0.0"/>
+  </joint>
+
+  <joint name="pincopen_right_arm_to_right_finger" type="revolute">
+    <parent link="pincopen_right_arm"/>
+    <child link="pincopen_right_finger"/>
+    <origin xyz="0.034641 0.020 -0.0002" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="0.0" upper="1.22" effort="5" velocity="1"/>
+    <mimic joint="6" multiplier="-0.5" offset="0.0"/>
+  </joint>
+
+  <joint name="pincopen_left_arm_to_left_finger" type="revolute">
+    <parent link="pincopen_left_arm"/>
+    <child link="pincopen_left_finger"/>
+    <origin xyz="0.034641 -0.020 0.0002" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-1.22" upper="0.0" effort="5" velocity="1"/>
+    <mimic joint="6" multiplier="0.5" offset="0.0"/>
+  </joint>
+
+  <!-- ============================================================
+       ros2_control + gazebo extensions
+       ============================================================ -->
+
+  <xacro:include filename="$(find mod101_tool_pincopen)/urdf/tool.ros2control"/>
+  <xacro:include filename="$(find mod101_tool_pincopen)/urdf/tool.gazebo"/>
+
+</robot>

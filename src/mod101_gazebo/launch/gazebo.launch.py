@@ -35,10 +35,25 @@ def _build(context):
     pkg_gazebo      = get_package_share_directory('mod101_gazebo')
     pkg_ros_gz_sim  = get_package_share_directory('ros_gz_sim')
 
-    install_prefix = get_package_prefix('mod101_description')
+    # Gazebo resolves `package://<pkg>/...` mesh URIs by walking
+    # GZ_SIM_RESOURCE_PATH for a directory named <pkg>. Under colcon's
+    # default isolated-install layout each package has its own prefix
+    # (install/<pkg>/share/<pkg>/...), so we need to add every package
+    # whose meshes are referenced — the arm, plus every installed tool.
+    resource_dirs = [os.path.join(get_package_prefix('mod101_description'), 'share')]
+    for pkg in (f'mod101_tool_{t}' for t in (tool,)):
+        try:
+            resource_dirs.append(
+                os.path.join(get_package_prefix(pkg), 'share')
+            )
+        except PackageNotFoundError:
+            pass
+    # Preserve any pre-existing GZ_SIM_RESOURCE_PATH (e.g. fuel cache mounts).
+    if os.environ.get('GZ_SIM_RESOURCE_PATH'):
+        resource_dirs.append(os.environ['GZ_SIM_RESOURCE_PATH'])
     gz_resource_path = SetEnvironmentVariable(
         name='GZ_SIM_RESOURCE_PATH',
-        value=os.path.join(install_prefix, 'share'),
+        value=os.pathsep.join(resource_dirs),
     )
 
     world_file    = os.path.join(pkg_gazebo, 'worlds', 'empty.sdf')

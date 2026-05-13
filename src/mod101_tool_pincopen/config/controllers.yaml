@@ -1,0 +1,23 @@
+# Controllers contributed by the PincOpen tool. Loaded by gz_ros2_control
+# alongside the arm's controllers.sim.yaml — both share the model's single
+# controller_manager namespace. Named `gripper_controller` for topic-parity
+# with mod101_tool_parallel, so downstream code (`/gripper_controller/commands`)
+# is tool-agnostic.
+#
+# Range note: PincOpen's `6` joint is revolute, lower=-2.44 rad (open),
+# upper=0.0 rad (closed). Sign is OPPOSITE to mod101_tool_parallel's prismatic
+# `6` (positive = open). MoveIt configs that talked to the parallel tool need
+# their gripper goal flipped.
+controller_manager:
+  ros__parameters:
+    gripper_controller:
+      type: position_controllers/JointGroupPositionController
+
+gripper_controller:
+  ros__parameters:
+    joints: ["6"]
+    command_interfaces:
+      - position
+    state_interfaces:
+      - position
+    open_loop_control: true
