@@ -25,12 +25,6 @@ The exact dimensions (link lengths, extrusion size) are parametric — the **[we
 
 ### BASE — 8× ST3215 ($134)
 
-- 2× ST3215 shoulder pitch (doubled)
-- 2× ST3215 elbow (doubled)
-- 1× ST3215 wrist tilt
-- 1× ST3215 wrist roll
-- 1× ST3215 gripper
-
 | Condition | Payload |
 |---|---|
 | Continuous (70% stall) | 547g |
@@ -104,20 +98,18 @@ python3 configurator/server.py  # http://localhost:8000/
 
 | Part | Qty | Unit Price | Subtotal |
 |---|---|---|---|
-| STS3215 servo (12V, 30 kg·cm) | 6 | $16.50 | $99.00 |
-| Waveshare SC09 gripper servo | 1 | $5.00 | $5.00 |
+| [STS3215 servo (12V, 30 kg·cm)](https://www.feetechrc.com/525603.html) | 8 | $16.50 | $132.00 |
 | 2020 aluminum extrusion (cut to length) | ~0.6m | $5.00/m | $3.00 |
 | M5 T-nuts | ~20 | — | $3.00 |
 | M5×8 bolts | ~20 | — | $2.00 |
 | PLA-CF filament (~150g) | — | — | $8.00 |
 | Pogo pin connector (4-pin) | 1 | $3.00 | $3.00 |
 | Misc hardware (bolts, nuts, wires) | — | — | $10.00 |
-| **Total** | | | **~$134** |
+| **Total** | | | **~$168** |
 
 ### PRO Upgrade (+$77)
 
-Replace 2× STS3215 shoulder servos with 2× STS3250 ($55 each). Everything else unchanged.
-
+Replace 2× STS3215 shoulder servos with 2× [STS3250](https://www.feetechrc.com/en/562636.html). Everything else unchanged.
 
 ## Related Projects
 
