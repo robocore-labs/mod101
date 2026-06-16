@@ -98,7 +98,7 @@ python3 configurator/server.py  # http://localhost:8000/
 
 | Part | Qty | Unit Price | Subtotal |
 |---|---|---|---|
-| [STS3215 servo (12V, 30 kg·cm)](https://www.feetechrc.com/525603.html) | 8 | $16.50 | $132.00 |
+| [STS3215 servo (12V, 30 kg·cm)](https://www.alibaba.com/product-detail/Low-Cost-Feetech-STS3215-Servo-7_1601611431055.html?spm=a2747.product_manager.0.0.45b471d29yemSr) | 8 | $16.50 | $132.00 |
 | 2020 aluminum extrusion (cut to length) | ~0.6m | $5.00/m | $3.00 |
 | M5 T-nuts | ~20 | — | $3.00 |
 | M5×8 bolts | ~20 | — | $2.00 |
@@ -109,7 +109,7 @@ python3 configurator/server.py  # http://localhost:8000/
 
 ### PRO Upgrade (+$77)
 
-Replace 2× STS3215 shoulder servos with 2× [STS3250](https://www.feetechrc.com/en/562636.html). Everything else unchanged.
+Replace 2× STS3215 shoulder servos with 2× [STS3250](https://www.alibaba.com/product-detail/12V-50kg-STS3250-Coreless-Motor-Magnetic_1601756525163.html?spm=a2747.product_manager.0.0.504a71d28VYAsz). Everything else unchanged.
 
 ## Related Projects
 
