@@ -16,7 +16,7 @@ mesh provenance, mass figures, and mount-induced offsets.
 
 Both exports share the same 18 link names (0 mismatches) — that parity is what
 made consolidation possible — but use CAD auto-generated joint names
-(`Revolute 24`, `Rigid 12`, bare `4`) that disagree between the two. The
+(CAD auto-names like `Revolute<N>` / `Rigid<N>` / bare integers) that disagree between the two. The
 maintained file defines one canonical joint vocabulary instead
 (`joint_base` / `joint_shoulder` / `joint_elbow` / `joint_wrist_tilt` /
 `joint_wrist_roll`, fixed joints as `fixed_<childlink>`).

@@ -118,6 +118,7 @@
     accent-color: var(--accent);
   }
   .input-row input[type=number],
+  .input-row select,
   #tool-select {
     background: var(--bg-input);
     color: var(--fg);
@@ -128,8 +129,11 @@
     font-size: 12px;
   }
   .input-row input[type=number] { width: 72px; }
+  .input-row select { flex: 1; min-width: 0; }
   #tool-select { flex: 1; min-width: 0; }
   .input-row > span { color: var(--fg-mute); font-size: 11px; }
+
+  .presets { display: flex; gap: 8px; margin: 4px 0 2px; flex-wrap: wrap; }
 
   table {
     width: 100%;
@@ -161,6 +165,28 @@
     font-variant-numeric: tabular-nums;
     color: var(--fg);
   }
+  tr.headline td { font-size: 13px; }
+  tr.headline td.num { color: var(--accent); font-weight: 600; }
+
+  .badge {
+    display: inline-block;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 3px;
+    border: 1px solid var(--warn);
+    color: var(--warn);
+    vertical-align: middle;
+    margin-left: 6px;
+  }
+  .cost-line {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    margin: 10px 0 2px;
+  }
+  .cost-line .total { color: var(--accent); font-weight: 600; }
 
   pre {
     background: var(--bg-input);
@@ -192,7 +218,7 @@
   button:hover { background: var(--accent-hover); }
   button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-  /* Secondary / "ghost" buttons (Copy, Home) — match robocore-studio's
+  /* Secondary / "ghost" buttons (Copy, Home, presets) — match robocore-studio's
      .urdf-btn-ghost. */
   button.ghost {
     background: var(--bg-3);
@@ -261,13 +287,14 @@
 <div class="wrap">
 
 <h1>mod101 — arm configurator</h1>
-<p class="note">Edit the two extrusion lengths. Range and payload recompute live. Copy the xacro snippet at the bottom back into <code>mod101_description/urdf/mod101.xacro</code>.</p>
+<p class="note">Pick a motor per pitch joint and set the two rail lengths. Payload (binding joint, three duty regimes × two reaches), mass, and an estimated servo cost recompute live. The four values drive the URDF's <code>shoulder_ext_length</code>, <code>elbow_ext_length</code>, <code>shoulder_mount</code>, <code>elbow_mount</code> args directly.</p>
 
 <div class="viewer-grid">
   <div class="panel">
     <h2>Live preview</h2>
     <div id="viewer"></div>
     <p class="note" id="viewer-status">Loading URDF…</p>
+    <button id="reload" class="ghost" style="margin-top: 8px;">Reload preview</button>
   </div>
   <div class="panel">
     <h2>Configuration</h2>
@@ -275,6 +302,26 @@
       <label>end-effector tool</label>
       <select id="tool-select"></select>
     </div>
+
+    <h2>Reference builds</h2>
+    <div class="presets">
+      <button class="ghost" data-preset="S">S · dual-3250</button>
+      <button class="ghost" data-preset="M">M · 3120+3250</button>
+      <button class="ghost" data-preset="L">L · dual-3120</button>
+    </div>
+
+    <h2>Motors (per joint)</h2>
+    <div class="input-row">
+      <label>shoulder motor</label>
+      <select id="shoulder-motor"></select>
+    </div>
+    <div class="input-row">
+      <label>elbow motor</label>
+      <select id="elbow-motor"></select>
+    </div>
+    <p class="note">STS3215 / STS3250 → <code>small</code> mount; ST3120 → <code>big</code> mount. A big mount raises the torque cap <em>and</em> lengthens the lever (Δ), so the payload model applies both.</p>
+
+    <h2>Rail lengths</h2>
     <div class="input-row">
       <label>shoulder length</label>
       <input id="shoulder-slider" type="range" min="80" max="280" step="5" value="136">
@@ -287,7 +334,7 @@
       <input id="elbow-num"    type="number" min="80" max="280" step="1" value="140">
       <span>mm</span>
     </div>
-    <p class="note">Practical bounds are ~80–280 mm per segment. Below 80 the brackets collide; above 280 the shoulder servo stalls under arm weight alone.</p>
+    <p class="note">Practical bounds ~80–280 mm/segment. Below 80 the brackets collide; above 280 the shoulder stalls under arm weight alone.</p>
 
     <h2>Joint pose</h2>
     <div id="joint-sliders">
@@ -300,176 +347,295 @@
 <div class="grid">
 
   <div class="panel">
-    <h2>Mass breakdown</h2>
+    <h2>Payload <span id="masses-badge"></span></h2>
     <table>
-      <tr><td>Fixed parts (printed + camera + jaws)</td>           <td class="num" id="m-fixed"></td></tr>
-      <tr><td>Shoulder rails (2×)</td>                              <td class="num" id="m-shoulder"></td></tr>
-      <tr><td>Elbow rail (dual)</td>                                <td class="num" id="m-elbow"></td></tr>
-      <tr><td>Servos (BASE)</td>                                    <td class="num" id="m-servos-base"></td></tr>
-      <tr><td>Servos (PRO)</td>                                     <td class="num" id="m-servos-pro"></td></tr>
-      <tr><th>Total — BASE</th>                                     <th class="num" id="m-total-base"></th></tr>
-      <tr><th>Total — PRO</th>                                      <th class="num" id="m-total-pro"></th></tr>
+      <tr class="headline">
+        <td>Rated payload <span class="note" style="margin:0">(duty · full reach)</span></td>
+        <td class="num" id="p-headline" colspan="2"></td>
+      </tr>
+      <tr><th>regime</th><th>full extension</th><th>@ 70 % reach</th></tr>
+      <tr><td>Duty-cycle (rated, 70 %)</td> <td class="num" id="p-duty-full"></td> <td class="num" id="p-duty-70"></td></tr>
+      <tr><td>Holding (50 %)</td>           <td class="num" id="p-hold-full"></td> <td class="num" id="p-hold-70"></td></tr>
+      <tr><td>Peak / stall (100 %)</td>     <td class="num" id="p-peak-full"></td> <td class="num" id="p-peak-70"></td></tr>
     </table>
+    <p class="note" id="binding-note"></p>
+    <p class="note" id="joint-detail"></p>
   </div>
 
   <div class="panel">
-    <h2>Reach</h2>
+    <h2>Mass &amp; reach</h2>
     <table>
-      <tr><td>Max reach (horizontal, full extension)</td>           <td class="num" id="r-full"></td></tr>
-      <tr><td>70 % reach (typical working envelope)</td>            <td class="num" id="r-70"></td></tr>
+      <tr><td>Shoulder rails (2×)</td>      <td class="num" id="m-rail-s"></td></tr>
+      <tr><td>Forearm rails (dual)</td>     <td class="num" id="m-rail-e"></td></tr>
+      <tr><td>Elbow assembly</td>           <td class="num" id="m-elbow"></td></tr>
+      <tr><td>Wrist + gripper assembly</td> <td class="num" id="m-wrist"></td></tr>
+      <tr><th>Actuated total</th>           <th class="num" id="m-total"></th></tr>
+      <tr><td>Max reach (full extension)</td> <td class="num" id="r-full"></td></tr>
+      <tr><td>70 % reach (working envelope)</td> <td class="num" id="r-70"></td></tr>
     </table>
 
-    <h2>Payload — BASE (8× STS3215)</h2>
-    <table>
-      <tr><th></th>                          <th>full extension</th>  <th>@ 70 % reach</th></tr>
-      <tr><td>Continuous (70 % stall)</td>   <td class="num" id="p-base-cont-full"></td>   <td class="num" id="p-base-cont-70"></td></tr>
-      <tr><td>Stall (peak)</td>              <td class="num" id="p-base-stall-full"></td>  <td class="num" id="p-base-stall-70"></td></tr>
-    </table>
-
-    <h2>Payload — PRO (2× STS3250 shoulder + 6× STS3215)</h2>
-    <table>
-      <tr><th></th>                          <th>full extension</th>  <th>@ 70 % reach</th></tr>
-      <tr><td>Continuous (70 % stall)</td>   <td class="num" id="p-pro-cont-full"></td>    <td class="num" id="p-pro-cont-70"></td></tr>
-      <tr><td>Stall (peak)</td>              <td class="num" id="p-pro-stall-full"></td>   <td class="num" id="p-pro-stall-70"></td></tr>
-    </table>
-    <p class="note">Numbers assume the shoulder pitch joint is the bottleneck (lowest leverage). Arm self-weight torque is modelled as the actuated mass at one-third of the current reach; payload contributes torque at full reach. Negative numbers mean the arm can't even hold its own weight at this length — pick a shorter extrusion.</p>
+    <h2>Estimated cost</h2>
+    <p class="cost-line">Servos: <span class="total" id="cost-total"></span></p>
+    <p class="note" id="cost-breakdown"></p>
+    <p class="note">Prices are placeholders (ST3120 ≈ 2× STS3250 ≈ 4× STS3215) until Cristi sets the real BOM. Servo cost only — not a purchase price; rails / printed parts / fasteners not included.</p>
   </div>
 
 </div>
 
 <div class="panel" style="margin-top: 16px;">
-  <h2>xacro values</h2>
+  <h2>xacro args</h2>
   <pre id="snippet"></pre>
   <button id="save">Save to mod101.xacro</button>
   <button id="copy" class="ghost" style="margin-left: 8px;">Copy snippet</button>
   <p class="note" id="copy-feedback"></p>
-  <p class="note">When the page is served by <code>configurator/server.py</code>, "Save" writes the new property values directly to <code>src/mod101_description/urdf/mod101.xacro</code>. Without the server, only the snippet is editable (use Copy).</p>
+  <p class="note">When served by <code>configurator/server.py</code>, "Save" writes all four args to <code>src/mod101_description/urdf/mod101.xacro</code>. Without the server only Copy works. Rebuild <code>mod101_description</code> to pick changes up in sim.</p>
 </div>
 
-<p class="footer">All math is first-order. Real servo torque drops with temperature, voltage, and duty cycle — derate accordingly. The 70 %-stall continuous figure is the manufacturer's safe-load rating, not a thermal limit.</p>
+<p class="footer" id="honesty">
+  All math is first-order static balance at the bottleneck (binding) pitch joint:
+  the two pitch servos hold the arm's self-weight plus payload at the stated
+  reach. <b>Regimes:</b> Duty-cycle (70 % of stall) is the rated continuous
+  headline — the manufacturer's safe-load figure, not a thermal limit; Holding
+  (50 %) is a conservative static hold; Peak (100 %) is momentary stall only.
+  Real torque drops with temperature, voltage, and duty — <b>verify on the
+  bench</b>. Negative payload means the arm can't hold its own weight at that
+  length — shorten the rail or fit a bigger motor.
+</p>
 
 </div><!-- .wrap -->
 
 <script>
 'use strict';
 
-// --- physical constants -----------------------------------------------------
-const G              = 9.81;            // m/s^2
-const EXT_DENSITY    = 0.46;            // kg/m, 2020 aluminum (single rail)
+// ============================================================================
+// mod101 configurator — v2 physics model
+// Single-output per joint, per-joint motor selection, mount-Δ coupling into the
+// torque lever, binding-joint readout, three duty regimes × two reaches, real
+// printed masses (Part C) with a lumped-estimate fallback, and a servo cost.
+// FIXME(cristi): the torque, price, and Δ constants below need datasheet / BOM /
+// CAD calibration — they are first-order placeholders kept in ONE place.
+// ============================================================================
 
-// Servo torques (N·m). Manufacturer stall ratings, then 70 % derate for continuous.
-const STS3215_STALL  = 30 * 0.0980665 / 1.0;  // 30 kg·cm  -> 2.94 N·m
-const STS3250_STALL  = 50 * 0.0980665 / 1.0;  // 50 kg·cm  -> 4.90 N·m
-const CONT_FACTOR    = 0.70;
+const G           = 9.81;     // m/s^2
+const EXT_DENSITY = 0.46;     // kg/m, one 2020 aluminium rail
+const KGCM        = 0.0980665; // kg·cm -> N·m
 
-// Fixed mass (kg) — every part NOT scaled by extrusion length.
-// Derived from the per-link mass table; matches mod101_description URDF.
-const M_PRINTED_FIXED = (
-  36.28 + 14.96 + 36.06 + 6 + 4 + 25 +
-  5 + 5 + 5 + 5 + 10 + 12 + 12 +
-  22 /* parallel gripper printed */ +
-  48 + 22 + 14.21
-) / 1000;
-const M_CAMERA_PCB    = 16.6 / 1000;
-const M_GRIPPER_SERVO = 0.056;  // embedded in Parallel_gripper_assembly_v1_1
-const M_FIXED         = M_PRINTED_FIXED + M_CAMERA_PCB + M_GRIPPER_SERVO;
+// Motor table. stall torque (N·m), body mass (kg), price (USD), URDF mount.
+const MOTORS = {
+  STS3215: { stall: 30 * KGCM, mass: 0.056, price: 18, mount: 'small' },
+  STS3250: { stall: 50 * KGCM, mass: 0.075, price: 30, mount: 'small' },
+  ST3120:  { stall: 120 * KGCM, mass: 0.210, price: 60, mount: 'big'  },  // peak 120 kg·cm
+};
+const MOTOR_KEYS = ['STS3215', 'STS3250', 'ST3120'];
 
-// Mass of an individual servo body.
-const M_STS3215 = 0.056;
-const M_STS3250 = 0.075;
-const N_SERVOS  = 7;  // 7 explicit servo links; gripper servo already in M_FIXED
+// Mount-induced downstream lever extension Δ (m) when a joint is 'big'.
+// MUST match the URDF's delta_shoulder / delta_elbow (single source of truth).
+const DELTA = { shoulder: 0.015, elbow: 0.030 };
 
-const M_SERVOS_BASE = N_SERVOS * M_STS3215;
-const M_SERVOS_PRO  = 2 * M_STS3250 + (N_SERVOS - 2) * M_STS3215;  // 2 shoulder upgraded
+// Regimes: fraction of stall torque. Lead with duty (rated headline).
+const REGIMES = [
+  { key: 'duty', factor: 0.70 },
+  { key: 'hold', factor: 0.50 },
+  { key: 'peak', factor: 1.00 },
+];
 
-// Reach calibration: at default lengths (shoulder=136, elbow=140), measured
-// total reach is 502 mm. So fixed_reach = 0.502 - 0.136 - 0.140 = 0.226 m
-// (covers base column + wrist/gripper extension).
-const REACH_FIXED_OFFSET = 0.226;
+// Reference builds -> preset motor pairs (set both dropdowns). T-shirt sizes.
+const PRESETS = {
+  S: { shoulder: 'STS3250', elbow: 'STS3250' },  // dual small
+  M: { shoulder: 'ST3120',  elbow: 'STS3250' },  // big shoulder, small elbow
+  L: { shoulder: 'ST3120',  elbow: 'ST3120'  },  // dual big
+};
+
+// First-order fixed geometry (m). Calibrate against CAD.
+const L1_FIXED = 0.050;  // shoulder axis -> upper-arm rail start + bracket
+const L2_FIXED = 0.050;  // elbow axis -> forearm rail start + bracket
+const W_WRIST  = 0.126;  // forearm tip -> payload point (wrist tilt+roll+gripper)
+
+// Printed-part groups -> link_masses.json stems (Part C output).
+const GROUP = {
+  elbow:   ['shoulder_elbow_body_1', 'elbow_fork_1', 'elbow_servo_adapter_L_1',
+            'elbow_servo_adapter_R_1', 'elbow_wrist_body_1'],
+  wrist:   ['wrist_tilt_body_1', 'camera_tilter_1', 'camera_mount_1'],
+  gripper: ['Parallel_gripper_assembly_v1_1', 'left_jaw_v1_1', 'right_jaw_v1_1'],
+};
+// Lumped fallbacks (kg) when link_masses.json is absent — sums of the geometric
+// estimate at default profile (shows an "estimated masses" badge in that case).
+const FALLBACK = { elbow: 0.157, wrist: 0.041, gripper: 0.071 };
+const M_CAMERA = 0.0166; // wrist camera PCB (electronics, not printed)
+
+let MASSES = null;       // {stem: {mass_g}} from /masses, or null
+let MASSES_REAL = false; // true once /masses returns real data
 
 // --- helpers ----------------------------------------------------------------
 const $ = id => document.getElementById(id);
-const fmtG    = kg => (kg * 1000).toFixed(1) + ' g';
-const fmtMM   = m  => (m * 1000).toFixed(0) + ' mm';
-const fmtKg   = kg => kg.toFixed(3) + ' kg';
+const fmtG  = kg => (kg * 1000).toFixed(0) + ' g';
+const fmtMM = m  => (m * 1000).toFixed(0) + ' mm';
 
-function payloadAtReach(shoulderTorqueMax, mArm, reach, reachRatio) {
-  // Worst-case static balance at the shoulder pitch joint.
-  // Arm CoM modelled at reach/3 from shoulder; payload at reach (at this configuration).
-  const r       = reach * reachRatio;
-  const mArmEff = mArm * reachRatio;          // proxy: less extended arm carries less torque
-  const torqueArm     = mArmEff * G * (r / 3);
-  const torqueBudget  = shoulderTorqueMax - torqueArm;
-  if (torqueBudget <= 0) return null;          // arm can't even hold itself
-  return torqueBudget / (G * r);
+// kg for one printed group: real JSON if present, else fallback constant.
+function groupMass(name) {
+  if (MASSES) {
+    let g = 0;
+    for (const stem of GROUP[name]) {
+      const e = MASSES[stem];
+      if (e && typeof e.mass_g === 'number') g += e.mass_g;
+    }
+    if (g > 0) return g / 1000;
+  }
+  return FALLBACK[name];
 }
 
-// --- update loop ------------------------------------------------------------
-function update() {
+// Core static model. Returns per-(regime,reach) binding payload + which joint
+// binds, plus the mass/reach breakdown.
+function compute() {
   const L_s = Number($('shoulder-num').value) / 1000;
   const L_e = Number($('elbow-num').value) / 1000;
+  const shMotor = $('shoulder-motor').value;
+  const elMotor = $('elbow-motor').value;
+  const bigSh = MOTORS[shMotor].mount === 'big';
+  const bigEl = MOTORS[elMotor].mount === 'big';
 
-  // Masses (kg)
-  const mShoulderPair = 2 * EXT_DENSITY * L_s;    // two single rails
-  const mElbow        = 2 * EXT_DENSITY * L_e;    // dual rail in one link
-  const mActuatedBase = M_FIXED + mShoulderPair + mElbow + M_SERVOS_BASE;
-  const mActuatedPro  = M_FIXED + mShoulderPair + mElbow + M_SERVOS_PRO;
+  // Effective link lengths (mount Δ lengthens the lever — physically correct).
+  const L1 = L1_FIXED + L_s + (bigSh ? DELTA.shoulder : 0);
+  const L2 = L2_FIXED + L_e + (bigEl ? DELTA.elbow : 0);
+  const w  = W_WRIST;
+  const reach = L1 + L2 + w;
 
-  // Reach (m)
-  const reach    = REACH_FIXED_OFFSET + L_s + L_e;
-  const reach70  = reach * 0.7;
+  // Masses (kg).
+  const mRailS  = 2 * EXT_DENSITY * L_s;        // two single rails
+  const mRailE  = 2 * EXT_DENSITY * L_e;        // dual rail
+  const mElbow  = groupMass('elbow')   + 2 * MOTORS[elMotor].mass;   // 2 elbow servos
+  const mWrist  = groupMass('wrist')   + groupMass('gripper')
+                + 2 * MOTORS.STS3215.mass       // wrist tilt + roll servos
+                + MOTORS.STS3215.mass            // gripper servo
+                + M_CAMERA;
+  const mTotal  = mRailS + mRailE + mElbow + mWrist;
 
-  // Available shoulder torque after doubling.
-  const T_base_cont  = 2 * STS3215_STALL * CONT_FACTOR;
-  const T_base_stall = 2 * STS3215_STALL;
-  const T_pro_cont   = 2 * STS3250_STALL * CONT_FACTOR;
-  const T_pro_stall  = 2 * STS3250_STALL;
+  // Self-weight moment about each pitch axis at FULL extension (k=1).
+  const bracketS = mRailS * (L1 / 2) + mElbow * L1
+                 + mRailE * (L1 + L2 / 2) + mWrist * (L1 + L2 + w / 2);
+  const bracketE = mRailE * (L2 / 2) + mWrist * (L2 + w / 2);
 
-  // Payload at full extension (reachRatio = 1) and at 70 % (reachRatio = 0.7)
-  const p = (T, mArm, ratio) => payloadAtReach(T, mArm, reach, ratio);
-  const cell = (id, kg) => {
-    const el = $(id);
-    if (kg === null) {
-      el.textContent = '—';
-      el.classList.remove('ok', 'warn'); el.classList.add('bad');
-    } else {
-      el.textContent = fmtG(kg);
-      el.classList.remove('bad', 'warn');
-      el.classList.toggle('ok', kg > 0.5);
-      el.classList.toggle('warn', kg <= 0.5 && kg > 0);
+  // Two pitch servos share each joint.
+  const Tsh = 2 * MOTORS[shMotor].stall;
+  const Tel = 2 * MOTORS[elMotor].stall;
+  const leverS = reach;       // shoulder axis -> payload
+  const leverE = L2 + w;      // elbow axis -> payload
+
+  // P(k) = (T*f/(G*k) - bracket) / lever, levers scale with reach ratio k.
+  function cap(T, f, k, bracket, lever) {
+    return (T * f / (G * k) - bracket) / lever;
+  }
+
+  const out = {};
+  for (const { key, factor } of REGIMES) {
+    for (const [k, tag] of [[1.0, 'full'], [0.7, '70']]) {
+      const ps = cap(Tsh, factor, k, bracketS, leverS);
+      const pe = cap(Tel, factor, k, bracketE, leverE);
+      const binding = Math.min(ps, pe);
+      out[`${key}-${tag}`] = {
+        payload: binding,
+        joint: ps <= pe ? 'shoulder' : 'elbow',
+        ps, pe,
+      };
     }
-  };
+  }
 
-  // Mass table
-  $('m-fixed').textContent       = fmtG(M_FIXED);
-  $('m-shoulder').textContent    = fmtG(mShoulderPair);
-  $('m-elbow').textContent       = fmtG(mElbow);
-  $('m-servos-base').textContent = fmtG(M_SERVOS_BASE);
-  $('m-servos-pro').textContent  = fmtG(M_SERVOS_PRO);
-  $('m-total-base').textContent  = fmtKg(mActuatedBase);
-  $('m-total-pro').textContent   = fmtKg(mActuatedPro);
+  return { out, reach, mRailS, mRailE, mElbow, mWrist, mTotal,
+           shMotor, elMotor };
+}
 
-  // Reach
-  $('r-full').textContent = fmtMM(reach);
-  $('r-70').textContent   = fmtMM(reach70);
+// --- render -----------------------------------------------------------------
+function cell(id, kg) {
+  const el = $(id);
+  if (kg === null || !isFinite(kg) || kg <= 0) {
+    el.textContent = '—';
+    el.classList.remove('ok', 'warn'); el.classList.add('bad');
+  } else {
+    el.textContent = fmtG(kg);
+    el.classList.remove('bad');
+    el.classList.toggle('ok', kg > 0.5);
+    el.classList.toggle('warn', kg <= 0.5);
+  }
+}
 
-  // Payload
-  cell('p-base-cont-full',  p(T_base_cont,  mActuatedBase, 1.0));
-  cell('p-base-cont-70',    p(T_base_cont,  mActuatedBase, 0.7));
-  cell('p-base-stall-full', p(T_base_stall, mActuatedBase, 1.0));
-  cell('p-base-stall-70',   p(T_base_stall, mActuatedBase, 0.7));
-  cell('p-pro-cont-full',   p(T_pro_cont,   mActuatedPro,  1.0));
-  cell('p-pro-cont-70',     p(T_pro_cont,   mActuatedPro,  0.7));
-  cell('p-pro-stall-full',  p(T_pro_stall,  mActuatedPro,  1.0));
-  cell('p-pro-stall-70',    p(T_pro_stall,  mActuatedPro,  0.7));
+function update() {
+  const r = compute();
+  const o = r.out;
 
-  // Xacro snippet
+  // Payload table.
+  cell('p-duty-full', o['duty-full'].payload);
+  cell('p-duty-70',   o['duty-70'].payload);
+  cell('p-hold-full', o['hold-full'].payload);
+  cell('p-hold-70',   o['hold-70'].payload);
+  cell('p-peak-full', o['peak-full'].payload);
+  cell('p-peak-70',   o['peak-70'].payload);
+
+  // Headline = duty @ full.
+  const head = o['duty-full'];
+  const hEl = $('p-headline');
+  if (head.payload > 0) {
+    hEl.textContent = `${fmtG(head.payload)}  ·  binding: ${head.joint}`;
+    hEl.classList.remove('bad'); hEl.classList.add('num');
+  } else {
+    hEl.textContent = `— (can't hold itself, binding: ${head.joint})`;
+  }
+
+  $('binding-note').textContent =
+    `Binding joint per cell is the lower of shoulder vs elbow capacity; the ` +
+    `headline binds at the ${head.joint}.`;
+  const det = o['duty-full'];
+  $('joint-detail').textContent =
+    `At duty / full reach — shoulder caps ${fmtG(Math.max(0, det.ps))}, ` +
+    `elbow caps ${fmtG(Math.max(0, det.pe))}.`;
+
+  // Mass + reach.
+  $('m-rail-s').textContent = fmtG(r.mRailS);
+  $('m-rail-e').textContent = fmtG(r.mRailE);
+  $('m-elbow').textContent  = fmtG(r.mElbow);
+  $('m-wrist').textContent  = fmtG(r.mWrist);
+  $('m-total').textContent  = fmtG(r.mTotal);
+  $('r-full').textContent   = fmtMM(r.reach);
+  $('r-70').textContent     = fmtMM(r.reach * 0.7);
+
+  // Masses badge.
+  $('masses-badge').innerHTML = MASSES_REAL
+    ? '' : '<span class="badge">estimated masses</span>';
+
+  // Cost.
+  const p = m => MOTORS[m].price;
+  const base = MOTORS.STS3215.price;   // joint_base
+  const tilt = MOTORS.STS3215.price;   // joint_wrist_tilt
+  const roll = MOTORS.STS3215.price;   // joint_wrist_roll
+  const grip = MOTORS.STS3215.price;   // gripper
+  const total = base + p(r.shMotor) + p(r.elMotor) + tilt + roll + grip;
+  $('cost-total').textContent = `$${total}`;
+  $('cost-breakdown').textContent =
+    `base 3215 ($${base}) · shoulder ${r.shMotor} ($${p(r.shMotor)}) · ` +
+    `elbow ${r.elMotor} ($${p(r.elMotor)}) · 3× wrist/gripper 3215 ($${tilt + roll + grip})`;
+
+  // xacro snippet (the four args).
+  const L_s = (Number($('shoulder-num').value) / 1000).toFixed(3);
+  const L_e = (Number($('elbow-num').value) / 1000).toFixed(3);
   $('snippet').textContent =
-`<xacro:property name="shoulder_ext_length" value="${L_s.toFixed(3)}"/>
-<xacro:property name="elbow_ext_length"    value="${L_e.toFixed(3)}"/>`;
+`<xacro:arg name="shoulder_ext_length" default="${L_s}"/>
+<xacro:arg name="elbow_ext_length"    default="${L_e}"/>
+<xacro:arg name="shoulder_mount"      default="${MOTORS[r.shMotor].mount}"/>
+<xacro:arg name="elbow_mount"         default="${MOTORS[r.elMotor].mount}"/>`;
 }
 
 // --- input wiring -----------------------------------------------------------
+function fillMotorSelect(id, selected) {
+  const sel = $(id);
+  sel.innerHTML = '';
+  for (const k of MOTOR_KEYS) {
+    const opt = document.createElement('option');
+    opt.value = k;
+    opt.textContent = `${k} (${(MOTORS[k].stall).toFixed(2)} N·m, ${MOTORS[k].mount})`;
+    if (k === selected) opt.selected = true;
+    sel.appendChild(opt);
+  }
+}
+
 function bind(sliderId, numberId) {
   const slider = $(sliderId), number = $(numberId);
   slider.addEventListener('input', () => { number.value = slider.value; update(); });
@@ -477,12 +643,31 @@ function bind(sliderId, numberId) {
 }
 bind('shoulder-slider', 'shoulder-num');
 bind('elbow-slider',    'elbow-num');
+$('shoulder-motor').addEventListener('change', update);
+$('elbow-motor').addEventListener('change', update);
+
+for (const btn of document.querySelectorAll('[data-preset]')) {
+  btn.addEventListener('click', () => {
+    const p = PRESETS[btn.dataset.preset];
+    $('shoulder-motor').value = p.shoulder;
+    $('elbow-motor').value = p.elbow;
+    update();
+  });
+}
 
 function setFeedback(text, cls = 'note') {
   const el = $('copy-feedback');
   el.textContent = text;
   el.className = 'note ' + cls;
 }
+
+// Reload preview: re-fetch /urdf and rebuild the 3D view (picks up edits made
+// to the xacro on disk, or a fresh render after Save). The viewer module
+// listens for 'xacro-saved' and re-runs loadUrdf().
+$('reload').addEventListener('click', () => {
+  setFeedback('Reloading preview…');
+  window.dispatchEvent(new CustomEvent('xacro-saved'));
+});
 
 $('copy').addEventListener('click', async () => {
   try {
@@ -496,23 +681,25 @@ $('copy').addEventListener('click', async () => {
 $('save').addEventListener('click', async () => {
   const L_s = Number($('shoulder-num').value) / 1000;
   const L_e = Number($('elbow-num').value) / 1000;
+  const shoulder_mount = MOTORS[$('shoulder-motor').value].mount;
+  const elbow_mount    = MOTORS[$('elbow-motor').value].mount;
   setFeedback('Saving…');
   try {
     const resp = await fetch('/save', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ shoulder: L_s, elbow: L_e }),
+      body:    JSON.stringify({ shoulder: L_s, elbow: L_e, shoulder_mount, elbow_mount }),
     });
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.error || resp.statusText);
     setFeedback(
-      `Saved: shoulder=${(data.shoulder * 1000).toFixed(0)} mm, elbow=${(data.elbow * 1000).toFixed(0)} mm. ` +
-      `Rebuild mod101_description to pick it up in sim.`, 'ok');
+      `Saved: shoulder=${(data.shoulder * 1000).toFixed(0)} mm/${data.shoulder_mount}, ` +
+      `elbow=${(data.elbow * 1000).toFixed(0)} mm/${data.elbow_mount}. ` +
+      `Rebuild mod101_description for sim.`, 'ok');
     window.dispatchEvent(new CustomEvent('xacro-saved'));
   } catch (e) {
     setFeedback(
-      `Save failed: ${e.message || e}. ` +
-      `Start the backend with: python3 configurator/server.py`, 'bad');
+      `Save failed: ${e.message || e}. Start the backend: python3 configurator/server.py`, 'bad');
   }
 });
 
@@ -527,26 +714,38 @@ $('tool-select').addEventListener('change', async () => {
     });
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.error || resp.statusText);
-    setFeedback(
-      `Tool set to "${data.tool}". Rebuild mod101_description if you want it ` +
-      `live in sim (the viewer below has reloaded with the new tool).`, 'ok');
+    setFeedback(`Tool set to "${data.tool}". Viewer reloaded.`, 'ok');
     window.dispatchEvent(new CustomEvent('xacro-saved'));
   } catch (e) {
-    setFeedback(`Tool switch failed: ${e.message || e}. ` +
-                `Backend needs python3 configurator/server.py.`, 'bad');
+    setFeedback(`Tool switch failed: ${e.message || e}. Backend needs python3 configurator/server.py.`, 'bad');
   }
 });
 
-// On boot, ask the server for current values; if no server, leave defaults.
+// On boot: load current args + masses; degrade gracefully without a backend.
 (async function init() {
+  fillMotorSelect('shoulder-motor', 'STS3250');
+  fillMotorSelect('elbow-motor', 'STS3250');
+
+  // Real masses (Part C). Absence -> fallback constants + badge.
+  try {
+    const mResp = await fetch('/masses');
+    if (mResp.ok) {
+      const { masses } = await mResp.json();
+      if (masses) { MASSES = masses; MASSES_REAL = true; }
+    }
+  } catch { /* no backend: keep fallback */ }
+
   try {
     const [propsResp, toolResp] = await Promise.all([fetch('/load'), fetch('/tool')]);
     if (!propsResp.ok) throw new Error('load failed');
-    const { shoulder, elbow } = await propsResp.json();
-    $('shoulder-num').value    = (shoulder * 1000).toFixed(0);
-    $('shoulder-slider').value = (shoulder * 1000).toFixed(0);
-    $('elbow-num').value       = (elbow    * 1000).toFixed(0);
-    $('elbow-slider').value    = (elbow    * 1000).toFixed(0);
+    const cfg = await propsResp.json();
+    $('shoulder-num').value    = (cfg.shoulder * 1000).toFixed(0);
+    $('shoulder-slider').value = (cfg.shoulder * 1000).toFixed(0);
+    $('elbow-num').value       = (cfg.elbow * 1000).toFixed(0);
+    $('elbow-slider').value    = (cfg.elbow * 1000).toFixed(0);
+    // Map mount back to a motor: big -> ST3120, small -> keep STS3250 default.
+    if (cfg.shoulder_mount === 'big') $('shoulder-motor').value = 'ST3120';
+    if (cfg.elbow_mount === 'big')    $('elbow-motor').value = 'ST3120';
 
     if (toolResp.ok) {
       const { tool, available } = await toolResp.json();
@@ -559,14 +758,15 @@ $('tool-select').addEventListener('change', async () => {
         sel.appendChild(opt);
       }
     }
-    setFeedback('Loaded current values from mod101.xacro.', 'ok');
+    setFeedback(MASSES_REAL
+      ? 'Loaded current args + real masses from disk.'
+      : 'Loaded current args (using estimated masses — run tools/estimate_masses.py).',
+      'ok');
   } catch {
-    setFeedback('Backend not detected — Copy works, Save needs ' +
-                'python3 configurator/server.py.', 'warn');
-    // Without backend we don't know which tools exist; show the two we ship.
+    setFeedback('Backend not detected — Copy works, Save needs python3 configurator/server.py.', 'warn');
     const sel = $('tool-select');
     sel.innerHTML = '';
-    for (const t of ['parallel', 'none']) {
+    for (const t of ['jaws', 'parallel', 'pincopen', 'none']) {
       const opt = document.createElement('option');
       opt.value = t; opt.textContent = t;
       sel.appendChild(opt);
@@ -609,8 +809,7 @@ scene.add(sun);
 const grid = new THREE.GridHelper(2, 20, 0x444444, 0x222222);
 scene.add(grid);
 
-// URDF convention is Z-up. Rotate the entire robot subtree so it displays
-// correctly under three.js's Y-up camera.
+// URDF convention is Z-up. Rotate the whole robot for three.js's Y-up camera.
 const robotRoot = new THREE.Group();
 robotRoot.rotation.x = -Math.PI / 2;
 scene.add(robotRoot);
@@ -618,19 +817,19 @@ scene.add(robotRoot);
 let currentRobot = null;
 const loader = new URDFLoader();
 
-// "Ready" home pose — matches the initial_value's in mod101.ros2control so
-// the viewer and Gazebo wake up looking the same. Joints not listed here
-// default to 0.
+// "Ready" home pose — matches the initial_value's in mod101.ros2control so the
+// viewer and Gazebo wake up looking the same. Canonical joint names; joints not
+// listed default to 0.
 const HOME_POSE = {
-  '2': -Math.PI / 4,   // shoulder pitch back, -45°
-  '3':  Math.PI / 2,   // elbow up, +90°
-  '4': -Math.PI / 4,   // wrist tilt back, -45°
+  joint_shoulder:   -Math.PI / 4,  // shoulder pitch back, -45°
+  joint_elbow:       Math.PI / 2,  // elbow up, +90°
+  joint_wrist_tilt: -Math.PI / 4,  // wrist tilt back, -45°
 };
 
-// --- joint sliders -----------------------------------------------------------
-// Built dynamically from the URDF so we pick up whichever tool is loaded
-// (each tool can add its own actuated joints). Mimic followers are skipped:
-// they're driven by the master via setJointValue automatically.
+// Display order for the arm's canonical joints; tool joints sort after.
+const ARM_ORDER = ['joint_base', 'joint_shoulder', 'joint_elbow',
+                   'joint_wrist_tilt', 'joint_wrist_roll'];
+
 function buildJointSliders() {
   const container = document.getElementById('joint-sliders');
   container.innerHTML = '';
@@ -639,12 +838,11 @@ function buildJointSliders() {
   const entries = Object.entries(currentRobot.joints)
     .filter(([_, j]) => j.jointType !== 'fixed' && !j.mimicJoint);
 
-  // Sort active arm joints (numeric names 1..6) first, then alphabetically.
   entries.sort(([a], [b]) => {
-    const na = /^\d+$/.test(a), nb = /^\d+$/.test(b);
-    if (na && nb) return Number(a) - Number(b);
-    if (na) return -1;
-    if (nb) return 1;
+    const ia = ARM_ORDER.indexOf(a), ib = ARM_ORDER.indexOf(b);
+    if (ia !== -1 && ib !== -1) return ia - ib;
+    if (ia !== -1) return -1;
+    if (ib !== -1) return 1;
     return a.localeCompare(b);
   });
 
@@ -659,7 +857,6 @@ function buildJointSliders() {
   for (const [name, joint] of entries) {
     let lower = joint.limit ? Number(joint.limit.lower) : -Math.PI;
     let upper = joint.limit ? Number(joint.limit.upper) : Math.PI;
-    // Continuous joints store lower==upper==0; replace with ±π for a usable range.
     if (joint.jointType === 'continuous' || lower === upper) {
       lower = -Math.PI; upper = Math.PI;
     }
@@ -672,19 +869,15 @@ function buildJointSliders() {
     const row = document.createElement('div');
     row.className = 'input-row';
     row.dataset.joint = name;
-    const labelText = isLinear
-      ? `joint ${name} (mm)`
-      : `joint ${name} (rad)`;
+    const labelText = isLinear ? `${name} (mm)` : `${name} (rad)`;
     row.innerHTML = `
-      <label style="min-width: 130px;">${labelText}</label>
+      <label style="min-width: 150px;">${labelText}</label>
       <input type="range" min="${lower}" max="${upper}" step="${step}" value="${initial}">
       <span class="readout" style="min-width: 3.5em; text-align: right; font-variant-numeric: tabular-nums;"></span>
     `;
     const slider  = row.querySelector('input');
     const readout = row.querySelector('.readout');
-    const render  = v => readout.textContent = isLinear
-      ? (v * 1000).toFixed(1)
-      : v.toFixed(2);
+    const render  = v => readout.textContent = isLinear ? (v * 1000).toFixed(1) : v.toFixed(2);
     slider.addEventListener('input', () => {
       const v = Number(slider.value);
       currentRobot.setJointValue(name, v);
@@ -729,8 +922,7 @@ async function loadUrdf() {
     status.textContent = 'URDF loaded.';
     status.className = 'note ok';
   } catch (e) {
-    status.textContent = `URDF load failed: ${e.message || e}. ` +
-                         `Source ROS before starting server.py.`;
+    status.textContent = `URDF load failed: ${e.message || e}. Source ROS before starting server.py.`;
     status.className = 'note bad';
   }
 }

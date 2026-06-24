@@ -2,24 +2,31 @@
 """mod101 configurator backend.
 
 Serves configurator/ as static files. Endpoints:
-  GET  /load              - read shoulder_ext_length and elbow_ext_length
-                            from src/mod101_description/urdf/mod101.xacro
-  POST /save              - write those two values back in-place
+  GET  /load              - read the four build args (shoulder/elbow rail
+                            length + shoulder/elbow mount) from
+                            src/mod101_description/urdf/mod101.xacro
+  POST /save              - write those four values back in-place
+  GET  /masses            - return src/mod101_description/link_masses.json
+                            (Part C output) so the page uses real printed masses
+  GET  /tool, POST /tool  - active end-effector package + discovery
   GET  /urdf              - run `xacro` and return the expanded URDF, with
-                            mesh URIs rewritten to /meshes/<file>
-  GET  /meshes/<file>     - serve binary mesh files from the description pkg
+                            mesh URIs rewritten to /pkg/<pkg>/meshes/<file>
+  GET  /pkg/<pkg>/meshes/<file> - serve binary mesh files from any package
 
 Stdlib only. Run from project root:
     python3 configurator/server.py
 """
 
+import atexit
 import http.server
 import json
+import os
 import re
 import shutil
 import socketserver
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 PORT = 8000
@@ -29,8 +36,18 @@ SRC  = ROOT / 'src'
 DESC = SRC / 'mod101_description'
 XACRO = DESC / 'urdf' / 'mod101.xacro'
 
-PROP_RE = re.compile(
-    r'(<xacro:property\s+name="(?P<name>shoulder_ext_length|elbow_ext_length)"\s+value=")'
+MASSES = DESC / 'link_masses.json'
+
+# The two rail-length build args: <xacro:arg name="shoulder_ext_length" default="0.130"/>
+LEN_ARG_RE = re.compile(
+    r'(<xacro:arg\s+name="(?P<name>shoulder_ext_length|elbow_ext_length)"\s+default=")'
+    r'(?P<val>[^"]+)'
+    r'(")'
+)
+
+# The two mount build args: <xacro:arg name="shoulder_mount" default="small"/>
+MOUNT_ARG_RE = re.compile(
+    r'(<xacro:arg\s+name="(?P<name>shoulder_mount|elbow_mount)"\s+default=")'
     r'(?P<val>[^"]+)'
     r'(")'
 )
@@ -73,52 +90,126 @@ def write_tool(name: str) -> None:
     XACRO.write_text(new_text)
 
 
-def read_props() -> dict[str, float]:
-    out: dict[str, float] = {}
-    for m in PROP_RE.finditer(XACRO.read_text()):
-        out[m['name']] = float(m['val'])
-    if {'shoulder_ext_length', 'elbow_ext_length'} - out.keys():
-        raise RuntimeError(
-            f'Both extrusion length properties not found in {XACRO}.'
-        )
-    return {'shoulder': out['shoulder_ext_length'], 'elbow': out['elbow_ext_length']}
+MOUNTS = ('small', 'big')
 
 
-def write_props(shoulder_m: float, elbow_m: float) -> None:
+def read_props() -> dict:
+    """Return the four build args: two lengths (m) + two mounts."""
+    text = XACRO.read_text()
+    lens: dict[str, float] = {}
+    for m in LEN_ARG_RE.finditer(text):
+        lens[m['name']] = float(m['val'])
+    mounts: dict[str, str] = {}
+    for m in MOUNT_ARG_RE.finditer(text):
+        mounts[m['name']] = m['val']
+    if {'shoulder_ext_length', 'elbow_ext_length'} - lens.keys():
+        raise RuntimeError(f'Both extrusion length args not found in {XACRO}.')
+    if {'shoulder_mount', 'elbow_mount'} - mounts.keys():
+        raise RuntimeError(f'Both mount args not found in {XACRO}.')
+    return {
+        'shoulder': lens['shoulder_ext_length'],
+        'elbow': lens['elbow_ext_length'],
+        'shoulder_mount': mounts['shoulder_mount'],
+        'elbow_mount': mounts['elbow_mount'],
+    }
+
+
+def write_props(shoulder_m: float, elbow_m: float,
+                shoulder_mount: str, elbow_mount: str) -> None:
     for label, v in (('shoulder', shoulder_m), ('elbow', elbow_m)):
         if not (0.05 <= v <= 0.40):
             raise ValueError(f'{label} length {v} m outside [0.05, 0.40]')
-    targets = {'shoulder_ext_length': shoulder_m, 'elbow_ext_length': elbow_m}
+    for label, mnt in (('shoulder', shoulder_mount), ('elbow', elbow_mount)):
+        if mnt not in MOUNTS:
+            raise ValueError(f'{label} mount {mnt!r} not in {MOUNTS}')
 
-    def sub(m: re.Match) -> str:
-        return f'{m.group(1)}{targets[m["name"]]:.4f}{m.group(4)}'
+    lengths = {'shoulder_ext_length': shoulder_m, 'elbow_ext_length': elbow_m}
+    mounts = {'shoulder_mount': shoulder_mount, 'elbow_mount': elbow_mount}
 
-    new_text, n = PROP_RE.subn(sub, XACRO.read_text())
+    text = XACRO.read_text()
+    text, n = LEN_ARG_RE.subn(
+        lambda m: f'{m.group(1)}{lengths[m["name"]]:.4f}{m.group(4)}', text)
     if n != 2:
-        raise RuntimeError(f'Expected 2 replacements, did {n}')
-    XACRO.write_text(new_text)
+        raise RuntimeError(f'Expected 2 length replacements, did {n}')
+    text, n = MOUNT_ARG_RE.subn(
+        lambda m: f'{m.group(1)}{mounts[m["name"]]}{m.group(4)}', text)
+    if n != 2:
+        raise RuntimeError(f'Expected 2 mount replacements, did {n}')
+    XACRO.write_text(text)
+
+
+def read_masses() -> dict:
+    """Part C output. {'masses': {...}} or {'masses': None} if not generated."""
+    if not MASSES.is_file():
+        return {'masses': None}
+    return {'masses': json.loads(MASSES.read_text())}
+
+
+_SRC_OVERLAY: str | None = None
+
+
+def src_ament_overlay() -> str:
+    """Build (once) a temp ament prefix whose share/<pkg> symlinks to each src
+    package, so `$(find <pkg>)` in xacro resolves to LIVE src/ — independent of
+    whether the colcon workspace is built, fresh, or even sourced. This is what
+    makes the configurator always render the current parameterized URDF instead
+    of a stale install/ copy.
+
+    A src package laid out as src/<pkg>/{urdf,meshes,config} matches the share/
+    layout ament expects, so the symlink Just Works for includes and meshes.
+    """
+    global _SRC_OVERLAY
+    if _SRC_OVERLAY is not None:
+        return _SRC_OVERLAY
+
+    prefix = Path(tempfile.mkdtemp(prefix='mod101-cfg-overlay-'))
+    share = prefix / 'share'
+    marker_dir = share / 'ament_index' / 'resource_index' / 'packages'
+    marker_dir.mkdir(parents=True, exist_ok=True)
+    for pkg_dir in sorted(SRC.iterdir()):
+        if not (pkg_dir / 'package.xml').is_file():
+            continue
+        pkg = pkg_dir.name
+        (share / pkg).symlink_to(pkg_dir.resolve())  # share/<pkg> -> src/<pkg>
+        (marker_dir / pkg).write_text('')            # ament package marker
+    atexit.register(shutil.rmtree, prefix, ignore_errors=True)
+    _SRC_OVERLAY = str(prefix)
+    return _SRC_OVERLAY
 
 
 def expand_urdf() -> str:
-    """Run `xacro` and rewrite mesh URIs to web-accessible paths."""
+    """Run `xacro` (resolving packages from src/) and rewrite mesh URIs to web
+    paths."""
     xacro_bin = shutil.which('xacro')
     if not xacro_bin:
         raise RuntimeError(
             "xacro CLI not on PATH. Source ROS first:\n"
-            "    source /opt/ros/jazzy/setup.bash && source install/setup.bash"
+            "    source /opt/ros/jazzy/setup.bash"
         )
+    # Prepend the src overlay so $(find <pkg>) -> src/<pkg>, ahead of any built
+    # install space. No `source install/setup.bash` needed.
+    env = dict(os.environ)
+    overlay = src_ament_overlay()
+    existing = env.get('AMENT_PREFIX_PATH', '')
+    env['AMENT_PREFIX_PATH'] = overlay + (os.pathsep + existing if existing else '')
+
     proc = subprocess.run(
         [xacro_bin, str(XACRO)],
-        capture_output=True, text=True
+        capture_output=True, text=True, env=env,
     )
     if proc.returncode != 0:
         raise RuntimeError(f'xacro failed: {proc.stderr.strip()}')
-    # Two mesh URI styles to rewrite to web paths:
-    #   file:///abs/.../<pkg>/share/<pkg>/meshes/foo.stl → /pkg/<pkg>/meshes/foo.stl
-    #   package://<pkg>/meshes/foo.stl                   → /pkg/<pkg>/meshes/foo.stl
+    # Mesh URI styles to rewrite to web paths (any of):
+    #   file:///abs/.../<pkg>/share/<pkg>/meshes/foo.stl  (built install space)
+    #   file:///abs/.../src/<pkg>/meshes/foo.stl          (src overlay)
+    #   package://<pkg>/meshes/foo.stl
+    # all -> /pkg/<pkg>/meshes/foo.stl
     urdf = proc.stdout
     urdf = re.sub(
         r'file://[^"]*/([^/]+)/share/\1/meshes/([^"]+)',
+        r'/pkg/\1/meshes/\2', urdf)
+    urdf = re.sub(
+        r'file://[^"]*/src/([^/]+)/meshes/([^"]+)',
         r'/pkg/\1/meshes/\2', urdf)
     urdf = re.sub(
         r'package://([^/]+)/meshes/',
@@ -163,6 +254,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             try:    return self._json(200, read_props())
             except Exception as e: return self._json(500, {'error': str(e)})
 
+        if path.rstrip('/') == '/masses':
+            try:    return self._json(200, read_masses())
+            except Exception as e: return self._json(500, {'error': str(e)})
+
         if path.rstrip('/') == '/tool':
             try:    return self._json(200, {'tool': read_tool(), 'available': list_tools()})
             except Exception as e: return self._json(500, {'error': str(e)})
@@ -197,7 +292,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
         if path == '/save':
             try:
-                write_props(float(data['shoulder']), float(data['elbow']))
+                # mounts default to whatever's on disk if the client omits them
+                # (lets a length-only save not disturb the motor selection).
+                cur = read_props()
+                write_props(
+                    float(data['shoulder']), float(data['elbow']),
+                    str(data.get('shoulder_mount', cur['shoulder_mount'])),
+                    str(data.get('elbow_mount', cur['elbow_mount'])))
                 return self._json(200, {'ok': True, **read_props()})
             except Exception as e:
                 return self._json(400, {'error': str(e)})
