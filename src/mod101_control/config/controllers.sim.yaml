@@ -23,7 +23,7 @@ controller_manager:
 
 arm_controller:
   ros__parameters:
-    joints: ["1", "2", "3", "4", "5"]
+    joints: ["joint_base", "joint_shoulder", "joint_elbow", "joint_wrist_tilt", "joint_wrist_roll"]
     command_interfaces:
       - position
     state_interfaces:
@@ -32,7 +32,7 @@ arm_controller:
 
 arm_trajectory_controller:
   ros__parameters:
-    joints: ["1", "2", "3", "4", "5"]
+    joints: ["joint_base", "joint_shoulder", "joint_elbow", "joint_wrist_tilt", "joint_wrist_roll"]
     command_interfaces:
       - position
     state_interfaces:

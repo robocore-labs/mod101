@@ -18,27 +18,27 @@
       <plugin>mock_components/GenericSystem</plugin>
     </hardware>
 
-    <joint name="1">
+    <joint name="joint_base">
       <command_interface name="position"/>
       <state_interface name="position"/>
       <state_interface name="velocity"/>
     </joint>
-    <joint name="2">
+    <joint name="joint_shoulder">
       <command_interface name="position"/>
       <state_interface name="position"/>
       <state_interface name="velocity"/>
     </joint>
-    <joint name="3">
+    <joint name="joint_elbow">
       <command_interface name="position"/>
       <state_interface name="position"/>
       <state_interface name="velocity"/>
     </joint>
-    <joint name="4">
+    <joint name="joint_wrist_tilt">
       <command_interface name="position"/>
       <state_interface name="position"/>
       <state_interface name="velocity"/>
     </joint>
-    <joint name="5">
+    <joint name="joint_wrist_roll">
       <command_interface name="position"/>
       <state_interface name="position"/>
       <state_interface name="velocity"/>

@@ -46,3 +46,9 @@ dist/
 
 # Windows
 **/*:Zone.Identifier
+
+# CAD exports kept only as reference/source geometry for the parametric
+# consolidation (not built; see reference/README.md). Untracked to keep the
+# tree clean and `git grep` free of the exports' CAD auto-joint names.
+/reference/*
+!/reference/README.md
