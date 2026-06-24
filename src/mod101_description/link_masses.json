@@ -1,0 +1,121 @@
+{
+  "Parallel_gripper_assembly_v1_1": {
+    "mass_g": 32.447,
+    "V_cm3": 26.167,
+    "shell_frac": 1.0,
+    "watertight": true,
+    "source": "geometry"
+  },
+  "base_cover_1": {
+    "mass_g": 25.729,
+    "V_cm3": 23.962,
+    "shell_frac": 0.842,
+    "watertight": true,
+    "source": "geometry"
+  },
+  "base_link": {
+    "mass_g": 63.392,
+    "V_cm3": 83.768,
+    "shell_frac": 0.542,
+    "watertight": true,
+    "source": "geometry"
+  },
+  "base_rotation_body_1": {
+    "mass_g": 60.979,
+    "V_cm3": 89.771,
+    "shell_frac": 0.468,
+    "watertight": true,
+    "source": "geometry"
+  },
+  "camera_mount_1": {
+    "mass_g": 10.478,
+    "V_cm3": 8.45,
+    "shell_frac": 1.0,
+    "watertight": true,
+    "source": "geometry"
+  },
+  "camera_tilter_1": {
+    "mass_g": 6.224,
+    "V_cm3": 5.019,
+    "shell_frac": 1.0,
+    "watertight": true,
+    "source": "geometry"
+  },
+  "elbow_fork_1": {
+    "mass_g": 41.656,
+    "V_cm3": 56.172,
+    "shell_frac": 0.527,
+    "watertight": true,
+    "source": "geometry"
+  },
+  "elbow_servo_adapter_L_1": {
+    "mass_g": 8.686,
+    "V_cm3": 9.106,
+    "shell_frac": 0.728,
+    "watertight": true,
+    "source": "geometry"
+  },
+  "elbow_servo_adapter_R_1": {
+    "mass_g": 8.686,
+    "V_cm3": 9.106,
+    "shell_frac": 0.728,
+    "watertight": true,
+    "source": "geometry"
+  },
+  "elbow_wrist_body_1": {
+    "mass_g": 17.309,
+    "V_cm3": 19.337,
+    "shell_frac": 0.673,
+    "watertight": true,
+    "source": "geometry"
+  },
+  "left_jaw_v1_1": {
+    "mass_g": 19.435,
+    "V_cm3": 15.673,
+    "shell_frac": 1.0,
+    "watertight": false,
+    "source": "geometry"
+  },
+  "right_jaw_v1_1": {
+    "mass_g": 19.435,
+    "V_cm3": 15.673,
+    "shell_frac": 1.0,
+    "watertight": false,
+    "source": "geometry"
+  },
+  "shoulder_elbow_body_1": {
+    "mass_g": 80.417,
+    "V_cm3": 129.806,
+    "shell_frac": 0.411,
+    "watertight": true,
+    "source": "geometry"
+  },
+  "shoulder_fork_1": {
+    "mass_g": 38.105,
+    "V_cm3": 43.269,
+    "shell_frac": 0.659,
+    "watertight": true,
+    "source": "geometry"
+  },
+  "shoulder_thingy_L_1": {
+    "mass_g": 8.686,
+    "V_cm3": 9.106,
+    "shell_frac": 0.729,
+    "watertight": true,
+    "source": "geometry"
+  },
+  "shoulder_thingy_R_1": {
+    "mass_g": 8.686,
+    "V_cm3": 9.106,
+    "shell_frac": 0.729,
+    "watertight": true,
+    "source": "geometry"
+  },
+  "wrist_tilt_body_1": {
+    "mass_g": 24.447,
+    "V_cm3": 23.101,
+    "shell_frac": 0.828,
+    "watertight": true,
+    "source": "geometry"
+  }
+}
