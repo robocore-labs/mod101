@@ -8,8 +8,8 @@
       <plugin>gz_ros2_control/GazeboSimSystem</plugin>
     </hardware>
 
-    <!-- 4 actuated DOF (wrist roll is fixed in the exports; the actuated 5th
-         DOF + tool flange arrive with the tool work). -->
+    <!-- Arm joints (5 DOF). End-effector joints live in the active tool's own
+         <ros2_control> block; see mod101_tool_<tool>/urdf/tool.ros2control. -->
     <joint name="${prefix}joint_base">
       <command_interface name="position"/>
       <state_interface name="position"/>
@@ -29,6 +29,12 @@
     </joint>
 
     <joint name="${prefix}joint_wrist_tilt">
+      <command_interface name="position"/>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+
+    <joint name="${prefix}joint_wrist_roll">
       <command_interface name="position"/>
       <state_interface name="position"/>
       <state_interface name="velocity"/>

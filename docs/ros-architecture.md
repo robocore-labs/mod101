@@ -95,9 +95,9 @@ ros2 launch mod101_description display.launch.py
 Gazebo sim with ros2_control:
 
 ```bash
-ros2 launch mod101_gazebo gazebo.launch.py                 # tool:=parallel (default)
+ros2 launch mod101_gazebo gazebo.launch.py                 # tool:=jaws (default)
+ros2 launch mod101_gazebo gazebo.launch.py tool:=parallel
 ros2 launch mod101_gazebo gazebo.launch.py tool:=pincopen
-ros2 launch mod101_gazebo gazebo.launch.py tool:=jaws
 ros2 launch mod101_gazebo gazebo.launch.py tool:=none
 ```
 
@@ -132,6 +132,11 @@ ros2 control switch_controllers \
 ## Wiring real hardware
 
 Override `mod101.xacro`'s `use_sim` arg to `false` and switch `mod101.hardware.xacro`'s placeholder `mock_components/GenericSystem` plugin for the real servo bus driver.
+
+Calibrate the physical arm first — the configurator's Calibrate tab sweeps each
+joint and generates `mod101_control/config/calibration.yaml` (joint limits in
+radians, per-servo tick ranges) plus a LeRobot calibration JSON. See
+[calibration.md](calibration.md).
 
 ## Gotchas
 

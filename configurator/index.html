@@ -5,7 +5,8 @@
 <title>mod101 configurator</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Tomorrow:wght@500;600&display=swap" rel="stylesheet">
+<!-- Robocore Design System — tokens/fonts.css -->
+<link href="https://fonts.googleapis.com/css2?family=Tomorrow:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script type="importmap">
 {
   "imports": {
@@ -15,421 +16,447 @@
   }
 }
 </script>
+<link rel="stylesheet" href="theme.css">
 <style>
-  /* Ported from /home/cdr/Work/robocore-studio/core/frontend/styles.css */
-  :root {
-    color-scheme: dark;
-    --bg: hsl(0, 0%, 7%);
-    --bg-2: hsl(0, 0%, 5%);
-    --bg-3: hsl(0, 0%, 10%);
-    --bg-input: hsl(0, 0%, 12%);
-    --border: hsl(0, 0%, 20%);
-    --border-soft: hsl(0, 0%, 14%);
-    --fg: hsl(0, 0%, 100%);
-    --fg-dim: hsl(0, 0%, 60%);
-    --fg-mute: hsl(0, 0%, 40%);
-    --accent: hsl(173, 72%, 36%);
-    --accent-hover: hsl(173, 72%, 42%);
-    --accent-soft: hsla(173, 72%, 36%, 0.12);
-    --accent-fg: hsl(0, 0%, 0%);
-    --warn: hsl(28, 90%, 55%);
-    --error: hsl(0, 85%, 60%);
-    --error-soft: hsla(0, 85%, 60%, 0.1);
-    --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    --font-display: "Tomorrow", "Inter", sans-serif;
-    --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  }
+  /* Design tokens (:root) + the page nav live in theme.css, shared with
+     calibrate.html. Everything below is build-page specific. */
 
   * { box-sizing: border-box; }
 
+  html, body { height: 100%; }
   body {
     margin: 0;
-    padding: 2rem;
-    background: var(--bg);
-    color: var(--fg);
-    font-family: var(--font-sans);
+    background:
+      radial-gradient(1100px 480px at 85% -12%, var(--teal-tint-06), transparent 62%),
+      var(--bg-page);
+    color: var(--text-primary);
+    font-family: var(--font-body);
     font-size: 14px;
-    letter-spacing: 0.02em;
+    letter-spacing: 0.01em;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     line-height: 1.5;
+    overflow: hidden;            /* one-screen: panels scroll internally, page doesn't */
   }
 
-  .wrap { max-width: 1400px; margin: 0 auto; }
+  /* ---- one-screen app shell (targets 1920×1080) ---- */
+  .app {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 14px 18px;
+  }
+  header.top { display: flex; align-items: baseline; gap: 16px; flex: 0 0 auto; }
+  header.top .lede {
+    color: var(--text-secondary);
+    font-size: 12px;
+    margin: 0;
+    line-height: 1.4;
+  }
+
+  .cols {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 452px;
+    gap: 12px;
+  }
+  .col { min-height: 0; display: flex; flex-direction: column; gap: 12px; }
+  .col-right { overflow-y: auto; padding-right: 2px; }
+  .col-viewer .panel { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+
+  /* Joint-pose controls float over the viewer as a frosted overlay panel. */
+  .viewer-overlay {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    width: 310px;
+    max-height: calc(100% - 24px);
+    overflow-y: auto;
+    background: rgba(0,0,0,.66);
+    border: 1px solid var(--border-hairline);
+    border-radius: var(--radius-sm);
+    padding: 12px 14px;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    z-index: 4;
+  }
+  /* keep the Home button pinned while the joint list above it scrolls */
+  .viewer-overlay h3 {
+    font-family: var(--font-label);
+    font-size: 11px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 1.5px;
+    color: var(--text-secondary);
+    margin: 0 0 10px;
+  }
+  #joint-sliders { max-height: 46vh; overflow-y: auto; padding-right: 2px; }
+  .viewer-overlay .input-row { margin: 5px 0; gap: 8px; }
+  .viewer-overlay .input-row label { min-width: 88px; font-size: 10px; letter-spacing: 0.8px; }
+  .viewer-overlay .readout { color: var(--accent); font-size: 11px; }
+
+  .viewer-bar { display: flex; align-items: center; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
+  .viewer-bar .note { margin: 0; }
+  .reach-table { margin-top: 4px; }
+
+  /* payload + reach: two small cards, one after the other */
+  .numbers { display: grid; grid-template-columns: 1fr; gap: 12px; }
+  .numbers .panel { min-width: 0; }
+  .numbers td.num { white-space: nowrap; }
 
   h1 {
     font-family: var(--font-display);
-    font-weight: 600;
-    font-size: 22px;
-    letter-spacing: 0.12em;
+    font-weight: 700;
+    font-size: 19px;
+    letter-spacing: 0.10em;
     text-transform: uppercase;
-    margin: 0 0 4px;
+    margin: 0;
+    white-space: nowrap;
   }
+  h1 .accent { color: var(--accent); }
 
   h2 {
-    font-family: var(--font-sans);
-    font-size: 10px;
+    font-family: var(--font-label);
+    font-size: 12px;
     text-transform: uppercase;
-    letter-spacing: 0.16em;
-    font-weight: 600;
-    color: var(--fg-dim);
-    margin: 18px 0 8px;
+    letter-spacing: 1.4px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    margin: 14px 0 8px;
   }
   .panel > h2:first-child { margin-top: 0; }
-
-  .grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-    gap: 16px;
-  }
-  .viewer-grid {
-    display: grid;
-    grid-template-columns: minmax(0, 1.4fr) minmax(360px, 1fr);
-    gap: 16px;
-    margin-bottom: 16px;
-  }
-  @media (max-width: 900px) {
-    .viewer-grid { grid-template-columns: 1fr; }
+  /* section divider inside a card (e.g. Configuration groups) */
+  h2.divide {
+    border-top: 1px solid var(--border-hairline);
+    padding-top: 15px;
+    margin-top: 16px;
   }
 
   .panel {
-    background: var(--bg-2);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 16px 20px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-hairline);
+    border-radius: var(--radius-md);
+    padding: 14px 16px;
   }
 
   .input-row {
     display: flex;
     align-items: center;
-    gap: 12px;
-    margin: 6px 0;
+    gap: 10px;
+    margin: 5px 0;
   }
   .input-row label {
-    min-width: 140px;
-    color: var(--fg-dim);
+    min-width: 128px;
+    color: var(--text-tertiary);
+    font-family: var(--font-label);
     font-size: 10px;
     text-transform: uppercase;
-    letter-spacing: 0.12em;
-    font-weight: 600;
+    letter-spacing: 1.2px;
+    font-weight: 500;
   }
-  .input-row input[type=range] {
-    flex: 1;
-    accent-color: var(--accent);
-  }
+  .input-row input[type=range] { flex: 1; accent-color: var(--accent); }
   .input-row input[type=number],
   .input-row select,
   #tool-select {
-    background: var(--bg-input);
-    color: var(--fg);
-    border: 1px solid var(--border);
-    border-radius: 3px;
-    padding: 4px 6px;
+    background: var(--bg-surface);
+    color: var(--text-primary);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-xs);
+    padding: 5px 8px;
     font-family: var(--font-mono);
     font-size: 12px;
   }
-  .input-row input[type=number] { width: 72px; }
+  .input-row input[type=number] { width: 68px; }
   .input-row select { flex: 1; min-width: 0; }
   #tool-select { flex: 1; min-width: 0; }
-  .input-row > span { color: var(--fg-mute); font-size: 11px; }
+  .input-row > span { color: var(--text-quaternary); font-size: 11px; font-family: var(--font-mono); }
 
   .presets { display: flex; gap: 8px; margin: 4px 0 2px; flex-wrap: wrap; }
+  .presets button { padding: 6px 14px; font-size: 10px; }
 
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 12px;
-  }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
   th, td {
-    padding: 6px 8px;
+    padding: 5px 8px;
     text-align: right;
-    border-bottom: 1px solid var(--border-soft);
+    border-bottom: 1px solid var(--border-faint);
     font-family: var(--font-mono);
   }
   th {
-    color: var(--fg-dim);
-    font-family: var(--font-sans);
-    font-size: 10px;
+    color: var(--text-tertiary);
+    font-family: var(--font-label);
+    font-size: 9px;
     text-transform: uppercase;
-    letter-spacing: 0.08em;
-    font-weight: 600;
+    letter-spacing: 1px;
+    font-weight: 700;
   }
   th:first-child, td:first-child {
     text-align: left;
-    color: var(--fg-dim);
-    font-family: var(--font-sans);
+    color: var(--text-secondary);
+    font-family: var(--font-body);
     font-size: 12px;
-    letter-spacing: 0.02em;
+    letter-spacing: 0.01em;
   }
   td.num, .readout {
     font-variant-numeric: tabular-nums;
-    color: var(--fg);
+    color: var(--text-primary);
   }
   tr.headline td { font-size: 13px; }
-  tr.headline td.num { color: var(--accent); font-weight: 600; }
+  tr.headline td.num { color: var(--accent); font-weight: 700; }
 
   .badge {
     display: inline-block;
+    font-family: var(--font-label);
     font-size: 9px;
     text-transform: uppercase;
-    letter-spacing: 0.1em;
-    font-weight: 600;
-    padding: 2px 6px;
-    border-radius: 3px;
-    border: 1px solid var(--warn);
-    color: var(--warn);
+    letter-spacing: 1.2px;
+    font-weight: 700;
+    padding: 2px 9px;
+    border-radius: var(--radius-pill);
+    border: 1px solid var(--amber-500);
+    color: var(--amber-500);
     vertical-align: middle;
     margin-left: 6px;
   }
-  .cost-line {
-    font-family: var(--font-mono);
-    font-size: 13px;
-    margin: 10px 0 2px;
-  }
-  .cost-line .total { color: var(--accent); font-weight: 600; }
+  .cost-line { font-family: var(--font-mono); font-size: 13px; margin: 8px 0 2px; }
+  .cost-line .total { color: var(--accent); font-weight: 700; }
 
   pre {
-    background: var(--bg-input);
-    border: 1px solid var(--border);
-    padding: 12px 14px;
-    border-radius: 4px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    padding: 10px 12px;
+    border-radius: var(--radius-sm);
     overflow-x: auto;
     font-family: var(--font-mono);
-    font-size: 12px;
-    color: var(--fg);
-    line-height: 1.5;
+    font-size: 11px;
+    color: var(--text-primary);
+    line-height: 1.55;
+    margin: 0 0 10px;
   }
 
   button {
-    font: inherit;
+    font-family: var(--font-body);
+    font-weight: 700;
+    font-size: 11px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
     cursor: pointer;
     background: var(--accent);
-    color: var(--accent-fg);
+    color: #fff;
     border: none;
-    padding: 6px 14px;
-    border-radius: 4px;
-    font-family: var(--font-sans);
-    font-size: 11px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    transition: background 120ms ease;
+    padding: 9px 20px;
+    border-radius: var(--radius-pill);
+    box-shadow: var(--shadow-accent-glow);
+    transition: opacity .15s ease, transform .1s ease;
   }
-  button:hover { background: var(--accent-hover); }
+  button:hover { opacity: .85; }
+  button:active { transform: scale(.97); }
   button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-  /* Secondary / "ghost" buttons (Copy, Home, presets) — match robocore-studio's
-     .urdf-btn-ghost. */
+  /* secondary / "ghost" buttons (Reload, Copy, Home, presets) */
   button.ghost {
-    background: var(--bg-3);
-    color: var(--fg-dim);
-    border: 1px solid var(--border);
+    background: rgba(255,255,255,.06);
+    color: var(--text-primary);
+    box-shadow: none;
   }
-  button.ghost:hover {
-    color: var(--fg);
-    border-color: var(--fg-mute);
-    background: var(--bg-input);
-  }
+  button.ghost:hover { opacity: 1; background: rgba(255,255,255,.11); }
 
   .note {
-    color: var(--fg-mute);
+    color: var(--text-quaternary);
     font-size: 11px;
     margin-top: 6px;
-    letter-spacing: 0.02em;
+    line-height: 1.5;
   }
-  .note code, p code {
+  .note code, p code, .lede code {
     font-family: var(--font-mono);
     font-size: 11px;
-    background: var(--bg-3);
-    border: 1px solid var(--border-soft);
+    background: var(--bg-card-2);
+    border: 1px solid var(--border-faint);
     padding: 1px 4px;
-    border-radius: 2px;
-    color: var(--fg);
+    border-radius: 4px;
+    color: var(--text-secondary);
   }
 
-  .ok    { color: var(--accent); }
-  .warn  { color: var(--warn); }
-  .bad   { color: var(--error); }
+  .ok   { color: var(--accent); }
+  .warn { color: var(--warn); }
+  .bad  { color: var(--error); }
 
-  .footer {
-    color: var(--fg-mute);
-    font-size: 11px;
-    margin-top: 2rem;
-    letter-spacing: 0.02em;
+  /* collapsible footnotes keep long explanatory copy off the one-screen view */
+  details.footnote { margin-top: 8px; }
+  details.footnote > summary {
+    cursor: pointer;
+    font-family: var(--font-label);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    color: var(--text-tertiary);
+    list-style: none;
   }
+  details.footnote > summary::-webkit-details-marker { display: none; }
+  details.footnote > summary::before { content: "▸ "; color: var(--accent); }
+  details.footnote[open] > summary::before { content: "▾ "; }
+  details.footnote p { color: var(--text-quaternary); font-size: 11px; margin-top: 6px; line-height: 1.5; }
 
   #viewer {
+    position: relative;
+    flex: 1;
+    min-height: 0;
     width: 100%;
-    height: clamp(280px, 55vh, 560px);
-    background: hsl(0, 0%, 4%);
-    border: 1px solid var(--border);
-    border-radius: 4px;
+    margin-top: 4px;
+    background: #050506;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
   }
-  #viewer canvas { display: block; width: 100%; height: 100%; }
+  #viewer canvas { display: block; width: 100%; height: 100%; border-radius: var(--radius-sm); }
 
   ::-webkit-scrollbar { width: 10px; height: 10px; }
   ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: var(--border); border: 2px solid var(--bg-2); }
-  ::-webkit-scrollbar-thumb:hover { background: var(--fg-mute); }
+  ::-webkit-scrollbar-thumb { background: var(--border-hairline); border: 2px solid var(--bg-page); border-radius: 6px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text-quaternary); }
 
-  @media (max-width: 640px) {
-    body { padding: 1rem; }
-    .panel { padding: 12px 14px; }
-    .input-row { flex-wrap: wrap; gap: 6px; }
-    .input-row label { min-width: 100%; }
-    h1 { font-size: 18px; }
-    button { padding: 8px 14px; }
+  /* Below ~1400px let the page scroll and give the viewer a floor. */
+  @media (max-width: 1400px) {
+    body { overflow: auto; }
+    .app { height: auto; min-height: 100vh; }
+    .cols { grid-template-columns: minmax(0, 1fr) 420px; }
+    .col-right { overflow: visible; }
+    .col-viewer { min-height: 62vh; }
+  }
+  @media (max-width: 1000px) {
+    .cols { grid-template-columns: 1fr; }
+    .numbers { grid-template-columns: 1fr; }
+    #viewer { height: 55vh; flex: none; }
+    /* stack the pose controls under the viewer on narrow screens */
+    .viewer-overlay {
+      position: static;
+      width: auto;
+      max-height: none;
+      margin-top: 8px;
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+    }
   }
 </style>
 </head>
 <body>
 
-<div class="wrap">
+<div class="app">
 
-<h1>mod101 — arm configurator</h1>
-<p class="note">Pick a motor per pitch joint and set the two rail lengths. Payload (binding joint, three duty regimes × two reaches), mass, and an estimated servo cost recompute live. The four values drive the URDF's <code>shoulder_ext_length</code>, <code>elbow_ext_length</code>, <code>shoulder_mount</code>, <code>elbow_mount</code> args directly.</p>
+  <header class="top">
+    <h1>mod101 · <span class="accent">arm configurator</span></h1>
+    <nav class="nav">
+      <a href="/" class="active">Build</a>
+      <a href="/calibrate.html">Calibrate</a>
+    </nav>
+  </header>
 
-<div class="viewer-grid">
-  <div class="panel">
-    <h2>Live preview</h2>
-    <div id="viewer"></div>
-    <p class="note" id="viewer-status">Loading URDF…</p>
-    <button id="reload" class="ghost" style="margin-top: 8px;">Reload preview</button>
+  <div class="cols">
 
-    <h2 style="margin-top: 18px;">Big-mesh nudge</h2>
-    <p class="note">Cosmetic alignment for a big-mount module — shifts all its meshes together (kinematics unchanged) and writes the offset back to its xacro. Drag and watch the preview above. Set big mounts on the right to see them.</p>
-    <div class="input-row">
-      <label>module</label>
-      <select id="nudge-module">
-        <option value="shoulder">shoulder (big)</option>
-        <option value="elbow">elbow (big)</option>
-      </select>
-    </div>
-    <div class="input-row">
-      <label>X · forward</label>
-      <input id="nudge-x" type="range" min="-30" max="30" step="0.5" value="0">
-      <span class="readout" id="nudge-x-val" style="min-width:4em;text-align:right;">0.0</span><span>mm</span>
-    </div>
-    <div class="input-row">
-      <label>Y · lateral</label>
-      <input id="nudge-y" type="range" min="-30" max="30" step="0.5" value="0">
-      <span class="readout" id="nudge-y-val" style="min-width:4em;text-align:right;">0.0</span><span>mm</span>
-    </div>
-    <div class="input-row">
-      <label>Z · up</label>
-      <input id="nudge-z" type="range" min="-30" max="30" step="0.5" value="0">
-      <span class="readout" id="nudge-z-val" style="min-width:4em;text-align:right;">0.0</span><span>mm</span>
-    </div>
-    <button id="nudge-reset" class="ghost" style="margin-top: 6px;">Reset this module</button>
-    <p class="note" id="nudge-feedback"></p>
-  </div>
-  <div class="panel">
-    <h2>Configuration</h2>
-    <div class="input-row">
-      <label>end-effector tool</label>
-      <select id="tool-select"></select>
+    <!-- Left — live preview with the joint-pose controls floating on top -->
+    <div class="col col-viewer">
+      <div class="panel">
+        <h2>Live preview</h2>
+        <div id="viewer">
+          <div class="viewer-overlay">
+            <h3>Joint pose</h3>
+            <div id="joint-sliders">
+              <p class="note" id="joint-empty">Joints appear once the URDF loads.</p>
+            </div>
+            <button id="home" class="ghost" style="margin-top: 8px; width: 100%;">Home (ready pose)</button>
+          </div>
+        </div>
+        <div class="viewer-bar">
+          <button id="reload" class="ghost">Reload preview</button>
+          <button id="save">Save to xacro</button>
+          <span class="note" id="viewer-status">Loading URDF…</span>
+          <span class="note" id="copy-feedback"></span>
+        </div>
+      </div>
     </div>
 
-    <h2>Reference builds</h2>
-    <div class="presets">
-      <button class="ghost" data-preset="S">S · dual-3250</button>
-      <button class="ghost" data-preset="M">M · 3120+3250</button>
-      <button class="ghost" data-preset="L">L · dual-3120</button>
+    <!-- Right — configuration on top, the numbers below -->
+    <div class="col col-right">
+
+      <div class="panel">
+        <h2>Configuration</h2>
+        <div class="input-row">
+          <label>end-effector tool</label>
+          <select id="tool-select"></select>
+        </div>
+
+        <h2 class="divide">Reference builds</h2>
+        <div class="presets">
+          <button class="ghost" data-preset="S">S · dual-3250</button>
+          <button class="ghost" data-preset="M">M · 3120+3250</button>
+          <button class="ghost" data-preset="L">L · dual-3120</button>
+        </div>
+
+        <h2 class="divide">Motors (per joint)</h2>
+        <div class="input-row">
+          <label>shoulder motor</label>
+          <select id="shoulder-motor"></select>
+        </div>
+        <div class="input-row">
+          <label>elbow motor</label>
+          <select id="elbow-motor"></select>
+        </div>
+
+        <h2 class="divide">Rail lengths</h2>
+        <div class="input-row">
+          <label>shoulder length</label>
+          <input id="shoulder-slider" type="range" min="80" max="280" step="5" value="136">
+          <input id="shoulder-num"    type="number" min="80" max="280" step="1" value="136">
+          <span>mm</span>
+        </div>
+        <div class="input-row">
+          <label>elbow length</label>
+          <input id="elbow-slider" type="range" min="80" max="280" step="5" value="140">
+          <input id="elbow-num"    type="number" min="80" max="280" step="1" value="140">
+          <span>mm</span>
+        </div>
+        <p class="note">Practical bounds ~80–280 mm/segment. Below 80 the brackets collide; above 280 the shoulder stalls under arm weight alone.</p>
+
+        <details class="footnote">
+          <summary>xacro args</summary>
+          <pre id="snippet"></pre>
+          <button id="copy" class="ghost">Copy snippet</button>
+          <p class="note">Served by <code>configurator/server.py</code>, Save writes all four args to <code>src/mod101_description/urdf/mod101.xacro</code>; rebuild <code>mod101_description</code> for sim. Without the server, only Copy works.</p>
+        </details>
+      </div>
+
+      <!-- two small cards: payload + reach, side by side -->
+      <div class="numbers">
+        <div class="panel">
+          <h2>Payload <span id="masses-badge"></span></h2>
+          <table>
+            <tr class="headline">
+              <td>Rated <span class="note" style="margin:0">(duty · full)</span></td>
+              <td class="num" id="p-headline" colspan="2" style="white-space:nowrap;"></td>
+            </tr>
+            <tr><th>regime</th><th>full</th><th>@ 70 %</th></tr>
+            <tr><td>Duty (70 %)</td>   <td class="num" id="p-duty-full"></td> <td class="num" id="p-duty-70"></td></tr>
+            <tr><td>Holding (50 %)</td> <td class="num" id="p-hold-full"></td> <td class="num" id="p-hold-70"></td></tr>
+            <tr><td>Peak (100 %)</td>   <td class="num" id="p-peak-full"></td> <td class="num" id="p-peak-70"></td></tr>
+          </table>
+        </div>
+
+        <div class="panel">
+          <h2>Reach</h2>
+          <table class="reach-table">
+            <tr class="headline"><td>Max reach (full)</td>  <td class="num" id="r-full"></td></tr>
+            <tr><td>Working (70 %)</td>                       <td class="num" id="r-70"></td></tr>
+            <tr><td>Actuated mass</td>                        <td class="num" id="m-total"></td></tr>
+            <tr><td>Servo cost (est.)</td>                    <td class="num" id="cost-total"></td></tr>
+          </table>
+          <p class="note" id="cost-breakdown"></p>
+        </div>
+      </div>
+
     </div>
 
-    <h2>Motors (per joint)</h2>
-    <div class="input-row">
-      <label>shoulder motor</label>
-      <select id="shoulder-motor"></select>
-    </div>
-    <div class="input-row">
-      <label>elbow motor</label>
-      <select id="elbow-motor"></select>
-    </div>
-    <p class="note">STS3215 / STS3250 → <code>small</code> mount; ST3120 → <code>big</code> mount. A big mount raises the torque cap <em>and</em> lengthens the lever (Δ), so the payload model applies both.</p>
+  </div><!-- .cols -->
 
-    <h2>Rail lengths</h2>
-    <div class="input-row">
-      <label>shoulder length</label>
-      <input id="shoulder-slider" type="range" min="80" max="280" step="5" value="136">
-      <input id="shoulder-num"    type="number" min="80" max="280" step="1" value="136">
-      <span>mm</span>
-    </div>
-    <div class="input-row">
-      <label>elbow length</label>
-      <input id="elbow-slider" type="range" min="80" max="280" step="5" value="140">
-      <input id="elbow-num"    type="number" min="80" max="280" step="1" value="140">
-      <span>mm</span>
-    </div>
-    <p class="note">Practical bounds ~80–280 mm/segment. Below 80 the brackets collide; above 280 the shoulder stalls under arm weight alone.</p>
-
-    <h2>Joint pose</h2>
-    <div id="joint-sliders">
-      <p class="note" id="joint-empty">Joints appear once the URDF loads.</p>
-    </div>
-    <button id="home" class="ghost" style="margin-top: 8px;">Home (ready pose)</button>
-  </div>
-</div>
-
-<div class="grid">
-
-  <div class="panel">
-    <h2>Payload <span id="masses-badge"></span></h2>
-    <table>
-      <tr class="headline">
-        <td>Rated payload <span class="note" style="margin:0">(duty · full reach)</span></td>
-        <td class="num" id="p-headline" colspan="2"></td>
-      </tr>
-      <tr><th>regime</th><th>full extension</th><th>@ 70 % reach</th></tr>
-      <tr><td>Duty-cycle (rated, 70 %)</td> <td class="num" id="p-duty-full"></td> <td class="num" id="p-duty-70"></td></tr>
-      <tr><td>Holding (50 %)</td>           <td class="num" id="p-hold-full"></td> <td class="num" id="p-hold-70"></td></tr>
-      <tr><td>Peak / stall (100 %)</td>     <td class="num" id="p-peak-full"></td> <td class="num" id="p-peak-70"></td></tr>
-    </table>
-    <p class="note" id="binding-note"></p>
-    <p class="note" id="joint-detail"></p>
-  </div>
-
-  <div class="panel">
-    <h2>Mass &amp; reach</h2>
-    <table>
-      <tr><td>Shoulder rails (2×)</td>      <td class="num" id="m-rail-s"></td></tr>
-      <tr><td>Forearm rails (dual)</td>     <td class="num" id="m-rail-e"></td></tr>
-      <tr><td>Elbow assembly</td>           <td class="num" id="m-elbow"></td></tr>
-      <tr><td>Wrist + gripper assembly</td> <td class="num" id="m-wrist"></td></tr>
-      <tr><th>Actuated total</th>           <th class="num" id="m-total"></th></tr>
-      <tr><td>Max reach (full extension)</td> <td class="num" id="r-full"></td></tr>
-      <tr><td>70 % reach (working envelope)</td> <td class="num" id="r-70"></td></tr>
-    </table>
-
-    <h2>Estimated cost</h2>
-    <p class="cost-line">Servos: <span class="total" id="cost-total"></span></p>
-    <p class="note" id="cost-breakdown"></p>
-    <p class="note">Prices are placeholders (ST3120 ≈ 2× STS3250 ≈ 4× STS3215) until Cristi sets the real BOM. Servo cost only — not a purchase price; rails / printed parts / fasteners not included.</p>
-  </div>
-
-</div>
-
-<div class="panel" style="margin-top: 16px;">
-  <h2>xacro args</h2>
-  <pre id="snippet"></pre>
-  <button id="save">Save to mod101.xacro</button>
-  <button id="copy" class="ghost" style="margin-left: 8px;">Copy snippet</button>
-  <p class="note" id="copy-feedback"></p>
-  <p class="note">When served by <code>configurator/server.py</code>, "Save" writes all four args to <code>src/mod101_description/urdf/mod101.xacro</code>. Without the server only Copy works. Rebuild <code>mod101_description</code> to pick changes up in sim.</p>
-</div>
-
-<p class="footer" id="honesty">
-  All math is first-order static balance at the bottleneck (binding) pitch joint:
-  the two pitch servos hold the arm's self-weight plus payload at the stated
-  reach. <b>Regimes:</b> Duty-cycle (70 % of stall) is the rated continuous
-  headline — the manufacturer's safe-load figure, not a thermal limit; Holding
-  (50 %) is a conservative static hold; Peak (100 %) is momentary stall only.
-  Real torque drops with temperature, voltage, and duty — <b>verify on the
-  bench</b>. Negative payload means the arm can't hold its own weight at that
-  length — shorten the rail or fit a bigger motor.
-</p>
-
-</div><!-- .wrap -->
+</div><!-- .app -->
 
 <script>
 'use strict';
@@ -601,28 +628,16 @@ function update() {
   const head = o['duty-full'];
   const hEl = $('p-headline');
   if (head.payload > 0) {
-    hEl.textContent = `${fmtG(head.payload)}  ·  binding: ${head.joint}`;
+    hEl.textContent = fmtG(head.payload);   // binding joint shown in the note below
     hEl.classList.remove('bad'); hEl.classList.add('num');
   } else {
-    hEl.textContent = `— (can't hold itself, binding: ${head.joint})`;
+    hEl.textContent = "— can't hold itself";
   }
 
-  $('binding-note').textContent =
-    `Binding joint per cell is the lower of shoulder vs elbow capacity; the ` +
-    `headline binds at the ${head.joint}.`;
-  const det = o['duty-full'];
-  $('joint-detail').textContent =
-    `At duty / full reach — shoulder caps ${fmtG(Math.max(0, det.ps))}, ` +
-    `elbow caps ${fmtG(Math.max(0, det.pe))}.`;
-
-  // Mass + reach.
-  $('m-rail-s').textContent = fmtG(r.mRailS);
-  $('m-rail-e').textContent = fmtG(r.mRailE);
-  $('m-elbow').textContent  = fmtG(r.mElbow);
-  $('m-wrist').textContent  = fmtG(r.mWrist);
-  $('m-total').textContent  = fmtG(r.mTotal);
-  $('r-full').textContent   = fmtMM(r.reach);
-  $('r-70').textContent     = fmtMM(r.reach * 0.7);
+  // Reach + total actuated mass (breakdown intentionally omitted).
+  $('m-total').textContent = fmtG(r.mTotal);
+  $('r-full').textContent  = fmtMM(r.reach);
+  $('r-70').textContent    = fmtMM(r.reach * 0.7);
 
   // Masses badge.
   $('masses-badge').innerHTML = MASSES_REAL
@@ -712,57 +727,6 @@ $('reload').addEventListener('click', () => {
   window.dispatchEvent(new CustomEvent('xacro-saved'));
 });
 
-// --- big-mesh nudge ---------------------------------------------------------
-// Each big module (shoulder/elbow) has an XYZ offset (m) stored in its xacro.
-// Sliders are mm. Dragging writes the offset back (POST /nudge) and reloads the
-// preview so you eyeball the alignment. Debounced so a drag isn't a write storm.
-const nudgeState = { shoulder: [0, 0, 0], elbow: [0, 0, 0] };
-const nf = msg => { const e = $('nudge-feedback'); if (e) e.textContent = msg; };
-
-function nudgeShowFromState() {
-  const v = nudgeState[$('nudge-module').value];
-  for (const [i, ax] of ['x', 'y', 'z'].entries()) {
-    $(`nudge-${ax}`).value = (v[i] * 1000).toFixed(1);
-    $(`nudge-${ax}-val`).textContent = (v[i] * 1000).toFixed(1);
-  }
-}
-
-let nudgeTimer = null;
-function nudgePush() {
-  const mod = $('nudge-module').value;
-  const xyz = ['x', 'y', 'z'].map(ax => Number($(`nudge-${ax}`).value) / 1000);
-  nudgeState[mod] = xyz;
-  clearTimeout(nudgeTimer);
-  nudgeTimer = setTimeout(async () => {
-    nf('Saving nudge…');
-    try {
-      const resp = await fetch('/nudge', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ module: mod, xyz }),
-      });
-      const data = await resp.json();
-      if (!resp.ok) throw new Error(data.error || resp.statusText);
-      Object.assign(nudgeState, data);
-      nf(`${mod} nudge = [${xyz.map(v => (v * 1000).toFixed(1)).join(', ')}] mm`);
-      window.dispatchEvent(new CustomEvent('xacro-saved'));   // reload preview
-    } catch (e) {
-      nf(`Nudge save failed: ${e.message || e}. Backend needs server.py.`);
-    }
-  }, 200);
-}
-
-for (const ax of ['x', 'y', 'z']) {
-  $(`nudge-${ax}`).addEventListener('input', () => {
-    $(`nudge-${ax}-val`).textContent = Number($(`nudge-${ax}`).value).toFixed(1);
-    nudgePush();
-  });
-}
-$('nudge-module').addEventListener('change', nudgeShowFromState);
-$('nudge-reset').addEventListener('click', () => {
-  for (const ax of ['x', 'y', 'z']) $(`nudge-${ax}`).value = 0;
-  nudgePush();
-});
-
 $('copy').addEventListener('click', async () => {
   try {
     await navigator.clipboard.writeText($('snippet').textContent);
@@ -828,12 +792,6 @@ $('tool-select').addEventListener('change', async () => {
       if (masses) { MASSES = masses; MASSES_REAL = true; }
     }
   } catch { /* no backend: keep fallback */ }
-
-  // Current big-module nudge offsets.
-  try {
-    const nResp = await fetch('/nudge');
-    if (nResp.ok) { Object.assign(nudgeState, await nResp.json()); nudgeShowFromState(); }
-  } catch { /* no backend */ }
 
   try {
     const [propsResp, toolResp] = await Promise.all([fetch('/load'), fetch('/tool')]);
@@ -917,14 +875,9 @@ scene.add(robotRoot);
 let currentRobot = null;
 const loader = new URDFLoader();
 
-// "Ready" home pose — matches the initial_value's in mod101.ros2control so the
-// viewer and Gazebo wake up looking the same. Canonical joint names; joints not
-// listed default to 0.
-const HOME_POSE = {
-  joint_shoulder:   -Math.PI / 4,  // shoulder pitch back, -45°
-  joint_elbow:       Math.PI / 2,  // elbow up, +90°
-  joint_wrist_tilt: -Math.PI / 4,  // wrist tilt back, -45°
-};
+// Home pose = 0.0 on every joint (the zero configuration). Any joint not listed
+// resolves to 0 via `HOME_POSE[name] ?? 0`, so an empty table means all-zeros.
+const HOME_POSE = {};
 
 // Display order for the arm's canonical joints; tool joints sort after.
 const ARM_ORDER = ['joint_base', 'joint_shoulder', 'joint_elbow',
@@ -969,11 +922,12 @@ function buildJointSliders() {
     const row = document.createElement('div');
     row.className = 'input-row';
     row.dataset.joint = name;
-    const labelText = isLinear ? `${name} (mm)` : `${name} (rad)`;
+    const short = name.replace(/^joint_/, '');
+    const labelText = isLinear ? `${short} · mm` : `${short} · rad`;
     row.innerHTML = `
-      <label style="min-width: 150px;">${labelText}</label>
+      <label style="min-width: 84px;">${labelText}</label>
       <input type="range" min="${lower}" max="${upper}" step="${step}" value="${initial}">
-      <span class="readout" style="min-width: 3.5em; text-align: right; font-variant-numeric: tabular-nums;"></span>
+      <span class="readout" style="min-width: 3.2em; text-align: right; font-variant-numeric: tabular-nums;"></span>
     `;
     const slider  = row.querySelector('input');
     const readout = row.querySelector('.readout');
@@ -999,12 +953,39 @@ document.getElementById('home').addEventListener('click', () => {
   }
 });
 
+// Frame the camera tightly on the loaded arm. Meshes load asynchronously, so the
+// bounding box can be empty for a few frames — retry until it's real, then fit.
+let framed = false;
+function fitCameraToRobot(attempt = 0) {
+  if (!currentRobot) return;
+  robotRoot.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(currentRobot);
+  if (box.isEmpty() || !isFinite(box.min.x)) {
+    if (attempt < 40) requestAnimationFrame(() => fitCameraToRobot(attempt + 1));
+    return;
+  }
+  const size   = box.getSize(new THREE.Vector3());
+  const center = box.getCenter(new THREE.Vector3());
+  const maxDim = Math.max(size.x, size.y, size.z) || 0.5;
+  const fov    = camera.fov * Math.PI / 180;
+  const dist   = (maxDim / 2) / Math.tan(fov / 2) * 1.55;   // 1.55 = a little padding
+  const dir    = new THREE.Vector3(0.85, 0.5, 1).normalize();
+  camera.position.copy(center).add(dir.multiplyScalar(dist));
+  camera.near = Math.max(dist / 200, 0.001);
+  camera.far  = dist * 200;
+  camera.updateProjectionMatrix();
+  controls.target.copy(center);
+  controls.minDistance = dist * 0.25;
+  controls.maxDistance = dist * 6;
+  controls.update();
+}
+
 async function loadUrdf() {
   status.textContent = 'Loading URDF…';
   status.className = 'note';
   try {
     // Render the current UI state (lengths + mounts) live, without writing the
-    // file. Nudges are read from the module files the server renders.
+    // file.
     const cfg = window.previewConfig || {};
     const qs = new URLSearchParams(cfg).toString();
     const resp = await fetch('/urdf' + (qs ? '?' + qs : ''), { cache: 'no-store' });
@@ -1023,6 +1004,7 @@ async function loadUrdf() {
     currentRobot = loader.parse(text);
     robotRoot.add(currentRobot);
     buildJointSliders();
+    if (!framed) { framed = true; fitCameraToRobot(); }   // frame the arm on first load
     status.textContent = 'URDF loaded.';
     status.className = 'note ok';
   } catch (e) {

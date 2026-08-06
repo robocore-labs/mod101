@@ -5,14 +5,22 @@
   other robots can instantiate it any number of times — include that file
   directly, not this one.
 
-  Tools and the configurator are handled separately (later). This standalone is
-  the bare arm, drivable in Gazebo via ros2_control.
+  Drivable in Gazebo via ros2_control, with the end-effector selected by the
+  `tool` arg.
 -->
 <robot name="mod101" xmlns:xacro="http://www.ros.org/wiki/xacro">
 
 <!-- use_sim: when true, pulls in the Gazebo ros2_control system + per-link
      gazebo extensions. Hardware overlays (mod101_control) override to false. -->
 <xacro:arg name="use_sim" default="true"/>
+
+<!-- tool: which end-effector package to pull in. The arm terminates at
+     `wrist_flange`; the selected tool's URDF attaches its root link there and
+     contributes its own joints, ros2_control hardware block, gazebo extensions,
+     controllers, and (via the gazebo launch) its own launch fragment. Must
+     match a package `mod101_tool_<tool>` shipping urdf/tool.urdf.xacro.
+     The configurator reads/writes this default. -->
+<xacro:arg name="tool" default="pincopen"/>
 
 <!-- Build parameters: two rail lengths + two servo-mount variants (small|big). -->
 <xacro:arg name="shoulder_ext_length" default="0.0820"/>
@@ -26,17 +34,32 @@
 <!-- Anchor base_link to the world so the arm doesn't tip over under gravity. -->
 <link name="world"/>
 
-<xacro:mod101_arm prefix="" parent="world" use_sim="$(arg use_sim)"
+<xacro:mod101_arm prefix="" parent="world" tool="$(arg tool)" use_sim="$(arg use_sim)"
                   shoulder_ext_length="$(arg shoulder_ext_length)"
                   elbow_ext_length="$(arg elbow_ext_length)"
                   shoulder_mount="$(arg shoulder_mount)"
                   elbow_mount="$(arg elbow_mount)"/>
 
-<!-- gz_ros2_control plugin: exactly once per robot. Loads the arm controllers. -->
+<!-- gz_ros2_control plugin: exactly once per robot, so it lives here rather than
+     in the macro. It loads BOTH the arm's controller yaml and the active tool's
+     — gz_ros2_control merges multiple <parameters> files into the model's single
+     controller_manager namespace, so a tool contributes controllers without
+     touching this file. Integrators with their own plugin declaration (e.g.
+     base101) use the macro directly and skip this block. -->
 <xacro:if value="$(arg use_sim)">
   <gazebo>
     <plugin filename="gz_ros2_control-system" name="gz_ros2_control::GazeboSimROS2ControlPlugin">
       <parameters>$(find mod101_control)/config/controllers.sim.yaml</parameters>
+      <!-- Tool-specific controllers yaml. mod101_tool_none ships none. -->
+      <xacro:if value="${'$(arg tool)' == 'parallel'}">
+        <parameters>$(find mod101_tool_parallel)/config/controllers.yaml</parameters>
+      </xacro:if>
+      <xacro:if value="${'$(arg tool)' == 'pincopen'}">
+        <parameters>$(find mod101_tool_pincopen)/config/controllers.yaml</parameters>
+      </xacro:if>
+      <xacro:if value="${'$(arg tool)' == 'jaws'}">
+        <parameters>$(find mod101_tool_jaws)/config/controllers.yaml</parameters>
+      </xacro:if>
     </plugin>
   </gazebo>
 </xacro:if>

@@ -2,13 +2,17 @@
 <!--
   Shoulder joint module — BIG (ST3120). Same interface links/joints as
   shoulder_small.xacro, but the larger servo + heavier brackets from the
-  mod101_large export. The large export sits in a different CAD canvas, so the
-  three meshes are registered as ONE rigid unit: a single offset anchors the
-  module's input link (shoulder_rotation_link) exactly on the small one, which
-  preserves the servo<->bracket mating from the large export. Residual ~1 cm
-  from the exports' ~1.5° relative rotation — re-export the big parts in the
-  small frame (or send a same-frame mod101-big export) to zero it; then these
-  visual origins just become the export's own.
+  mod101_large export. The three meshes are registered as ONE rigid unit
+  (visual origins satisfy V_servo = V_rot - fixed_servo_shoulder and
+  V_adapter = V_servo - joint_shoulder, exactly as in the small module), so the
+  assembly moves together.
+
+  The big parts are now exported in the same CAD frame as the small ones, so
+  the visual origins below are the export's own and the nudge is zero: the
+  adapter's rail slot straddles the 20x20 extrusion axis to within ~1.5 mm and
+  the rotation link is centred on the joint_base axis to within ~1 mm — the
+  same fit the small module has. Don't re-introduce a nudge to "fix" apparent
+  offset; check the datums first (see below).
 -->
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
 
@@ -16,11 +20,18 @@
 
 <!-- Fine-alignment nudge for the whole big-shoulder assembly (cosmetic; shifts
      all three meshes together, kinematics unchanged). Editable live from the
-     configurator's nudge panel, or by hand here. Zero out after a same-frame
-     re-export. -->
-<xacro:property name="snx" value="0.014000"/>
-<xacro:property name="sny" value="0.026500"/>
-<xacro:property name="snz" value="0.006000"/>
+     configurator's nudge panel, or by hand here.
+
+     Zero, and it should stay zero for this export. The datums to check if you
+     think it needs adjusting (all in link-local coords):
+       shoulder_adapter_1  AABB centre should sit on the arm_extrusion axis,
+                           i.e. (y,z) = (-0.019171, -0.001125)
+       shoulder_rotation_link_1  AABB should be centred on y=0 (the joint_base
+                           axis, which passes through the link origin)
+     A stale non-zero nudge here was displacing the whole assembly ~26 mm. -->
+<xacro:property name="snx" value="0.000000"/>
+<xacro:property name="sny" value="0.000000"/>
+<xacro:property name="snz" value="0.000000"/>
 
 <link name="${prefix}shoulder_rotation_link_1">
   <inertial>

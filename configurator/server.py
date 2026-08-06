@@ -12,6 +12,22 @@ Serves configurator/ as static files. Endpoints:
   GET  /urdf              - run `xacro` and return the expanded URDF, with
                             mesh URIs rewritten to /pkg/<pkg>/meshes/<file>
   GET  /pkg/<pkg>/meshes/<file> - serve binary mesh files from any package
+  GET  /calibration       - read back the generated calibration artifacts
+  POST /calibration       - write calibration.yaml (ROS) + lerobot_calibration
+                            .json from calibrate.html's sweep results
+
+Servo bus (see motors.py — talks to the Feetech chain over USB-TTL directly):
+  GET  /bus               - connection status + known servo IDs
+  GET  /bus/ports         - candidate serial devices
+  POST /bus/connect       - {port} open the bus and scan it
+  POST /bus/disconnect    - disarm + close
+  POST /bus/scan          - re-ping the bus
+  POST /bus/disarm        - torque off everything (also the unload beacon)
+  GET  /servo/<id>        - one servo's telemetry
+  POST /servo/<id>/torque - {on}
+  POST /servo/<id>/move   - {pos, speed?, accel?}
+  POST /servo/<id>/profile- {speed, accel}
+  POST /servo/<id>/id     - {to} reassign servo ID
 
 Stdlib only. Run from project root:
     python3 configurator/server.py
@@ -29,7 +45,12 @@ import sys
 import tempfile
 from pathlib import Path
 
-PORT = 8000
+# Run as `python3 configurator/server.py` this is already sys.path[0], but be
+# explicit so importing server.py as a module (tests) resolves motors too.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from motors import BUS, BusError  # noqa: E402
+
+PORT = 8001
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
 SRC  = ROOT / 'src'
@@ -37,6 +58,12 @@ DESC = SRC / 'mod101_description'
 XACRO = DESC / 'urdf' / 'mod101.xacro'
 
 MASSES = DESC / 'link_masses.json'
+
+# Calibration artifacts written by configurator/calibrate.html. Both are
+# generated files — the wizard is the source of truth, not hand edits.
+CAL_DIR = SRC / 'mod101_control' / 'config'
+CAL_YAML = CAL_DIR / 'calibration.yaml'
+CAL_LEROBOT = CAL_DIR / 'lerobot_calibration.json'
 
 # The two rail-length build args: <xacro:arg name="shoulder_ext_length" default="0.130"/>
 LEN_ARG_RE = re.compile(
@@ -147,7 +174,9 @@ def read_masses() -> dict:
 
 # Big-module fine-alignment nudge (xyz, m), one per swappable big module. Each
 # module xacro carries three property values (e.g. snx/sny/snz) that shift all
-# its meshes together; the configurator's nudge panel edits them live.
+# its meshes together. Backend-only — there is no UI for these; they're driven
+# by hand or over HTTP. Should stay zero for same-frame exports: see
+# docs/configurator.md, "The nudge endpoints".
 MODULES_DIR = DESC / 'urdf' / 'modules'
 NUDGE = {
     'shoulder': {'file': MODULES_DIR / 'shoulder_big.xacro', 'props': ('snx', 'sny', 'snz')},
@@ -186,6 +215,34 @@ def write_nudge(module: str, xyz) -> None:
         if n != 1:
             raise RuntimeError(f'expected 1 replacement for {p}, did {n}')
     spec['file'].write_text(text)
+
+
+def read_calibration() -> dict:
+    """Return whatever calibration artifacts exist on disk (None when absent)."""
+    return {
+        'yaml': CAL_YAML.read_text() if CAL_YAML.is_file() else None,
+        'lerobot': (json.loads(CAL_LEROBOT.read_text())
+                    if CAL_LEROBOT.is_file() else None),
+    }
+
+
+def write_calibration(yaml_text: str, lerobot: dict) -> list[str]:
+    """Persist the wizard's output. `yaml_text` is rendered client-side so the
+    page's preview and the file on disk can't drift; we only sanity-check it."""
+    if not isinstance(yaml_text, str) or 'mod101_calibration:' not in yaml_text:
+        raise ValueError('yaml payload missing the mod101_calibration root key')
+    if not isinstance(lerobot, dict) or not lerobot:
+        raise ValueError('lerobot payload must be a non-empty object')
+    for name, entry in lerobot.items():
+        missing = {'id', 'drive_mode', 'homing_offset',
+                   'range_min', 'range_max'} - set(entry)
+        if missing:
+            raise ValueError(f'{name}: missing {sorted(missing)}')
+
+    CAL_DIR.mkdir(parents=True, exist_ok=True)
+    CAL_YAML.write_text(yaml_text)
+    CAL_LEROBOT.write_text(json.dumps(lerobot, indent=2) + '\n')
+    return [str(p.relative_to(ROOT)) for p in (CAL_YAML, CAL_LEROBOT)]
 
 
 _SRC_OVERLAY: str | None = None
@@ -319,6 +376,24 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             try:    return self._json(200, {'tool': read_tool(), 'available': list_tools()})
             except Exception as e: return self._json(500, {'error': str(e)})
 
+        if path.rstrip('/') == '/calibration':
+            try:    return self._json(200, read_calibration())
+            except Exception as e: return self._json(500, {'error': str(e)})
+
+        if path.rstrip('/') == '/bus':
+            return self._json(200, BUS.status())
+
+        if path.rstrip('/') == '/bus/ports':
+            return self._json(200, {'ports': BUS.list_ports()})
+
+        if path.startswith('/servo/'):
+            parts = path[len('/servo/'):].strip('/').split('/')
+            if len(parts) == 1 and parts[0].isdigit():
+                try:    return self._json(200, BUS.telemetry(int(parts[0])))
+                except BusError as e:   return self._json(409, {'error': str(e)})
+                except Exception as e:  return self._json(500, {'error': str(e)})
+            return self._json(400, {'error': 'expected GET /servo/<id>'})
+
         if path.rstrip('/') == '/urdf':
             try:
                 from urllib.parse import parse_qs
@@ -347,7 +422,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         path = self.path.rstrip('/')
         try:
             length = int(self.headers.get('Content-Length', '0'))
-            data = json.loads(self.rfile.read(length))
+            # A bodyless POST is legitimate here: the page's unload handler
+            # fires /bus/disarm through navigator.sendBeacon.
+            data = json.loads(self.rfile.read(length)) if length else {}
         except Exception as e:
             return self._json(400, {'error': f'bad json: {e}'})
 
@@ -379,7 +456,62 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             except Exception as e:
                 return self._json(400, {'error': str(e)})
 
+        if path == '/calibration':
+            try:
+                written = write_calibration(data.get('yaml'), data.get('lerobot'))
+                return self._json(200, {'ok': True, 'written': written})
+            except Exception as e:
+                return self._json(400, {'error': str(e)})
+
+        # ---- servo bus ----------------------------------------------------
+        # BusError is the "you asked for something the bus can't do right now"
+        # case (not connected, servo didn't ack) -> 409, not a 500.
+        if path.startswith('/bus') or path.startswith('/servo/'):
+            try:
+                return self._bus_post(path, data)
+            except BusError as e:
+                return self._json(409, {'error': str(e)})
+            except Exception as e:
+                return self._json(500, {'error': str(e)})
+
         return self._json(404, {'error': 'unknown endpoint'})
+
+    def _bus_post(self, path: str, data: dict):
+        if path == '/bus/connect':
+            port = str(data.get('port') or '').strip()
+            if not port:
+                raise BusError('port is required')
+            return self._json(200, {'ok': True, **BUS.connect(port)})
+
+        if path == '/bus/disconnect':
+            BUS.disconnect()
+            return self._json(200, {'ok': True, **BUS.status()})
+
+        if path == '/bus/scan':
+            return self._json(200, {'ok': True, **BUS.scan()})
+
+        if path == '/bus/disarm':
+            return self._json(200, {'ok': True, **BUS.disarm_all()})
+
+        if path.startswith('/servo/'):
+            parts = path[len('/servo/'):].strip('/').split('/')
+            if len(parts) == 2 and parts[0].isdigit():
+                sid, action = int(parts[0]), parts[1]
+                if action == 'torque':
+                    BUS.torque(sid, bool(data.get('on')))
+                    return self._json(200, {'ok': True})
+                if action == 'move':
+                    BUS.move(sid, int(data['pos']),
+                             data.get('speed'), data.get('accel'))
+                    return self._json(200, {'ok': True})
+                if action == 'profile':
+                    BUS.profile(sid, int(data['speed']), int(data['accel']))
+                    return self._json(200, {'ok': True})
+                if action == 'id':
+                    BUS.change_id(sid, int(data['to']))
+                    return self._json(200, {'ok': True, **BUS.status()})
+
+        return self._json(404, {'error': f'unknown bus endpoint {path}'})
 
 
 def main() -> None:

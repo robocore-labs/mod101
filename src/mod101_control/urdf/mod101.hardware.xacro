@@ -38,6 +38,18 @@
       <state_interface name="position"/>
       <state_interface name="velocity"/>
     </joint>
+    <joint name="joint_wrist_roll">
+      <command_interface name="position"/>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+
+    <!-- No tool joint here on purpose. Each mod101_tool_* package emits its own
+         <ros2_control> block (urdf/tool.ros2control) in BOTH sim and hardware
+         modes, already declaring its `6` joint with the right limits. Declaring
+         it here too would have two hardware components claiming one joint,
+         which controller_manager rejects at load. -->
+
 
   </ros2_control>
 

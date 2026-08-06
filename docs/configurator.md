@@ -62,5 +62,30 @@ live `/urdf` view need the server.
 | `GET /load` / `POST /save` | the four build args (two lengths + two mounts) |
 | `GET /masses` | `link_masses.json` (Part C output) or `{"masses": null}` |
 | `GET /tool` / `POST /tool` | active tool + discovered tools |
+| `GET /nudge` / `POST /nudge` | big-module mesh alignment offsets — see below |
 | `GET /urdf` | runs `xacro` and rewrites mesh URIs to `/pkg/<pkgname>/meshes/<file>` |
 | `GET /pkg/<pkgname>/meshes/<file>` | serves binary meshes from any package's `meshes/` dir |
+
+`GET /tool` reads the `tool` xacro arg out of `mod101.xacro` and lists every
+`mod101_tool_*` package under `src/`; `POST /tool` rewrites that arg's
+`default`. If the arg is missing from `mod101.xacro`, both return HTTP 500 and
+the page's tool dropdown comes up empty — that's the symptom to look for.
+
+## The nudge endpoints
+
+`/nudge` reads and writes the `snx/sny/snz` (shoulder) and `enx/eny/enz`
+(elbow) properties in `urdf/modules/*_big.xacro`. They shift **all** of a big
+module's meshes together — cosmetic only, kinematics unchanged — to absorb a
+frame mismatch when the big parts come from a different CAD canvas than the
+small ones.
+
+**They should be zero whenever the big parts are exported in the same frame as
+the small ones**, which is the case for the current shoulder export. A stale
+non-zero nudge left over from an older export is indistinguishable, at a
+glance, from a genuinely broken URDF: the whole assembly floats off the arm.
+Before touching these, check the module's datums instead — the adapter's AABB
+centre should sit on the extrusion axis, and the rotation link should be
+centred on its joint axis. `shoulder_big.xacro` lists the exact numbers.
+
+There is no UI for these endpoints; they're a backend affordance, edited by
+hand or over HTTP.

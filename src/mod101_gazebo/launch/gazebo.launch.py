@@ -1,13 +1,18 @@
 #!/usr/bin/env python3
-"""Bring up the bare mod101 arm in Gazebo Sim with ros2_control.
+"""Bring up mod101 in Gazebo Sim with ros2_control.
 
-Tools and the configurator are handled separately (later); this launch brings
-up the parametric arm only. The four build params are launch args:
+The tool layer is selected by the `tool` arg: the URDF pulls in
+mod101_tool_<tool>, and this launch then defers to
+mod101_tool_<tool>/launch/tool.launch.py to spawn any tool-specific controllers
+and nodes (gripper controllers, image bridges, suction-pump drivers, …).
 
+Launch args:
+
+    tool                                     mod101_tool_<tool>, default jaws
     shoulder_ext_length / elbow_ext_length   2020 rail length, m
     shoulder_mount / elbow_mount             small | big
 
-e.g.  ros2 launch mod101_gazebo gazebo.launch.py shoulder_mount:=big elbow_ext_length:=0.26
+e.g.  ros2 launch mod101_gazebo gazebo.launch.py tool:=parallel shoulder_mount:=big
 """
 
 import os
@@ -32,15 +37,23 @@ import xacro
 
 def _build(context):
     params = {k: LaunchConfiguration(k).perform(context) for k in (
-        'shoulder_ext_length', 'elbow_ext_length', 'shoulder_mount', 'elbow_mount')}
+        'tool', 'shoulder_ext_length', 'elbow_ext_length',
+        'shoulder_mount', 'elbow_mount')}
+    tool = params['tool']
 
     pkg_description = get_package_share_directory('mod101_description')
     pkg_gazebo      = get_package_share_directory('mod101_gazebo')
     pkg_ros_gz_sim  = get_package_share_directory('ros_gz_sim')
 
     # Gazebo resolves mesh URIs by walking GZ_SIM_RESOURCE_PATH for a directory
-    # named <pkg>; the bare arm only needs mod101_description.
+    # named <pkg>, so every package whose meshes are referenced must be on it —
+    # the arm, plus the active tool.
     resource_dirs = [os.path.join(get_package_prefix('mod101_description'), 'share')]
+    try:
+        resource_dirs.append(
+            os.path.join(get_package_prefix(f'mod101_tool_{tool}'), 'share'))
+    except PackageNotFoundError:
+        pass  # warned about below, where the tool launch is resolved
     # Preserve any pre-existing GZ_SIM_RESOURCE_PATH (e.g. fuel cache mounts).
     if os.environ.get('GZ_SIM_RESOURCE_PATH'):
         resource_dirs.append(os.environ['GZ_SIM_RESOURCE_PATH'])
@@ -53,7 +66,8 @@ def _build(context):
     urdf_file     = os.path.join(pkg_description, 'urdf', 'mod101.xacro')
     bridge_config = os.path.join(pkg_gazebo, 'config', 'gz_ros_bridge.yaml')
 
-    # Expand the parametric URDF with the four build params.
+    # Expand the parametric URDF with the build params + the chosen tool, so the
+    # tool's links/joints/ros2_control blocks land in robot_description.
     robot_description = xacro.process_file(
         urdf_file, mappings=params
     ).toxml()
@@ -132,6 +146,19 @@ def _build(context):
     spawn_jsb = spawner('joint_state_broadcaster', delay=3.0)
     spawn_arm = spawner('arm_controller', delay=5.0)
 
+    # Defer to the active tool's launch — spawns its gripper controller,
+    # tool-specific bridges, anything else it needs at runtime.
+    tool_launch_actions = []
+    tool_pkg = f'mod101_tool_{tool}'
+    try:
+        tool_launch_file = os.path.join(
+            get_package_share_directory(tool_pkg), 'launch', 'tool.launch.py')
+        tool_launch_actions.append(IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(tool_launch_file)))
+    except PackageNotFoundError:
+        print(f'[mod101_gazebo] warning: tool package "{tool_pkg}" not found; '
+              f'continuing without tool-side launch.')
+
     return [
         gz_resource_path,
         robot_state_publisher,
@@ -142,11 +169,15 @@ def _build(context):
         spawn_robot,
         spawn_jsb,
         spawn_arm,
+        *tool_launch_actions,
     ]
 
 
 def generate_launch_description():
     return LaunchDescription([
+        DeclareLaunchArgument(
+            'tool', default_value='jaws',
+            description='End-effector package suffix (matches mod101_tool_<tool>).'),
         DeclareLaunchArgument('shoulder_ext_length', default_value='0.082',
                               description='upper-arm 2020 rail length, m'),
         DeclareLaunchArgument('elbow_ext_length', default_value='0.098',
