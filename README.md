@@ -10,6 +10,7 @@ mod101 is a 5-DOF arm designed as a *base* you build on. Resize it for your reac
 
 - 🔧 **Resize it** — shoulder and elbow extrusions are parametric; tweak from the web configurator with live preview.
 - 🧰 **Hot-swap tools** — every end-effector is its own ROS 2 package. Ships with a parallel-jaw gripper, a PincOpen pincer, and a blank end-cap.
+- 🤖 **Embeddable** — the whole arm is a prefix-parameterized xacro macro; mount one (or two, or four) on any robot with a one-line `<xacro:mod101_arm .../>` call. No name collisions, no forking.
 - 💪 **Lifts up to 1.65 kg** in the PRO config — same brackets, just bigger shoulder servos.
 - 📏 **Reach up to 72 cm** with long extrusions.
 - 🌐 **Web configurator** — `python3 configurator/server.py` and you're sizing the arm in three.js.
@@ -90,6 +91,39 @@ Try the configurator while sim is running:
 ```bash
 python3 configurator/server.py  # http://localhost:8000/
 ```
+
+## Embedding in another robot
+
+The arm is defined as the `mod101_arm` xacro macro
+(`mod101_description/urdf/mod101_macro.xacro`); the standalone `mod101.xacro`
+is just a thin wrapper that instantiates it once with an empty prefix. Any
+robot can include the macro file and bolt on as many arms as it likes:
+
+```xml
+<xacro:include filename="$(find mod101_description)/urdf/mod101_macro.xacro"/>
+
+<xacro:mod101_arm prefix="left_arm_"  parent="left_arm_bracket"
+                  xyz="0 0.06 0.024" rpy="0 0 0"
+                  tool="jaws" use_sim="true"/>
+<xacro:mod101_arm prefix="right_arm_" parent="right_arm_bracket"
+                  xyz="0 -0.06 0.024" rpy="0 0 0"
+                  tool="jaws" use_sim="true"/>
+```
+
+| Param | Default | Meaning |
+|---|---|---|
+| `prefix` | `''` | Prepended to **every** link/joint name. Joints become e.g. `left_arm_1 … left_arm_6`; the wrist camera topic becomes `<prefix>wrist_camera/image_raw`. |
+| `parent` | `''` | Link to bolt the arm base onto via a fixed `<prefix>base_mount` joint. Empty = no mount joint (the caller anchors `<prefix>base_link` itself). |
+| `xyz`, `rpy` | `0 0 0` | Mount joint origin in the parent frame. The base plate is 80×100 mm, centred on `base_link`. |
+| `tool` | `jaws` | End-effector package (`mod101_tool_<tool>`). |
+| `use_sim` | `true` | Emit the gz_ros2_control hardware blocks + gazebo extensions. |
+
+The macro emits a complete, independently named `<ros2_control>` system per
+instance (plus one per tool), so a single `gz_ros2_control` plugin /
+controller_manager handles them all — the integrator just declares the
+plugin once and supplies controller YAML with the prefixed joint names. The
+reference integration is the base101 dual-arm workspace (two arms on a
+mobile base's lift tower).
 
 ### Deeper docs
 

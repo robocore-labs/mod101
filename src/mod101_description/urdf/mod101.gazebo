@@ -1,35 +1,23 @@
 <?xml version="1.0" ?>
 <robot name="mod101" xmlns:xacro="http://www.ros.org/wiki/xacro" >
 
-<!-- ros2_control plugin for Gazebo Sim. Loads BOTH the arm's controller
-     yaml and the active tool's yaml — gz_ros2_control merges multiple
-     <parameters> files into the model's single controller_manager namespace,
-     so the tool can contribute its own controllers without touching this file.
-
-     Tools that don't have a yaml (e.g. mod101_tool_none) ship a passive
-     stub; if the file is absent gz_ros2_control silently skips it.  -->
-<gazebo>
-  <plugin filename="gz_ros2_control-system" name="gz_ros2_control::GazeboSimROS2ControlPlugin">
-    <parameters>$(find mod101_control)/config/controllers.sim.yaml</parameters>
-    <!-- Tool-specific controllers yaml. mod101_tool_none has none. -->
-    <xacro:if value="${'$(arg tool)' == 'parallel'}">
-      <parameters>$(find mod101_tool_parallel)/config/controllers.yaml</parameters>
-    </xacro:if>
-    <xacro:if value="${'$(arg tool)' == 'pincopen'}">
-      <parameters>$(find mod101_tool_pincopen)/config/controllers.yaml</parameters>
-    </xacro:if>
-    <xacro:if value="${'$(arg tool)' == 'jaws'}">
-      <parameters>$(find mod101_tool_jaws)/config/controllers.yaml</parameters>
-    </xacro:if>
-  </plugin>
-</gazebo>
+<xacro:macro name="mod101_arm_gazebo" params="prefix">
 
 <xacro:property name="body_color" value="Gazebo/DarkGrey" />
 <xacro:property name="motor_color" value="Gazebo/Black" />
 <xacro:property name="silver_color" value="Gazebo/Silver" />
 <xacro:property name="accent_color" value="Gazebo/Green" />
 
-<gazebo reference="base_link">
+<xacro:macro name="gz_link" params="name color">
+  <gazebo reference="${prefix}${name}">
+    <material>${color}</material>
+    <mu1>0.2</mu1>
+    <mu2>0.2</mu2>
+    <self_collide>true</self_collide>
+  </gazebo>
+</xacro:macro>
+
+<gazebo reference="${prefix}base_link">
   <material>${body_color}</material>
   <mu1>0.2</mu1>
   <mu2>0.2</mu2>
@@ -37,155 +25,32 @@
   <gravity>true</gravity>
 </gazebo>
 
-<gazebo reference="servo_base_rotation_1">
-  <material>${motor_color}</material>
-  <mu1>0.2</mu1>
-  <mu2>0.2</mu2>
-  <self_collide>true</self_collide>
-</gazebo>
+<xacro:gz_link name="servo_base_1"             color="${motor_color}"/>
+<xacro:gz_link name="base_cover_1"             color="${accent_color}"/>
+<xacro:gz_link name="shoulder_rotation_link_1" color="${body_color}"/>
+<xacro:gz_link name="servo_shoulder_1"         color="${motor_color}"/>
+<xacro:gz_link name="shoulder_adapter_1"       color="${body_color}"/>
+<xacro:gz_link name="arm_extrusion_1"          color="${silver_color}"/>
+<xacro:gz_link name="elbow_link_1"             color="${body_color}"/>
+<xacro:gz_link name="servo_elbow_1"            color="${motor_color}"/>
+<xacro:gz_link name="elbow_adapter_1"          color="${body_color}"/>
+<xacro:gz_link name="forearm_extrusion_1"      color="${silver_color}"/>
+<xacro:gz_link name="wrist_servo_adapter_1"    color="${body_color}"/>
+<xacro:gz_link name="servo_wrist_tilt_1"       color="${motor_color}"/>
+<xacro:gz_link name="wrist_roll_adapter_1"     color="${body_color}"/>
+<xacro:gz_link name="servo_wrist_rotation_1"   color="${motor_color}"/>
+<xacro:gz_link name="camera_adapter_1"         color="${accent_color}"/>
+<xacro:gz_link name="camera_wing_1"            color="${accent_color}"/>
 
-<gazebo reference="base_cover_1">
-  <material>${accent_color}</material>
-  <mu1>0.2</mu1>
-  <mu2>0.2</mu2>
-  <self_collide>true</self_collide>
-</gazebo>
-
-<gazebo reference="base_rotation_body_1">
-  <material>${body_color}</material>
-  <mu1>0.2</mu1>
-  <mu2>0.2</mu2>
-  <self_collide>true</self_collide>
-</gazebo>
-
-<gazebo reference="servo_elbow_L_1">
-  <material>${motor_color}</material>
-  <mu1>0.2</mu1>
-  <mu2>0.2</mu2>
-  <self_collide>true</self_collide>
-</gazebo>
-
-<gazebo reference="elbow_extrusion_1">
-  <material>${silver_color}</material>
-  <mu1>0.2</mu1>
-  <mu2>0.2</mu2>
-  <self_collide>true</self_collide>
-</gazebo>
-
-<gazebo reference="elbow_wrist_body_1">
-  <material>${body_color}</material>
-  <mu1>0.2</mu1>
-  <mu2>0.2</mu2>
-  <self_collide>true</self_collide>
-</gazebo>
-
-<gazebo reference="servo_wrist_tilt_1">
-  <material>${motor_color}</material>
-  <mu1>0.2</mu1>
-  <mu2>0.2</mu2>
-  <self_collide>true</self_collide>
-</gazebo>
-
-<gazebo reference="wrist_tilt_body_1">
-  <material>${body_color}</material>
-  <mu1>0.2</mu1>
-  <mu2>0.2</mu2>
-  <self_collide>true</self_collide>
-</gazebo>
-
-<gazebo reference="servo_base_rotation__1__1">
-  <material>${motor_color}</material>
-  <mu1>0.2</mu1>
-  <mu2>0.2</mu2>
-  <self_collide>true</self_collide>
-</gazebo>
-
-<gazebo reference="shoulder_thingy_R_1">
-  <material>${body_color}</material>
-  <mu1>0.2</mu1>
-  <mu2>0.2</mu2>
-  <self_collide>true</self_collide>
-</gazebo>
-
-<gazebo reference="shoulder_thingy_L_1">
-  <material>${body_color}</material>
-  <mu1>0.2</mu1>
-  <mu2>0.2</mu2>
-  <self_collide>true</self_collide>
-</gazebo>
-
-<gazebo reference="servo_shoulder_L_1">
-  <material>${motor_color}</material>
-  <mu1>0.2</mu1>
-  <mu2>0.2</mu2>
-  <self_collide>true</self_collide>
-</gazebo>
-
-<gazebo reference="servo_shoulder_R_1">
-  <material>${motor_color}</material>
-  <mu1>0.2</mu1>
-  <mu2>0.2</mu2>
-  <self_collide>true</self_collide>
-</gazebo>
-
-<gazebo reference="shoulder_fork_1">
-  <material>${body_color}</material>
-  <mu1>0.2</mu1>
-  <mu2>0.2</mu2>
-  <self_collide>true</self_collide>
-</gazebo>
-
-<gazebo reference="shoulder_extrusion_R_1">
-  <material>${silver_color}</material>
-  <mu1>0.2</mu1>
-  <mu2>0.2</mu2>
-  <self_collide>true</self_collide>
-</gazebo>
-
-<gazebo reference="shoulder_extrusion_L_1">
-  <material>${silver_color}</material>
-  <mu1>0.2</mu1>
-  <mu2>0.2</mu2>
-  <self_collide>true</self_collide>
-</gazebo>
-
-<gazebo reference="servo_elbow_R_1">
-  <material>${motor_color}</material>
-  <mu1>0.2</mu1>
-  <mu2>0.2</mu2>
-  <self_collide>true</self_collide>
-</gazebo>
-
-<gazebo reference="shoulder_elbow_body_1">
-  <material>${accent_color}</material>
-  <mu1>0.2</mu1>
-  <mu2>0.2</mu2>
-  <self_collide>true</self_collide>
-</gazebo>
-
-<gazebo reference="camera_tilter_1">
-  <material>${accent_color}</material>
-  <mu1>0.2</mu1>
-  <mu2>0.2</mu2>
-  <self_collide>true</self_collide>
-</gazebo>
-
-<gazebo reference="camera_mount_1">
-  <material>${accent_color}</material>
-  <mu1>0.2</mu1>
-  <mu2>0.2</mu2>
-  <self_collide>true</self_collide>
-</gazebo>
-
-<gazebo reference="wrist_camera_pcb_1">
+<gazebo reference="${prefix}wrist_camera_v1_1">
   <material>${body_color}</material>
   <mu1>0.2</mu1>
   <mu2>0.2</mu2>
   <self_collide>true</self_collide>
 
-  <sensor name="wrist_camera" type="camera">
-    <topic>wrist_camera/image_raw</topic>
-    <gz_frame_id>wrist_camera_pcb_1</gz_frame_id>
+  <sensor name="${prefix}wrist_camera" type="camera">
+    <topic>${prefix}wrist_camera/image_raw</topic>
+    <gz_frame_id>${prefix}wrist_camera_v1_1</gz_frame_id>
     <update_rate>30</update_rate>
     <always_on>1</always_on>
     <visualize>true</visualize>
@@ -204,25 +69,6 @@
   </sensor>
 </gazebo>
 
-<gazebo reference="elbow_servo_adapter_L_1">
-  <material>${body_color}</material>
-  <mu1>0.2</mu1>
-  <mu2>0.2</mu2>
-  <self_collide>true</self_collide>
-</gazebo>
-
-<gazebo reference="elbow_servo_adapter_R_1">
-  <material>${body_color}</material>
-  <mu1>0.2</mu1>
-  <mu2>0.2</mu2>
-  <self_collide>true</self_collide>
-</gazebo>
-
-<gazebo reference="elbow_fork_1">
-  <material>${accent_color}</material>
-  <mu1>0.2</mu1>
-  <mu2>0.2</mu2>
-  <self_collide>true</self_collide>
-</gazebo>
+</xacro:macro>
 
 </robot>

@@ -17,6 +17,10 @@
     * minimal inertials added (upstream has none; gz_ros2_control needs them).
 -->
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+<xacro:include filename="$(find mod101_tool_pincopen)/urdf/tool.ros2control"/>
+<xacro:include filename="$(find mod101_tool_pincopen)/urdf/tool.gazebo"/>
+
+<xacro:macro name="mod101_tool_pincopen" params="prefix:='' use_sim:='true'">
 
   <xacro:property name="mesh_scale" value="0.001 0.001 0.001"/>
 
@@ -29,7 +33,7 @@
        the gripper.
        ============================================================ -->
 
-  <link name="pincopen_root">
+  <link name="${prefix}pincopen_root">
     <inertial>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <mass value="0.001"/>
@@ -37,23 +41,23 @@
     </inertial>
   </link>
 
-  <joint name="pincopen_mount" type="fixed">
+  <joint name="${prefix}pincopen_mount" type="fixed">
     <origin xyz="0 0 0" rpy="0 0 0"/>
-    <parent link="wrist_flange"/>
-    <child  link="pincopen_root"/>
+    <parent link="${prefix}wrist_flange"/>
+    <child  link="${prefix}pincopen_root"/>
   </joint>
 
-  <joint name="pincopen_cad_to_root" type="fixed">
+  <joint name="${prefix}pincopen_cad_to_root" type="fixed">
     <origin xyz="0 0 0" rpy="0 0 0"/>
-    <parent link="pincopen_root"/>
-    <child  link="pincopen_base_link"/>
+    <parent link="${prefix}pincopen_root"/>
+    <child  link="${prefix}pincopen_base_link"/>
   </joint>
 
   <!-- ============================================================
        Vendored PincOpen sub-tree
        ============================================================ -->
 
-  <link name="pincopen_base_link">
+  <link name="${prefix}pincopen_base_link">
     <inertial>
       <origin xyz="0.029 0 0.005" rpy="0 0 0"/>
       <mass value="0.080"/>
@@ -81,7 +85,7 @@
   </link>
 
   <!-- Coupler is the driven link; mass kept tiny since it carries no geometry. -->
-  <link name="pincopen_coupler">
+  <link name="${prefix}pincopen_coupler">
     <inertial>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <mass value="0.001"/>
@@ -89,7 +93,7 @@
     </inertial>
   </link>
 
-  <link name="pincopen_right_arm">
+  <link name="${prefix}pincopen_right_arm">
     <inertial>
       <origin xyz="0.017 0 0" rpy="0 0 0"/>
       <mass value="0.008"/>
@@ -110,7 +114,7 @@
     </collision>
   </link>
 
-  <link name="pincopen_left_arm">
+  <link name="${prefix}pincopen_left_arm">
     <inertial>
       <origin xyz="0.017 0 0" rpy="0 0 0"/>
       <mass value="0.008"/>
@@ -131,7 +135,7 @@
     </collision>
   </link>
 
-  <link name="pincopen_right_finger">
+  <link name="${prefix}pincopen_right_finger">
     <inertial>
       <origin xyz="0.012 0 0" rpy="0 0 0"/>
       <mass value="0.006"/>
@@ -152,7 +156,7 @@
     </collision>
   </link>
 
-  <link name="pincopen_left_finger">
+  <link name="${prefix}pincopen_left_finger">
     <inertial>
       <origin xyz="0.012 0 0" rpy="0 0 0"/>
       <mass value="0.006"/>
@@ -178,55 +182,57 @@
        ============================================================ -->
 
   <!-- Single active joint. Named "6" to match the mod101 numbering. -->
-  <joint name="6" type="revolute">
-    <parent link="pincopen_base_link"/>
-    <child link="pincopen_coupler"/>
+  <joint name="${prefix}6" type="revolute">
+    <parent link="${prefix}pincopen_base_link"/>
+    <child link="${prefix}pincopen_coupler"/>
     <origin xyz="0.053492 0 0.0" rpy="0 0 0"/>
     <axis xyz="0 0 1"/>
     <limit lower="-2.44" upper="0.0" effort="5" velocity="1"/>
   </joint>
 
-  <joint name="pincopen_base_to_right_arm" type="revolute">
-    <parent link="pincopen_base_link"/>
-    <child link="pincopen_right_arm"/>
+  <joint name="${prefix}pincopen_base_to_right_arm" type="revolute">
+    <parent link="${prefix}pincopen_base_link"/>
+    <child link="${prefix}pincopen_right_arm"/>
     <origin xyz="0.053492 -0.03250 -0.008" rpy="0 0 0"/>
     <axis xyz="0 0 1"/>
     <limit lower="-1.22" upper="0.0" effort="5" velocity="1"/>
-    <mimic joint="6" multiplier="0.5" offset="0.0"/>
+    <mimic joint="${prefix}6" multiplier="0.5" offset="0.0"/>
   </joint>
 
-  <joint name="pincopen_base_to_left_arm" type="revolute">
-    <parent link="pincopen_base_link"/>
-    <child link="pincopen_left_arm"/>
+  <joint name="${prefix}pincopen_base_to_left_arm" type="revolute">
+    <parent link="${prefix}pincopen_base_link"/>
+    <child link="${prefix}pincopen_left_arm"/>
     <origin xyz="0.053492 0.03250 -0.008" rpy="0 0 0"/>
     <axis xyz="0 0 1"/>
     <limit lower="0.0" upper="1.22" effort="5" velocity="1"/>
-    <mimic joint="6" multiplier="-0.5" offset="0.0"/>
+    <mimic joint="${prefix}6" multiplier="-0.5" offset="0.0"/>
   </joint>
 
-  <joint name="pincopen_right_arm_to_right_finger" type="revolute">
-    <parent link="pincopen_right_arm"/>
-    <child link="pincopen_right_finger"/>
+  <joint name="${prefix}pincopen_right_arm_to_right_finger" type="revolute">
+    <parent link="${prefix}pincopen_right_arm"/>
+    <child link="${prefix}pincopen_right_finger"/>
     <origin xyz="0.034641 0.020 -0.0002" rpy="0 0 0"/>
     <axis xyz="0 0 1"/>
     <limit lower="0.0" upper="1.22" effort="5" velocity="1"/>
-    <mimic joint="6" multiplier="-0.5" offset="0.0"/>
+    <mimic joint="${prefix}6" multiplier="-0.5" offset="0.0"/>
   </joint>
 
-  <joint name="pincopen_left_arm_to_left_finger" type="revolute">
-    <parent link="pincopen_left_arm"/>
-    <child link="pincopen_left_finger"/>
+  <joint name="${prefix}pincopen_left_arm_to_left_finger" type="revolute">
+    <parent link="${prefix}pincopen_left_arm"/>
+    <child link="${prefix}pincopen_left_finger"/>
     <origin xyz="0.034641 -0.020 0.0002" rpy="0 0 0"/>
     <axis xyz="0 0 1"/>
     <limit lower="-1.22" upper="0.0" effort="5" velocity="1"/>
-    <mimic joint="6" multiplier="0.5" offset="0.0"/>
+    <mimic joint="${prefix}6" multiplier="0.5" offset="0.0"/>
   </joint>
 
   <!-- ============================================================
        ros2_control + gazebo extensions
        ============================================================ -->
 
-  <xacro:include filename="$(find mod101_tool_pincopen)/urdf/tool.ros2control"/>
-  <xacro:include filename="$(find mod101_tool_pincopen)/urdf/tool.gazebo"/>
+<xacro:mod101_tool_pincopen_ros2control prefix="${prefix}" use_sim="${use_sim}"/>
+<xacro:mod101_tool_pincopen_gazebo prefix="${prefix}"/>
+
+</xacro:macro>
 
 </robot>

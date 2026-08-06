@@ -13,12 +13,16 @@
   parallel_root and Parallel_gripper_assembly_v1_1 are colocated.
 -->
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+<xacro:include filename="$(find mod101_tool_parallel)/urdf/tool.ros2control"/>
+<xacro:include filename="$(find mod101_tool_parallel)/urdf/tool.gazebo"/>
+
+<xacro:macro name="mod101_tool_parallel" params="prefix:='' use_sim:='true'">
 
   <!-- ============================================================
        Convention root: at the bolt pattern, +X outward, +Z up.
        ============================================================ -->
 
-  <link name="parallel_root">
+  <link name="${prefix}parallel_root">
     <inertial>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <mass value="0.001"/>
@@ -26,23 +30,23 @@
     </inertial>
   </link>
 
-  <joint name="parallel_mount" type="fixed">
+  <joint name="${prefix}parallel_mount" type="fixed">
     <origin xyz="0 0 0" rpy="0 0 0"/>
-    <parent link="wrist_flange"/>
-    <child  link="parallel_root"/>
+    <parent link="${prefix}wrist_flange"/>
+    <child  link="${prefix}parallel_root"/>
   </joint>
 
-  <joint name="parallel_cad_to_root" type="fixed">
+  <joint name="${prefix}parallel_cad_to_root" type="fixed">
     <origin xyz="0 0 0" rpy="0 0 0"/>
-    <parent link="parallel_root"/>
-    <child  link="Parallel_gripper_assembly_v1_1"/>
+    <parent link="${prefix}parallel_root"/>
+    <child  link="${prefix}Parallel_gripper_assembly_v1_1"/>
   </joint>
 
   <!-- ============================================================
        Gripper body + jaws (vendored CAD sub-tree)
        ============================================================ -->
 
-  <link name="Parallel_gripper_assembly_v1_1">
+  <link name="${prefix}Parallel_gripper_assembly_v1_1">
     <inertial>
       <origin xyz="0.037342654208552234 -2.71910236137967e-05 0.002477280757497813" rpy="0 0 0"/>
       <mass value="0.078"/>
@@ -63,7 +67,7 @@
     </collision>
   </link>
 
-  <link name="left_jaw">
+  <link name="${prefix}left_jaw">
     <inertial>
       <origin xyz="0.023806479253455026 -0.0016996718789872856 -0.019446683209120547" rpy="0 0 0"/>
       <mass value="0.012"/>
@@ -84,7 +88,7 @@
     </collision>
   </link>
 
-  <link name="right_jaw">
+  <link name="${prefix}right_jaw">
     <inertial>
       <origin xyz="0.023808169064152396 0.0016409164921040156 -0.02262577329786908" rpy="0 0 0"/>
       <mass value="0.012"/>
@@ -109,28 +113,30 @@
        Joints
        ============================================================ -->
 
-  <joint name="6" type="prismatic">
+  <joint name="${prefix}6" type="prismatic">
     <origin xyz="0.04361 0.021616 0.020519" rpy="0 0 0"/>
-    <parent link="Parallel_gripper_assembly_v1_1"/>
-    <child link="left_jaw"/>
+    <parent link="${prefix}Parallel_gripper_assembly_v1_1"/>
+    <child link="${prefix}left_jaw"/>
     <axis xyz="0.008881 0.999923 0.008649"/>
     <limit effort="100" lower="-0.013" upper="0.013" velocity="100"/>
   </joint>
 
-  <joint name="right_jaw_slider" type="prismatic">
+  <joint name="${prefix}right_jaw_slider" type="prismatic">
     <origin xyz="0.043251 -0.022781 0.02017" rpy="0 0 0"/>
-    <parent link="Parallel_gripper_assembly_v1_1"/>
-    <child link="right_jaw"/>
+    <parent link="${prefix}Parallel_gripper_assembly_v1_1"/>
+    <child link="${prefix}right_jaw"/>
     <axis xyz="0.008881 0.999923 0.008649"/>
     <limit effort="100" lower="-0.013" upper="0.013" velocity="100"/>
-    <mimic joint="6" multiplier="-1" offset="0"/>
+    <mimic joint="${prefix}6" multiplier="-1" offset="0"/>
   </joint>
 
   <!-- ============================================================
        ros2_control + gazebo extensions
        ============================================================ -->
 
-  <xacro:include filename="$(find mod101_tool_parallel)/urdf/tool.ros2control"/>
-  <xacro:include filename="$(find mod101_tool_parallel)/urdf/tool.gazebo"/>
+<xacro:mod101_tool_parallel_ros2control prefix="${prefix}" use_sim="${use_sim}"/>
+<xacro:mod101_tool_parallel_gazebo prefix="${prefix}"/>
+
+</xacro:macro>
 
 </robot>

@@ -1,34 +1,22 @@
 <?xml version="1.0" ?>
 <!--
-  Standalone mod101 entry point: one arm anchored to the world. The arm
-  itself lives in mod101_macro.xacro as the prefix-parameterised
-  `mod101_arm` macro so other robots (e.g. base101's dual-arm tower) can
-  instantiate it any number of times — include that file directly, not
-  this one.
+  Standalone mod101 entry point: one arm anchored to the world. The arm itself
+  lives in mod101_macro.xacro as the prefix-parameterised `mod101_arm` macro so
+  other robots can instantiate it any number of times — include that file
+  directly, not this one.
+
+  Tools and the configurator are handled separately (later). This standalone is
+  the bare arm, drivable in Gazebo via ros2_control.
 -->
 <robot name="mod101" xmlns:xacro="http://www.ros.org/wiki/xacro">
 
 <!-- use_sim: when true, pulls in the Gazebo ros2_control system + per-link
-     gazebo extensions. Hardware overlays (mod101_control) should override
-     to false. -->
+     gazebo extensions. Hardware overlays (mod101_control) override to false. -->
 <xacro:arg name="use_sim" default="true"/>
 
-<!-- tool: which end-effector package to pull in. The arm terminates at
-     `wrist_flange`; the selected tool's URDF attaches via a fixed joint at
-     that link and contributes its own joints, ros2_control hardware block,
-     gazebo extensions, controllers, and (separately, via the gazebo launch)
-     its own launch fragment. Must match a package named
-     `mod101_tool_<tool>` that ships urdf/tool.urdf.xacro. -->
-<xacro:arg name="tool" default="jaws"/>
-
-<!-- Build parameters (the configurator's four inputs). These resolve any
-     member of the mod101 family: two rail lengths + two servo-mount variants.
-       *_ext_length  upper-arm / forearm 2020 rail length, m (configurator: the
-                     two length sliders; STS3215/3250 motor dropdown -> small,
-                     ST3120 -> big).
-       *_mount       'small' (STS3215/3250) | 'big' (ST3120). -->
-<xacro:arg name="shoulder_ext_length" default="0.1360"/>
-<xacro:arg name="elbow_ext_length"    default="0.1400"/>
+<!-- Build parameters: two rail lengths + two servo-mount variants (small|big). -->
+<xacro:arg name="shoulder_ext_length" default="0.0820"/>
+<xacro:arg name="elbow_ext_length"    default="0.0980"/>
 <xacro:arg name="shoulder_mount"      default="small"/>
 <xacro:arg name="elbow_mount"         default="small"/>
 
@@ -38,33 +26,17 @@
 <!-- Anchor base_link to the world so the arm doesn't tip over under gravity. -->
 <link name="world"/>
 
-<xacro:mod101_arm prefix="" parent="world" tool="$(arg tool)" use_sim="$(arg use_sim)"
+<xacro:mod101_arm prefix="" parent="world" use_sim="$(arg use_sim)"
                   shoulder_ext_length="$(arg shoulder_ext_length)"
                   elbow_ext_length="$(arg elbow_ext_length)"
                   shoulder_mount="$(arg shoulder_mount)"
                   elbow_mount="$(arg elbow_mount)"/>
 
-<!-- The gz_ros2_control plugin must appear exactly once per robot, so it
-     lives here rather than in the macro. It loads BOTH the arm's controller
-     yaml and the active tool's yaml — gz_ros2_control merges multiple
-     <parameters> files into the model's single controller_manager namespace,
-     so the tool can contribute its own controllers without touching this
-     file. Integrators with their own plugin declaration (e.g. base101)
-     skip this block automatically by using the macro directly. -->
+<!-- gz_ros2_control plugin: exactly once per robot. Loads the arm controllers. -->
 <xacro:if value="$(arg use_sim)">
   <gazebo>
     <plugin filename="gz_ros2_control-system" name="gz_ros2_control::GazeboSimROS2ControlPlugin">
       <parameters>$(find mod101_control)/config/controllers.sim.yaml</parameters>
-      <!-- Tool-specific controllers yaml. mod101_tool_none has none. -->
-      <xacro:if value="${'$(arg tool)' == 'parallel'}">
-        <parameters>$(find mod101_tool_parallel)/config/controllers.yaml</parameters>
-      </xacro:if>
-      <xacro:if value="${'$(arg tool)' == 'pincopen'}">
-        <parameters>$(find mod101_tool_pincopen)/config/controllers.yaml</parameters>
-      </xacro:if>
-      <xacro:if value="${'$(arg tool)' == 'jaws'}">
-        <parameters>$(find mod101_tool_jaws)/config/controllers.yaml</parameters>
-      </xacro:if>
     </plugin>
   </gazebo>
 </xacro:if>

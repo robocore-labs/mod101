@@ -145,6 +145,49 @@ def read_masses() -> dict:
     return {'masses': json.loads(MASSES.read_text())}
 
 
+# Big-module fine-alignment nudge (xyz, m), one per swappable big module. Each
+# module xacro carries three property values (e.g. snx/sny/snz) that shift all
+# its meshes together; the configurator's nudge panel edits them live.
+MODULES_DIR = DESC / 'urdf' / 'modules'
+NUDGE = {
+    'shoulder': {'file': MODULES_DIR / 'shoulder_big.xacro', 'props': ('snx', 'sny', 'snz')},
+    'elbow':    {'file': MODULES_DIR / 'elbow_big.xacro',    'props': ('enx', 'eny', 'enz')},
+}
+
+
+def _nudge_re(prop: str) -> re.Pattern:
+    return re.compile(rf'(<xacro:property\s+name="{prop}"\s+value=")(?P<val>[^"]+)(")')
+
+
+def read_nudge() -> dict:
+    out = {}
+    for mod, spec in NUDGE.items():
+        text = spec['file'].read_text()
+        vals = []
+        for p in spec['props']:
+            m = _nudge_re(p).search(text)
+            vals.append(float(m['val']) if m else 0.0)
+        out[mod] = vals
+    return out
+
+
+def write_nudge(module: str, xyz) -> None:
+    if module not in NUDGE:
+        raise ValueError(f'unknown module {module!r}; expected {list(NUDGE)}')
+    if len(xyz) != 3:
+        raise ValueError('nudge needs [x, y, z]')
+    for v in xyz:
+        if not (-0.1 <= float(v) <= 0.1):
+            raise ValueError(f'nudge {v} m out of range [-0.1, 0.1]')
+    spec = NUDGE[module]
+    text = spec['file'].read_text()
+    for p, v in zip(spec['props'], xyz):
+        text, n = _nudge_re(p).subn(lambda m: f'{m.group(1)}{float(v):.6f}{m.group(3)}', text)
+        if n != 1:
+            raise RuntimeError(f'expected 1 replacement for {p}, did {n}')
+    spec['file'].write_text(text)
+
+
 _SRC_OVERLAY: str | None = None
 
 
@@ -177,9 +220,14 @@ def src_ament_overlay() -> str:
     return _SRC_OVERLAY
 
 
-def expand_urdf() -> str:
+ALLOWED_ARGS = ('shoulder_ext_length', 'elbow_ext_length',
+                'shoulder_mount', 'elbow_mount')
+
+
+def expand_urdf(mappings: dict | None = None) -> str:
     """Run `xacro` (resolving packages from src/) and rewrite mesh URIs to web
-    paths."""
+    paths. `mappings` overrides the build args for a LIVE preview without
+    writing the file (only the four ALLOWED_ARGS are honoured)."""
     xacro_bin = shutil.which('xacro')
     if not xacro_bin:
         raise RuntimeError(
@@ -193,20 +241,25 @@ def expand_urdf() -> str:
     existing = env.get('AMENT_PREFIX_PATH', '')
     env['AMENT_PREFIX_PATH'] = overlay + (os.pathsep + existing if existing else '')
 
+    arg_pairs = []
+    for k, v in (mappings or {}).items():
+        if k in ALLOWED_ARGS and v not in (None, ''):
+            arg_pairs.append(f'{k}:={v}')
+
     proc = subprocess.run(
-        [xacro_bin, str(XACRO)],
+        [xacro_bin, str(XACRO), *arg_pairs],
         capture_output=True, text=True, env=env,
     )
     if proc.returncode != 0:
         raise RuntimeError(f'xacro failed: {proc.stderr.strip()}')
-    # Mesh URI styles to rewrite to web paths (any of):
-    #   file:///abs/.../<pkg>/share/<pkg>/meshes/foo.stl  (built install space)
-    #   file:///abs/.../src/<pkg>/meshes/foo.stl          (src overlay)
+    # Mesh URI styles to rewrite to web paths, all -> /pkg/<pkg>/meshes/foo.stl:
+    #   file:///.../share/<pkg>/meshes/foo.stl   (install space OR src overlay —
+    #                                             both end in /share/<pkg>/meshes)
+    #   file:///.../src/<pkg>/meshes/foo.stl      (if $(find) resolves to src)
     #   package://<pkg>/meshes/foo.stl
-    # all -> /pkg/<pkg>/meshes/foo.stl
     urdf = proc.stdout
     urdf = re.sub(
-        r'file://[^"]*/([^/]+)/share/\1/meshes/([^"]+)',
+        r'file://[^"]*/share/([^/]+)/meshes/([^"]+)',
         r'/pkg/\1/meshes/\2', urdf)
     urdf = re.sub(
         r'file://[^"]*/src/([^/]+)/meshes/([^"]+)',
@@ -258,12 +311,20 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             try:    return self._json(200, read_masses())
             except Exception as e: return self._json(500, {'error': str(e)})
 
+        if path.rstrip('/') == '/nudge':
+            try:    return self._json(200, read_nudge())
+            except Exception as e: return self._json(500, {'error': str(e)})
+
         if path.rstrip('/') == '/tool':
             try:    return self._json(200, {'tool': read_tool(), 'available': list_tools()})
             except Exception as e: return self._json(500, {'error': str(e)})
 
         if path.rstrip('/') == '/urdf':
-            try:    return self._text(200, expand_urdf(), 'application/xml')
+            try:
+                from urllib.parse import parse_qs
+                q = parse_qs(self.path.split('?', 1)[1]) if '?' in self.path else {}
+                mappings = {k: v[0] for k, v in q.items()}
+                return self._text(200, expand_urdf(mappings), 'application/xml')
             except Exception as e: return self._json(500, {'error': str(e)})
 
         if path.startswith('/pkg/'):
@@ -300,6 +361,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     str(data.get('shoulder_mount', cur['shoulder_mount'])),
                     str(data.get('elbow_mount', cur['elbow_mount'])))
                 return self._json(200, {'ok': True, **read_props()})
+            except Exception as e:
+                return self._json(400, {'error': str(e)})
+
+        if path == '/nudge':
+            try:
+                write_nudge(str(data['module']), [float(v) for v in data['xyz']])
+                return self._json(200, {'ok': True, **read_nudge()})
             except Exception as e:
                 return self._json(400, {'error': str(e)})
 

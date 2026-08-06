@@ -1,0 +1,90 @@
+<?xml version="1.0" ?>
+<!--
+  Elbow joint module — BIG (ST3120). Same interface as elbow_small.xacro with
+  the larger servo + heavier brackets from mod101_large, registered as a rigid
+  unit (single offset anchors elbow_link on the small one). NOTE: the large
+  export's elbow_adapter visual origin is corrupt (Y=0.704), so that one part is
+  centroid-aligned instead of anchored — slightly looser than the others. A
+  same-frame re-export fixes both.
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+<xacro:macro name="mod101_elbow_big" params="prefix">
+
+<!-- Fine-alignment nudge for the whole big-elbow assembly (cosmetic; shifts all
+     three meshes together, kinematics unchanged). Cristi eyeballed ~3 mm
+     lateral (Y) and ~8 mm up (Z) in Gazebo. Flip a sign if it moved the wrong
+     way; set all to 0 once a same-frame re-export lands. -->
+<xacro:property name="enx" value="0.000000"/>
+<xacro:property name="eny" value="-0.002000"/>
+<xacro:property name="enz" value="-0.006000"/>
+
+<link name="${prefix}elbow_link_1">
+  <inertial>
+    <origin xyz="-0.010386839428546318 0.00039485016823848085 -0.0020812304383783786" rpy="0 0 0"/>
+    <mass value="1.0939"/>
+    <inertia ixx="0.000337" iyy="0.000279" izz="0.000486" ixy="-6e-06" iyz="3e-06" ixz="-1e-05"/>
+  </inertial>
+  <visual>
+    <origin xyz="${0.093660+enx} ${0.003135+eny} ${-0.065996+enz}" rpy="0 0 0"/>
+    <geometry><mesh filename="file://$(find mod101_description)/meshes/elbow_link_big_1.stl" scale="0.001 0.001 0.001"/></geometry>
+    <material name="body_darkgrey"/>
+  </visual>
+  <collision>
+    <origin xyz="${0.093660+enx} ${0.003135+eny} ${-0.065996+enz}" rpy="0 0 0"/>
+    <geometry><mesh filename="file://$(find mod101_description)/meshes/elbow_link_big_1.stl" scale="0.001 0.001 0.001"/></geometry>
+  </collision>
+</link>
+
+<link name="${prefix}servo_elbow_1">
+  <inertial>
+    <origin xyz="0.010248900428017363 0.014922520716508098 0.018164022574663097" rpy="0 0 0"/>
+    <mass value="0.210"/>
+    <inertia ixx="5.7e-05" iyy="4.5e-05" izz="3.2e-05" ixy="0.0" iyz="0.0" ixz="-0.0"/>
+  </inertial>
+  <visual>
+    <origin xyz="${0.128120+enx} ${0.018005+eny} ${-0.069671+enz}" rpy="0 0 0"/>
+    <geometry><mesh filename="file://$(find mod101_description)/meshes/servo_elbow_big_1.stl" scale="0.001 0.001 0.001"/></geometry>
+    <material name="motor_black"/>
+  </visual>
+  <collision>
+    <origin xyz="${0.128120+enx} ${0.018005+eny} ${-0.069671+enz}" rpy="0 0 0"/>
+    <geometry><mesh filename="file://$(find mod101_description)/meshes/servo_elbow_big_1.stl" scale="0.001 0.001 0.001"/></geometry>
+  </collision>
+</link>
+
+<link name="${prefix}elbow_adapter_1">
+  <inertial>
+    <origin xyz="0.020137826276852483 0.018502164445195313 0.00029332039965654366" rpy="0 0 0"/>
+    <mass value="0.4679"/>
+    <inertia ixx="0.000165" iyy="0.000101" izz="0.000213" ixy="0.0" iyz="-0.0" ixz="-2e-06"/>
+  </inertial>
+  <visual>
+    <origin xyz="${0.117870+enx} ${0.021405+eny} ${-0.098671+enz}" rpy="0 0 0"/>
+    <geometry><mesh filename="file://$(find mod101_description)/meshes/elbow_adapter_big_1.stl" scale="0.001 0.001 0.001"/></geometry>
+    <material name="body_darkgrey"/>
+  </visual>
+  <collision>
+    <origin xyz="${0.117870+enx} ${0.021405+eny} ${-0.098671+enz}" rpy="0 0 0"/>
+    <geometry><mesh filename="file://$(find mod101_description)/meshes/elbow_adapter_big_1.stl" scale="0.001 0.001 0.001"/></geometry>
+  </collision>
+</link>
+
+<joint name="${prefix}fixed_servo_elbow_1" type="fixed">
+  <origin xyz="-0.03446 -0.01487 0.003675" rpy="0 0 0"/>
+  <parent link="${prefix}elbow_link_1"/>
+  <child link="${prefix}servo_elbow_1"/>
+</joint>
+
+<joint name="${prefix}joint_elbow" type="revolute">
+  <origin xyz="0.01025 -0.0034 0.029" rpy="0 0 0"/>
+  <parent link="${prefix}servo_elbow_1"/>
+  <child link="${prefix}elbow_adapter_1"/>
+  <axis xyz="0.0 -1.0 0.0"/>
+  <limit upper="3.141593" lower="0.0" effort="100" velocity="100"/>
+  <dynamics damping="${joint_damping}" friction="${joint_friction}"/>
+</joint>
+
+</xacro:macro>
+
+</robot>

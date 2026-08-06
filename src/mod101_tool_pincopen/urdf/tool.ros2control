@@ -7,14 +7,16 @@
 -->
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
 
-  <ros2_control name="mod101_tool_pincopen_system" type="system">
+<xacro:macro name="mod101_tool_pincopen_ros2control" params="prefix:='' use_sim:='true'">
 
-    <xacro:if value="$(arg use_sim)">
+  <ros2_control name="${prefix}mod101_tool_pincopen_system" type="system">
+
+    <xacro:if value="${use_sim}">
       <hardware>
         <plugin>gz_ros2_control/GazeboSimSystem</plugin>
       </hardware>
     </xacro:if>
-    <xacro:unless value="$(arg use_sim)">
+    <xacro:unless value="${use_sim}">
       <!-- Real hardware: needs the pinc_open_driver package built in the
            workspace (clone CNURobotics/pinc_open_driver into src/). Override
            baud / port / servo_id by re-running xacro with the corresponding
@@ -29,7 +31,7 @@
       </hardware>
     </xacro:unless>
 
-    <joint name="6">
+    <joint name="${prefix}6">
       <command_interface name="position">
         <param name="min">-2.44</param>
         <param name="max">0.0</param>
@@ -44,23 +46,25 @@
 
     <!-- Mimic followers: state-only registration so gz_ros2_control publishes
          their feedback but the controller_manager won't try to command them. -->
-    <joint name="pincopen_base_to_right_arm">
+    <joint name="${prefix}pincopen_base_to_right_arm">
       <state_interface name="position"/>
       <state_interface name="velocity"/>
     </joint>
-    <joint name="pincopen_base_to_left_arm">
+    <joint name="${prefix}pincopen_base_to_left_arm">
       <state_interface name="position"/>
       <state_interface name="velocity"/>
     </joint>
-    <joint name="pincopen_right_arm_to_right_finger">
+    <joint name="${prefix}pincopen_right_arm_to_right_finger">
       <state_interface name="position"/>
       <state_interface name="velocity"/>
     </joint>
-    <joint name="pincopen_left_arm_to_left_finger">
+    <joint name="${prefix}pincopen_left_arm_to_left_finger">
       <state_interface name="position"/>
       <state_interface name="velocity"/>
     </joint>
 
   </ros2_control>
+
+</xacro:macro>
 
 </robot>

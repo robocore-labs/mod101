@@ -8,50 +8,31 @@
       <plugin>gz_ros2_control/GazeboSimSystem</plugin>
     </hardware>
 
-    <!-- Arm joints (5 DOF, continuous). -->
+    <!-- 4 actuated DOF (wrist roll is fixed in the exports; the actuated 5th
+         DOF + tool flange arrive with the tool work). -->
     <joint name="${prefix}joint_base">
       <command_interface name="position"/>
       <state_interface name="position"/>
       <state_interface name="velocity"/>
     </joint>
 
-    <!-- Initial poses (radians) put the arm in a "ready" stance:
-           joint_shoulder   = -45°  (shoulder pitch back)
-           joint_elbow      = +90°  (elbow up)
-           joint_wrist_tilt = -45°  (wrist tilt back)
-         so the arm wakes up roughly vertical with the wrist forward. -->
     <joint name="${prefix}joint_shoulder">
-      <command_interface name="position"/>
-      <state_interface name="position">
-        <param name="initial_value">-0.7853981633974483</param>
-      </state_interface>
-      <state_interface name="velocity"/>
-    </joint>
-
-    <joint name="${prefix}joint_elbow">
-      <command_interface name="position"/>
-      <state_interface name="position">
-        <param name="initial_value">1.5707963267948966</param>
-      </state_interface>
-      <state_interface name="velocity"/>
-    </joint>
-
-    <joint name="${prefix}joint_wrist_tilt">
-      <command_interface name="position"/>
-      <state_interface name="position">
-        <param name="initial_value">-0.7853981633974483</param>
-      </state_interface>
-      <state_interface name="velocity"/>
-    </joint>
-
-    <joint name="${prefix}joint_wrist_roll">
       <command_interface name="position"/>
       <state_interface name="position"/>
       <state_interface name="velocity"/>
     </joint>
 
-    <!-- End-effector joints live in $(arg tool)'s own <ros2_control> block;
-         see mod101_tool_<tool>/urdf/tool.ros2control. -->
+    <joint name="${prefix}joint_elbow">
+      <command_interface name="position"/>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+
+    <joint name="${prefix}joint_wrist_tilt">
+      <command_interface name="position"/>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
 
   </ros2_control>
 

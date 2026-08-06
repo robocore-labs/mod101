@@ -1,0 +1,93 @@
+<?xml version="1.0" ?>
+<!--
+  Shoulder joint module — BIG (ST3120). Same interface links/joints as
+  shoulder_small.xacro, but the larger servo + heavier brackets from the
+  mod101_large export. The large export sits in a different CAD canvas, so the
+  three meshes are registered as ONE rigid unit: a single offset anchors the
+  module's input link (shoulder_rotation_link) exactly on the small one, which
+  preserves the servo<->bracket mating from the large export. Residual ~1 cm
+  from the exports' ~1.5° relative rotation — re-export the big parts in the
+  small frame (or send a same-frame mod101-big export) to zero it; then these
+  visual origins just become the export's own.
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+<xacro:macro name="mod101_shoulder_big" params="prefix">
+
+<!-- Fine-alignment nudge for the whole big-shoulder assembly (cosmetic; shifts
+     all three meshes together, kinematics unchanged). Editable live from the
+     configurator's nudge panel, or by hand here. Zero out after a same-frame
+     re-export. -->
+<xacro:property name="snx" value="0.014000"/>
+<xacro:property name="sny" value="0.026500"/>
+<xacro:property name="snz" value="0.006000"/>
+
+<link name="${prefix}shoulder_rotation_link_1">
+  <inertial>
+    <origin xyz="0.032744272167771385 0.0004962194281389748 -0.013844865838515547" rpy="0 0 0"/>
+    <mass value="0.5298"/>
+    <inertia ixx="0.000197" iyy="0.00027" izz="0.000248" ixy="-3e-06" iyz="-2e-06" ixz="-2.5e-05"/>
+  </inertial>
+  <visual>
+    <origin xyz="${-0.001130+snx} ${-0.000787+sny} ${-0.049192+snz}" rpy="0 0 0"/>
+    <geometry><mesh filename="file://$(find mod101_description)/meshes/shoulder_rotation_link_big_1.stl" scale="0.001 0.001 0.001"/></geometry>
+    <material name="body_darkgrey"/>
+  </visual>
+  <collision>
+    <origin xyz="${-0.001130+snx} ${-0.000787+sny} ${-0.049192+snz}" rpy="0 0 0"/>
+    <geometry><mesh filename="file://$(find mod101_description)/meshes/shoulder_rotation_link_big_1.stl" scale="0.001 0.001 0.001"/></geometry>
+  </collision>
+</link>
+
+<link name="${prefix}servo_shoulder_1">
+  <inertial>
+    <origin xyz="-0.010248506820219064 0.016877231540248554 0.021914022574664543" rpy="0 0 0"/>
+    <mass value="0.210"/>
+    <inertia ixx="5.7e-05" iyy="4.5e-05" izz="3.2e-05" ixy="0.0" iyz="-0.0" ixz="0.0"/>
+  </inertial>
+  <visual>
+    <origin xyz="${-0.059990+snx} ${0.015210+sny} ${-0.042608+snz}" rpy="0 0 0"/>
+    <geometry><mesh filename="file://$(find mod101_description)/meshes/servo_shoulder_big_1.stl" scale="0.001 0.001 0.001"/></geometry>
+    <material name="motor_black"/>
+  </visual>
+  <collision>
+    <origin xyz="${-0.059990+snx} ${0.015210+sny} ${-0.042608+snz}" rpy="0 0 0"/>
+    <geometry><mesh filename="file://$(find mod101_description)/meshes/servo_shoulder_big_1.stl" scale="0.001 0.001 0.001"/></geometry>
+  </collision>
+</link>
+
+<link name="${prefix}shoulder_adapter_1">
+  <inertial>
+    <origin xyz="-0.020137432669050628 -0.01850241218843865 0.0002933203996578482" rpy="0 0 0"/>
+    <mass value="0.4682"/>
+    <inertia ixx="0.000165" iyy="0.000101" izz="0.000213" ixy="0.0" iyz="0.0" ixz="2e-06"/>
+  </inertial>
+  <visual>
+    <origin xyz="${-0.049740+snx} ${-0.019990+sny} ${-0.075358+snz}" rpy="0 0 0"/>
+    <geometry><mesh filename="file://$(find mod101_description)/meshes/shoulder_adapter_big_1.stl" scale="0.001 0.001 0.001"/></geometry>
+    <material name="body_darkgrey"/>
+  </visual>
+  <collision>
+    <origin xyz="${-0.049740+snx} ${-0.019990+sny} ${-0.075358+snz}" rpy="0 0 0"/>
+    <geometry><mesh filename="file://$(find mod101_description)/meshes/shoulder_adapter_big_1.stl" scale="0.001 0.001 0.001"/></geometry>
+  </collision>
+</link>
+
+<joint name="${prefix}fixed_servo_shoulder_1" type="fixed">
+  <origin xyz="0.05886 -0.015997 -0.006584" rpy="0 0 0"/>
+  <parent link="${prefix}shoulder_rotation_link_1"/>
+  <child link="${prefix}servo_shoulder_1"/>
+</joint>
+
+<joint name="${prefix}joint_shoulder" type="revolute">
+  <origin xyz="-0.01025 0.0352 0.03275" rpy="0 0 0"/>
+  <parent link="${prefix}servo_shoulder_1"/>
+  <child link="${prefix}shoulder_adapter_1"/>
+  <axis xyz="0.0 1.0 0.0"/>
+  <limit upper="3.141593" lower="0.0" effort="100" velocity="100"/>
+  <dynamics damping="${joint_damping}" friction="${joint_friction}"/>
+</joint>
+
+</xacro:macro>
+
+</robot>

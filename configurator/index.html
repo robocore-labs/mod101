@@ -295,6 +295,33 @@
     <div id="viewer"></div>
     <p class="note" id="viewer-status">Loading URDF…</p>
     <button id="reload" class="ghost" style="margin-top: 8px;">Reload preview</button>
+
+    <h2 style="margin-top: 18px;">Big-mesh nudge</h2>
+    <p class="note">Cosmetic alignment for a big-mount module — shifts all its meshes together (kinematics unchanged) and writes the offset back to its xacro. Drag and watch the preview above. Set big mounts on the right to see them.</p>
+    <div class="input-row">
+      <label>module</label>
+      <select id="nudge-module">
+        <option value="shoulder">shoulder (big)</option>
+        <option value="elbow">elbow (big)</option>
+      </select>
+    </div>
+    <div class="input-row">
+      <label>X · forward</label>
+      <input id="nudge-x" type="range" min="-30" max="30" step="0.5" value="0">
+      <span class="readout" id="nudge-x-val" style="min-width:4em;text-align:right;">0.0</span><span>mm</span>
+    </div>
+    <div class="input-row">
+      <label>Y · lateral</label>
+      <input id="nudge-y" type="range" min="-30" max="30" step="0.5" value="0">
+      <span class="readout" id="nudge-y-val" style="min-width:4em;text-align:right;">0.0</span><span>mm</span>
+    </div>
+    <div class="input-row">
+      <label>Z · up</label>
+      <input id="nudge-z" type="range" min="-30" max="30" step="0.5" value="0">
+      <span class="readout" id="nudge-z-val" style="min-width:4em;text-align:right;">0.0</span><span>mm</span>
+    </div>
+    <button id="nudge-reset" class="ghost" style="margin-top: 6px;">Reset this module</button>
+    <p class="note" id="nudge-feedback"></p>
   </div>
   <div class="panel">
     <h2>Configuration</h2>
@@ -621,6 +648,22 @@ function update() {
 <xacro:arg name="elbow_ext_length"    default="${L_e}"/>
 <xacro:arg name="shoulder_mount"      default="${MOTORS[r.shMotor].mount}"/>
 <xacro:arg name="elbow_mount"         default="${MOTORS[r.elMotor].mount}"/>`;
+
+  // Publish the live config for the preview (loadUrdf reads this to render the
+  // current UI state without writing the file) and schedule a debounced reload.
+  window.previewConfig = {
+    shoulder_ext_length: L_s, elbow_ext_length: L_e,
+    shoulder_mount: MOTORS[r.shMotor].mount, elbow_mount: MOTORS[r.elMotor].mount,
+  };
+  schedulePreview();
+}
+
+// Debounced live-preview reload (rebuilds the 3D view from the current config).
+let _previewTimer = null;
+function schedulePreview() {
+  clearTimeout(_previewTimer);
+  _previewTimer = setTimeout(
+    () => window.dispatchEvent(new CustomEvent('xacro-saved')), 250);
 }
 
 // --- input wiring -----------------------------------------------------------
@@ -667,6 +710,57 @@ function setFeedback(text, cls = 'note') {
 $('reload').addEventListener('click', () => {
   setFeedback('Reloading preview…');
   window.dispatchEvent(new CustomEvent('xacro-saved'));
+});
+
+// --- big-mesh nudge ---------------------------------------------------------
+// Each big module (shoulder/elbow) has an XYZ offset (m) stored in its xacro.
+// Sliders are mm. Dragging writes the offset back (POST /nudge) and reloads the
+// preview so you eyeball the alignment. Debounced so a drag isn't a write storm.
+const nudgeState = { shoulder: [0, 0, 0], elbow: [0, 0, 0] };
+const nf = msg => { const e = $('nudge-feedback'); if (e) e.textContent = msg; };
+
+function nudgeShowFromState() {
+  const v = nudgeState[$('nudge-module').value];
+  for (const [i, ax] of ['x', 'y', 'z'].entries()) {
+    $(`nudge-${ax}`).value = (v[i] * 1000).toFixed(1);
+    $(`nudge-${ax}-val`).textContent = (v[i] * 1000).toFixed(1);
+  }
+}
+
+let nudgeTimer = null;
+function nudgePush() {
+  const mod = $('nudge-module').value;
+  const xyz = ['x', 'y', 'z'].map(ax => Number($(`nudge-${ax}`).value) / 1000);
+  nudgeState[mod] = xyz;
+  clearTimeout(nudgeTimer);
+  nudgeTimer = setTimeout(async () => {
+    nf('Saving nudge…');
+    try {
+      const resp = await fetch('/nudge', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ module: mod, xyz }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || resp.statusText);
+      Object.assign(nudgeState, data);
+      nf(`${mod} nudge = [${xyz.map(v => (v * 1000).toFixed(1)).join(', ')}] mm`);
+      window.dispatchEvent(new CustomEvent('xacro-saved'));   // reload preview
+    } catch (e) {
+      nf(`Nudge save failed: ${e.message || e}. Backend needs server.py.`);
+    }
+  }, 200);
+}
+
+for (const ax of ['x', 'y', 'z']) {
+  $(`nudge-${ax}`).addEventListener('input', () => {
+    $(`nudge-${ax}-val`).textContent = Number($(`nudge-${ax}`).value).toFixed(1);
+    nudgePush();
+  });
+}
+$('nudge-module').addEventListener('change', nudgeShowFromState);
+$('nudge-reset').addEventListener('click', () => {
+  for (const ax of ['x', 'y', 'z']) $(`nudge-${ax}`).value = 0;
+  nudgePush();
 });
 
 $('copy').addEventListener('click', async () => {
@@ -734,6 +828,12 @@ $('tool-select').addEventListener('change', async () => {
       if (masses) { MASSES = masses; MASSES_REAL = true; }
     }
   } catch { /* no backend: keep fallback */ }
+
+  // Current big-module nudge offsets.
+  try {
+    const nResp = await fetch('/nudge');
+    if (nResp.ok) { Object.assign(nudgeState, await nResp.json()); nudgeShowFromState(); }
+  } catch { /* no backend */ }
 
   try {
     const [propsResp, toolResp] = await Promise.all([fetch('/load'), fetch('/tool')]);
@@ -903,7 +1003,11 @@ async function loadUrdf() {
   status.textContent = 'Loading URDF…';
   status.className = 'note';
   try {
-    const resp = await fetch('/urdf', { cache: 'no-store' });
+    // Render the current UI state (lengths + mounts) live, without writing the
+    // file. Nudges are read from the module files the server renders.
+    const cfg = window.previewConfig || {};
+    const qs = new URLSearchParams(cfg).toString();
+    const resp = await fetch('/urdf' + (qs ? '?' + qs : ''), { cache: 'no-store' });
     if (!resp.ok) {
       const detail = await resp.json().catch(() => ({}));
       throw new Error(detail.error || resp.statusText);
