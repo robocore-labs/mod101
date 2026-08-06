@@ -2,6 +2,10 @@
 
 **An open-source, universal robot arm platform.**
 
+
+
+![](https://i.imgur.com/igzezJ8.png)
+
 Robot arms are cool,  but no two people want the same one. Bolt a dremel to it
 for light machining and you need a short reach and real payload. Put a camera
 on it for inspection work and you want the exact opposite: long reach, almost
@@ -12,8 +16,6 @@ mod101 doesn't. It's a 5-DOF arm designed as a *base* you build on: size it for
 your reach envelope, snap in whichever tool the job needs (gripper, vacuum,
 camera, dispenser…), and drive it with whatever stack you like — ROS 2, MoveIt,
 direct serial, LeRobot.
-
-![](img/imagine.jpg)
 
 ## Features
 
