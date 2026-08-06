@@ -6,21 +6,23 @@
 -->
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
 
-  <ros2_control name="mod101_tool_jaws_system" type="system">
+<xacro:macro name="mod101_tool_jaws_ros2control" params="prefix:='' use_sim:='true'">
 
-    <xacro:if value="$(arg use_sim)">
+  <ros2_control name="${prefix}mod101_tool_jaws_system" type="system">
+
+    <xacro:if value="${use_sim}">
       <hardware>
         <plugin>gz_ros2_control/GazeboSimSystem</plugin>
       </hardware>
     </xacro:if>
-    <xacro:unless value="$(arg use_sim)">
+    <xacro:unless value="${use_sim}">
       <hardware>
         <!-- Placeholder: replace with the real bus driver once wired up. -->
         <plugin>mock_components/GenericSystem</plugin>
       </hardware>
     </xacro:unless>
 
-    <joint name="6">
+    <joint name="${prefix}6">
       <command_interface name="position">
         <param name="min">0.0</param>
         <param name="max">2.14</param>
@@ -34,5 +36,7 @@
     </joint>
 
   </ros2_control>
+
+</xacro:macro>
 
 </robot>

@@ -1,56 +1,47 @@
 <?xml version="1.0"?>
 <robot name="mod101" xmlns:xacro="http://www.ros.org/wiki/xacro">
 
-  <ros2_control name="mod101_sim_system" type="system">
+<xacro:macro name="mod101_arm_ros2control" params="prefix">
+
+  <ros2_control name="${prefix}mod101_sim_system" type="system">
     <hardware>
       <plugin>gz_ros2_control/GazeboSimSystem</plugin>
     </hardware>
 
-    <!-- Arm joints (5 DOF, continuous). -->
-    <joint name="1">
+    <!-- Arm joints (5 DOF). End-effector joints live in the active tool's own
+         <ros2_control> block; see mod101_tool_<tool>/urdf/tool.ros2control. -->
+    <joint name="${prefix}joint_base">
       <command_interface name="position"/>
       <state_interface name="position"/>
       <state_interface name="velocity"/>
     </joint>
 
-    <!-- Initial poses (radians) put the arm in a "ready" stance:
-           joint 2 = -45°  (shoulder pitch back)
-           joint 3 = +90°  (elbow up)
-           joint 4 = -45°  (wrist tilt back)
-         so the arm wakes up roughly vertical with the wrist forward. -->
-    <joint name="2">
-      <command_interface name="position"/>
-      <state_interface name="position">
-        <param name="initial_value">-0.7853981633974483</param>
-      </state_interface>
-      <state_interface name="velocity"/>
-    </joint>
-
-    <joint name="3">
-      <command_interface name="position"/>
-      <state_interface name="position">
-        <param name="initial_value">1.5707963267948966</param>
-      </state_interface>
-      <state_interface name="velocity"/>
-    </joint>
-
-    <joint name="4">
-      <command_interface name="position"/>
-      <state_interface name="position">
-        <param name="initial_value">-0.7853981633974483</param>
-      </state_interface>
-      <state_interface name="velocity"/>
-    </joint>
-
-    <joint name="5">
+    <joint name="${prefix}joint_shoulder">
       <command_interface name="position"/>
       <state_interface name="position"/>
       <state_interface name="velocity"/>
     </joint>
 
-    <!-- End-effector joints live in $(arg tool)'s own <ros2_control> block;
-         see mod101_tool_<tool>/urdf/tool.ros2control. -->
+    <joint name="${prefix}joint_elbow">
+      <command_interface name="position"/>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+
+    <joint name="${prefix}joint_wrist_tilt">
+      <command_interface name="position"/>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+
+    <joint name="${prefix}joint_wrist_roll">
+      <command_interface name="position"/>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
 
   </ros2_control>
+
+</xacro:macro>
 
 </robot>

@@ -6,7 +6,9 @@
 -->
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
 
-  <link name="end_cap">
+<xacro:macro name="mod101_tool_none" params="prefix:='' use_sim:='true'">
+
+  <link name="${prefix}end_cap">
     <inertial>
       <origin xyz="0 0 0.005" rpy="0 0 0"/>
       <mass value="0.010"/>
@@ -27,10 +29,10 @@
     </collision>
   </link>
 
-  <joint name="end_cap_mount" type="fixed">
+  <joint name="${prefix}end_cap_mount" type="fixed">
     <origin xyz="0 0 0" rpy="0 0 0"/>
-    <parent link="wrist_flange"/>
-    <child link="end_cap"/>
+    <parent link="${prefix}wrist_flange"/>
+    <child link="${prefix}end_cap"/>
   </joint>
 
   <gazebo reference="end_cap">
@@ -39,5 +41,7 @@
     <mu2>0.2</mu2>
     <self_collide>false</self_collide>
   </gazebo>
+
+</xacro:macro>
 
 </robot>

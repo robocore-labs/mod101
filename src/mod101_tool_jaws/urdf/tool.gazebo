@@ -1,14 +1,16 @@
 <?xml version="1.0" ?>
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
 
-  <gazebo reference="jaws_body">
+<xacro:macro name="mod101_tool_jaws_gazebo" params="prefix:=''">
+
+  <gazebo reference="${prefix}jaws_body">
     <material>Gazebo/Green</material>
     <mu1>0.4</mu1>
     <mu2>0.4</mu2>
     <self_collide>true</self_collide>
   </gazebo>
 
-  <gazebo reference="jaws_servo">
+  <gazebo reference="${prefix}jaws_servo">
     <material>Gazebo/Black</material>
     <mu1>0.2</mu1>
     <mu2>0.2</mu2>
@@ -16,11 +18,13 @@
   </gazebo>
 
   <!-- Bumped friction on the moving jaw — that's the contact surface. -->
-  <gazebo reference="jaws_moving">
+  <gazebo reference="${prefix}jaws_moving">
     <material>Gazebo/Green</material>
     <mu1>1.0</mu1>
     <mu2>1.0</mu2>
     <self_collide>true</self_collide>
   </gazebo>
+
+</xacro:macro>
 
 </robot>

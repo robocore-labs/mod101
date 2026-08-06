@@ -1,0 +1,83 @@
+<?xml version="1.0" ?>
+<!--
+  Shoulder joint module — SMALL (STS3215/3250).
+  Self-contained swappable unit: the previous link (shoulder_rotation_link), the
+  servo (servo_shoulder), the next link (shoulder_adapter), and the joints
+  between them (fixed_servo_shoulder + the actuated joint_shoulder). The core
+  macro wires joint_base -> shoulder_rotation_link and shoulder_adapter ->
+  arm_extrusion, so this module just defines its own links + internal joints.
+  Swap to shoulder_big.xacro for the ST3120 variant (same interface links).
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+<xacro:macro name="mod101_shoulder_small" params="prefix">
+
+<link name="${prefix}shoulder_rotation_link_1">
+  <inertial>
+    <origin xyz="0.032744272167771385 0.0004962194281389748 -0.013844865838515547" rpy="0 0 0"/>
+    <mass value="0.34166100376418634"/>
+    <inertia ixx="0.000127" iyy="0.000174" izz="0.00016" ixy="-2e-06" iyz="-1e-06" ixz="-1.6e-05"/>
+  </inertial>
+  <visual>
+    <origin xyz="0.004981 -0.073826 -0.117174" rpy="0 0 0"/>
+    <geometry><mesh filename="file://$(find mod101_description)/meshes/shoulder_rotation_link_1.stl" scale="0.001 0.001 0.001"/></geometry>
+    <material name="body_darkgrey"/>
+  </visual>
+  <collision>
+    <origin xyz="0.004981 -0.073826 -0.117174" rpy="0 0 0"/>
+    <geometry><mesh filename="file://$(find mod101_description)/meshes/shoulder_rotation_link_1.stl" scale="0.001 0.001 0.001"/></geometry>
+  </collision>
+</link>
+
+<link name="${prefix}servo_shoulder_1">
+  <inertial>
+    <origin xyz="-0.010248506820219064 0.016877231540248554 0.021914022574664543" rpy="0 0 0"/>
+    <mass value="0.0658962961901927"/>
+    <inertia ixx="1.8e-05" iyy="1.4e-05" izz="1e-05" ixy="0.0" iyz="-0.0" ixz="0.0"/>
+  </inertial>
+  <visual>
+    <origin xyz="-0.053879 -0.057829 -0.11059" rpy="0 0 0"/>
+    <geometry><mesh filename="file://$(find mod101_description)/meshes/servo_shoulder_1.stl" scale="0.001 0.001 0.001"/></geometry>
+    <material name="motor_black"/>
+  </visual>
+  <collision>
+    <origin xyz="-0.053879 -0.057829 -0.11059" rpy="0 0 0"/>
+    <geometry><mesh filename="file://$(find mod101_description)/meshes/servo_shoulder_1.stl" scale="0.001 0.001 0.001"/></geometry>
+  </collision>
+</link>
+
+<link name="${prefix}shoulder_adapter_1">
+  <inertial>
+    <origin xyz="-0.020137432669050628 -0.01850241218843865 0.0002933203996578482" rpy="0 0 0"/>
+    <mass value="0.2129021996409236"/>
+    <inertia ixx="7.5e-05" iyy="4.6e-05" izz="9.7e-05" ixy="0.0" iyz="0.0" ixz="1e-06"/>
+  </inertial>
+  <visual>
+    <origin xyz="-0.043629 -0.093029 -0.14334" rpy="0 0 0"/>
+    <geometry><mesh filename="file://$(find mod101_description)/meshes/shoulder_adapter_1.stl" scale="0.001 0.001 0.001"/></geometry>
+    <material name="body_darkgrey"/>
+  </visual>
+  <collision>
+    <origin xyz="-0.043629 -0.093029 -0.14334" rpy="0 0 0"/>
+    <geometry><mesh filename="file://$(find mod101_description)/meshes/shoulder_adapter_1.stl" scale="0.001 0.001 0.001"/></geometry>
+  </collision>
+</link>
+
+<joint name="${prefix}fixed_servo_shoulder_1" type="fixed">
+  <origin xyz="0.05886 -0.015997 -0.006584" rpy="0 0 0"/>
+  <parent link="${prefix}shoulder_rotation_link_1"/>
+  <child link="${prefix}servo_shoulder_1"/>
+</joint>
+
+<joint name="${prefix}joint_shoulder" type="revolute">
+  <origin xyz="-0.01025 0.0352 0.03275" rpy="0 0 0"/>
+  <parent link="${prefix}servo_shoulder_1"/>
+  <child link="${prefix}shoulder_adapter_1"/>
+  <axis xyz="0.0 1.0 0.0"/>
+  <limit upper="3.141593" lower="0.0" effort="100" velocity="100"/>
+  <dynamics damping="${joint_damping}" friction="${joint_friction}"/>
+</joint>
+
+</xacro:macro>
+
+</robot>

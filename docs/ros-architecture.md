@@ -8,7 +8,7 @@ Target distro: **Jazzy** (Ubuntu 24.04, Python 3.12, Gazebo Harmonic).
 
 | Package | Build type | Purpose |
 |---|---|---|
-| `mod101_description` | `ament_cmake` | Arm URDF/xacro (`mod101.xacro`, `materials.xacro`, `mod101.ros2control`, `mod101.gazebo`), meshes, RViz config, `display.launch.py`. Terminates at the `wrist_flange` link — the contract point for tools. |
+| `mod101_description` | `ament_cmake` | Arm URDF/xacro, meshes, RViz config, `display.launch.py`. The arm itself is the **`mod101_arm` macro** in `mod101_macro.xacro` (prefix-parameterized so multiple instances can coexist in one robot); `mod101.xacro` is the thin standalone wrapper; `mod101.ros2control` / `mod101.gazebo` hold the matching per-instance macros. Terminates at the `wrist_flange` link — the contract point for tools. |
 | `mod101_control` | `ament_cmake` | Arm controller YAML (`controllers.sim.yaml`), real-hardware overlay (`mod101.hardware.xacro` — placeholder plugin) |
 | `mod101_gazebo` | `ament_cmake` | World (`empty.sdf`, bullet-featherstone physics), bridge config, `gazebo.launch.py` (accepts `tool:=<name>`) |
 | `mod101_tool_parallel` | `ament_cmake` | Parallel-jaw gripper |
@@ -16,28 +16,63 @@ Target distro: **Jazzy** (Ubuntu 24.04, Python 3.12, Gazebo Harmonic).
 | `mod101_tool_jaws` | `ament_cmake` | SO-101 single-jaw gripper (URDF + meshes adapted from the SO-101 lineage) |
 | `mod101_tool_none` | `ament_cmake` | Empty end-cap. No actuators, no controllers — useful as a baseline / template |
 
+## The `mod101_arm` macro
+
+Everything that *is* the arm — links, joints, ros2_control hardware block,
+gazebo extensions, the selected tool — is emitted by one macro:
+
+```xml
+<xacro:include filename="$(find mod101_description)/urdf/mod101_macro.xacro"/>
+<xacro:mod101_arm prefix="" parent="world" xyz="0 0 0" rpy="0 0 0"
+                  tool="jaws" use_sim="true"/>
+```
+
+`prefix` is prepended to every link/joint/system name and the wrist-camera
+topic, so multiple instances coexist cleanly (`left_arm_1…6`, etc.).
+`parent` adds a fixed `<prefix>base_mount` joint to the given link (empty =
+no mount joint). `use_sim` gates the gz_ros2_control system blocks + gazebo
+tags per instance.
+
+Two things deliberately stay **outside** the macro, in the standalone
+wrapper `mod101.xacro`: the `world` anchor link and the gz_ros2_control
+**plugin** declaration (one per robot — an integrator with its own plugin
+block, like base101, must not inherit a second one). `mod101.xacro` keeps
+the original `use_sim` / `tool` args, so single-arm bringup is unchanged.
+
 ## Tool layer
 
-The arm xacro takes a `tool` arg (default `parallel`). At expansion time it `<xacro:include>`s `mod101_tool_<tool>/urdf/tool.urdf.xacro`, which is fixed-jointed to `wrist_flange`. The Gazebo plugin block in `mod101.gazebo` loads `mod101_control`'s arm YAML **plus** the active tool's YAML (multiple `<parameters>` files merge into the single `controller_manager` namespace); the launch file `IncludeLaunchDescription`s the tool's `launch/tool.launch.py` to spawn whatever controllers / bridges / drivers the tool needs.
+The macro's `tool` param (arg `tool` on the standalone wrapper, default
+`jaws`) selects which `mod101_tool_<tool>` macro to invoke; the tool's links
+are fixed-jointed to `<prefix>wrist_flange`. The Gazebo plugin block in
+`mod101.xacro` loads `mod101_control`'s arm YAML **plus** the active tool's
+YAML (multiple `<parameters>` files merge into the single
+`controller_manager` namespace); the launch file `IncludeLaunchDescription`s
+the tool's `launch/tool.launch.py` to spawn whatever controllers / bridges /
+drivers the tool needs.
 
 ### Adding a new tool
 
 Create `mod101_tool_<name>/` with:
 
 ```
-urdf/tool.urdf.xacro        # links + a fixed joint to wrist_flange
-urdf/tool.ros2control       # optional, included by tool.urdf.xacro
-urdf/tool.gazebo            # optional, included by tool.urdf.xacro
+urdf/tool.urdf.xacro        # macro mod101_tool_<name>(prefix, use_sim): links + fixed joint to ${prefix}wrist_flange
+urdf/tool.ros2control       # optional: macro mod101_tool_<name>_ros2control(prefix, use_sim)
+urdf/tool.gazebo            # optional: macro mod101_tool_<name>_gazebo(prefix)
 config/controllers.yaml     # optional
 launch/tool.launch.py       # spawners, image bridges, drivers, ...
 ```
 
-Then add one `<xacro:if>` branch in `mod101.xacro` (include the tool's xacro) and one in `mod101.gazebo` (point the plugin at the tool's controllers YAML if it has one). The configurator auto-discovers the package on disk and lists it in the dropdown.
+Every link/joint name and parent/child reference inside the macros takes a
+`${prefix}` (copy an existing tool — `jaws` is the smallest complete
+example). Then add one include + one `<xacro:if>` invocation branch in
+`mod101_macro.xacro`, and one `<parameters>` branch in `mod101.xacro`'s
+plugin block (if the tool ships controllers). The configurator
+auto-discovers the package on disk and lists it in the dropdown.
 
 ## Joints
 
-- Arm (`mod101_description`): `1`, `2`, `3`, `4`, `5` (all continuous)
-- Tool joints live in the tool package. For `mod101_tool_parallel`: `6` (prismatic, drives `left_jaw`); `right_jaw_slider` follows via URDF `<mimic>` (bullet-featherstone honors it; dartsim doesn't).
+- Arm: `<prefix>1 … <prefix>5` (all continuous; standalone prefix is empty, so just `1…5`)
+- Tool joints live in the tool package. For `mod101_tool_parallel`: `<prefix>6` (prismatic, drives `left_jaw`); `<prefix>right_jaw_slider` follows via URDF `<mimic>` (bullet-featherstone honors it; dartsim doesn't).
 
 ## Build
 
@@ -60,9 +95,9 @@ ros2 launch mod101_description display.launch.py
 Gazebo sim with ros2_control:
 
 ```bash
-ros2 launch mod101_gazebo gazebo.launch.py                 # tool:=parallel (default)
+ros2 launch mod101_gazebo gazebo.launch.py                 # tool:=jaws (default)
+ros2 launch mod101_gazebo gazebo.launch.py tool:=parallel
 ros2 launch mod101_gazebo gazebo.launch.py tool:=pincopen
-ros2 launch mod101_gazebo gazebo.launch.py tool:=jaws
 ros2 launch mod101_gazebo gazebo.launch.py tool:=none
 ```
 
@@ -97,6 +132,11 @@ ros2 control switch_controllers \
 ## Wiring real hardware
 
 Override `mod101.xacro`'s `use_sim` arg to `false` and switch `mod101.hardware.xacro`'s placeholder `mock_components/GenericSystem` plugin for the real servo bus driver.
+
+Calibrate the physical arm first — the configurator's Calibrate tab sweeps each
+joint and generates `mod101_control/config/calibration.yaml` (joint limits in
+radians, per-servo tick ranges) plus a LeRobot calibration JSON. See
+[calibration.md](calibration.md).
 
 ## Gotchas
 

@@ -1,0 +1,79 @@
+<?xml version="1.0" ?>
+<!--
+  Elbow joint module — SMALL (STS3215/3250). Previous link (elbow_link), servo
+  (servo_elbow), next link (elbow_adapter) + the joints between them. The core
+  wires arm_extrusion -> elbow_link and elbow_adapter -> forearm_extrusion.
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+<xacro:macro name="mod101_elbow_small" params="prefix">
+
+<link name="${prefix}elbow_link_1">
+  <inertial>
+    <origin xyz="-0.010386839428546318 0.00039485016823848085 -0.0020812304383783786" rpy="0 0 0"/>
+    <mass value="0.3445733336731394"/>
+    <inertia ixx="0.000106" iyy="8.8e-05" izz="0.000153" ixy="-2e-06" iyz="1e-06" ixz="-3e-06"/>
+  </inertial>
+  <visual>
+    <origin xyz="0.062581 -0.073858 -0.142215" rpy="0 0 0"/>
+    <geometry><mesh filename="file://$(find mod101_description)/meshes/elbow_link_1.stl" scale="0.001 0.001 0.001"/></geometry>
+    <material name="body_darkgrey"/>
+  </visual>
+  <collision>
+    <origin xyz="0.062581 -0.073858 -0.142215" rpy="0 0 0"/>
+    <geometry><mesh filename="file://$(find mod101_description)/meshes/elbow_link_1.stl" scale="0.001 0.001 0.001"/></geometry>
+  </collision>
+</link>
+
+<link name="${prefix}servo_elbow_1">
+  <inertial>
+    <origin xyz="0.010248900428017363 0.014922520716508098 0.018164022574663097" rpy="0 0 0"/>
+    <mass value="0.0658962961901927"/>
+    <inertia ixx="1.8e-05" iyy="1.4e-05" izz="1e-05" ixy="0.0" iyz="0.0" ixz="-0.0"/>
+  </inertial>
+  <visual>
+    <origin xyz="0.097041 -0.058988 -0.14589" rpy="0 0 0"/>
+    <geometry><mesh filename="file://$(find mod101_description)/meshes/servo_elbow_1.stl" scale="0.001 0.001 0.001"/></geometry>
+    <material name="motor_black"/>
+  </visual>
+  <collision>
+    <origin xyz="0.097041 -0.058988 -0.14589" rpy="0 0 0"/>
+    <geometry><mesh filename="file://$(find mod101_description)/meshes/servo_elbow_1.stl" scale="0.001 0.001 0.001"/></geometry>
+  </collision>
+</link>
+
+<link name="${prefix}elbow_adapter_1">
+  <inertial>
+    <origin xyz="0.020137826276852483 0.018502164445195313 0.00029332039965654366" rpy="0 0 0"/>
+    <mass value="0.2129021996409237"/>
+    <inertia ixx="7.5e-05" iyy="4.6e-05" izz="9.7e-05" ixy="0.0" iyz="-0.0" ixz="-1e-06"/>
+  </inertial>
+  <visual>
+    <origin xyz="0.086791 -0.055588 -0.17489" rpy="0 0 0"/>
+    <geometry><mesh filename="file://$(find mod101_description)/meshes/elbow_adapter_1.stl" scale="0.001 0.001 0.001"/></geometry>
+    <material name="body_darkgrey"/>
+  </visual>
+  <collision>
+    <origin xyz="0.086791 -0.055588 -0.17489" rpy="0 0 0"/>
+    <geometry><mesh filename="file://$(find mod101_description)/meshes/elbow_adapter_1.stl" scale="0.001 0.001 0.001"/></geometry>
+  </collision>
+</link>
+
+<joint name="${prefix}fixed_servo_elbow_1" type="fixed">
+  <origin xyz="-0.03446 -0.01487 0.003675" rpy="0 0 0"/>
+  <parent link="${prefix}elbow_link_1"/>
+  <child link="${prefix}servo_elbow_1"/>
+</joint>
+
+<joint name="${prefix}joint_elbow" type="revolute">
+  <origin xyz="0.01025 -0.0034 0.029" rpy="0 0 0"/>
+  <parent link="${prefix}servo_elbow_1"/>
+  <child link="${prefix}elbow_adapter_1"/>
+  <axis xyz="0.0 -1.0 0.0"/>
+  <limit upper="3.141593" lower="0.0" effort="100" velocity="100"/>
+  <dynamics damping="${joint_damping}" friction="${joint_friction}"/>
+</joint>
+
+</xacro:macro>
+
+</robot>

@@ -1,0 +1,462 @@
+<?xml version="1.0" ?>
+<!--
+  Reusable mod101 arm macro — consolidated parametric build.
+
+  Geometry is the mod101_small CAD export (reference/mod101-small_description),
+  ported faithfully (exact joint origins + axes, so it articulates correctly).
+  Two things are parametric:
+
+    shoulder_ext_length / elbow_ext_length   2020 rail length (m) — advances the
+                                             elbow / wrist joint along the rail.
+    shoulder_mount / elbow_mount             'small' | 'big'. 'big' swaps in the
+                                             larger servo + heavier structural
+                                             links from the mod101_large export
+                                             (mesh + mass). Everything else is
+                                             identical between the two exports.
+
+  The arm terminates at ${prefix}wrist_flange; the tool selected by the `tool`
+  param bolts its root link there (see docs/tool-convention.md).
+
+  prefix   prepended to every link/joint name (multiple instances coexist).
+  parent   link to bolt the base onto via a fixed ${prefix}base_mount joint.
+           Empty = caller anchors ${prefix}base_link (mod101.xacro does).
+  tool     end-effector package suffix (mod101_tool_<tool>).
+  use_sim  emit the gz_ros2_control hardware block + gazebo extensions.
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+<xacro:include filename="$(find mod101_description)/urdf/mod101.ros2control"/>
+<xacro:include filename="$(find mod101_description)/urdf/mod101.gazebo"/>
+
+<!-- Every tool macro is included unconditionally (xacro has no conditional
+     include); only the one selected by `tool` is instantiated below. -->
+<xacro:include filename="$(find mod101_tool_parallel)/urdf/tool.urdf.xacro"/>
+<xacro:include filename="$(find mod101_tool_pincopen)/urdf/tool.urdf.xacro"/>
+<xacro:include filename="$(find mod101_tool_jaws)/urdf/tool.urdf.xacro"/>
+<xacro:include filename="$(find mod101_tool_none)/urdf/tool.urdf.xacro"/>
+
+<!-- Swappable joint modules (shoulder/elbow, small/big). Same pattern as the
+     tools: each module is a self-contained sub-tree (prev link + servo + next
+     link + the joints between them) selected at xacro-expansion time by the
+     *_mount param. The core wires the module's interface links (joint_base ->
+     shoulder_rotation_link -> ... -> arm_extrusion, etc.). -->
+<xacro:include filename="$(find mod101_description)/urdf/modules/shoulder_small.xacro"/>
+<xacro:include filename="$(find mod101_description)/urdf/modules/shoulder_big.xacro"/>
+<xacro:include filename="$(find mod101_description)/urdf/modules/elbow_small.xacro"/>
+<xacro:include filename="$(find mod101_description)/urdf/modules/elbow_big.xacro"/>
+
+<!-- 2020 aluminium extrusion cross-section + linear density (one rail). -->
+<xacro:property name="ext_cross"         value="0.020"/>  <!-- 20x20 mm -->
+<xacro:property name="extrusion_density" value="0.46"/>   <!-- kg/m -->
+
+<xacro:macro name="mod101_arm" params="prefix:='' parent:='' xyz:='0 0 0' rpy:='0 0 0' tool:='jaws' use_sim:='true' shoulder_ext_length:='0.082' elbow_ext_length:='0.098' shoulder_mount:='small' elbow_mount:='small'">
+
+<!-- Rail length IS the joint advance along local X (1:1). The extrusion link is
+     a box primitive of this length, so editing the length scales the rail AND
+     moves the downstream joint together. Export defaults: 0.082 arm, 0.098 forearm. -->
+<xacro:property name="arm_advance"     value="${-shoulder_ext_length}"/>
+<xacro:property name="forearm_advance" value="${ elbow_ext_length}"/>
+<xacro:property name="m_arm_ext"       value="${extrusion_density * shoulder_ext_length}"/>
+<xacro:property name="m_forearm_ext"   value="${extrusion_density * elbow_ext_length}"/>
+
+<!-- Joint damping/friction. Without these Gazebo's solver lets the actuated
+     joints flop/jitter (especially the heavier big-mount links). Tune if the
+     arm feels over- or under-damped. -->
+<xacro:property name="joint_damping"  value="1.0"/>
+<xacro:property name="joint_friction" value="0.1"/>
+
+<xacro:unless value="${parent == ''}">
+  <joint name="${prefix}base_mount" type="fixed">
+    <origin xyz="${xyz}" rpy="${rpy}"/>
+    <parent link="${parent}"/>
+    <child link="${prefix}base_link"/>
+  </joint>
+</xacro:unless>
+
+<link name="${prefix}base_link">
+  <inertial>
+    <origin xyz="-0.016083210300696003 0.07326726540183791 0.07387020603487769" rpy="0 0 0"/>
+    <mass value="0.8668211242819505"/>
+    <inertia ixx="0.001015" iyy="0.000946" izz="0.001687" ixy="4e-06" iyz="-3e-06" ixz="0.000152"/>
+  </inertial>
+  <visual>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <geometry><mesh filename="file://$(find mod101_description)/meshes/base_link.stl" scale="0.001 0.001 0.001"/></geometry>
+    <material name="body_darkgrey"/>
+  </visual>
+  <collision>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <geometry><mesh filename="file://$(find mod101_description)/meshes/base_link.stl" scale="0.001 0.001 0.001"/></geometry>
+  </collision>
+</link>
+
+<link name="${prefix}servo_base_1">
+  <inertial>
+    <origin xyz="0.018164451014978943 -0.010249127257539445 -0.015123159345860906" rpy="0 0 0"/>
+    <mass value="0.0658962961901927"/>
+    <inertia ixx="1e-05" iyy="1.8e-05" izz="1.4e-05" ixy="0.0" iyz="0.0" ixz="-0.0"/>
+  </inertial>
+  <visual>
+    <origin xyz="0.033981 -0.084076 -0.113974" rpy="0 0 0"/>
+    <geometry><mesh filename="file://$(find mod101_description)/meshes/servo_base_1.stl" scale="0.001 0.001 0.001"/></geometry>
+    <material name="motor_black"/>
+  </visual>
+  <collision>
+    <origin xyz="0.033981 -0.084076 -0.113974" rpy="0 0 0"/>
+    <geometry><mesh filename="file://$(find mod101_description)/meshes/servo_base_1.stl" scale="0.001 0.001 0.001"/></geometry>
+  </collision>
+</link>
+
+<link name="${prefix}base_cover_1">
+  <inertial>
+    <origin xyz="0.02230051687619229 0.01594291177721944 -3.4268786498758974e-07" rpy="0 0 0"/>
+    <mass value="0.1881374899503161"/>
+    <inertia ixx="6e-05" iyy="0.000108" izz="0.000142" ixy="1e-06" iyz="0.0" ixz="-0.0"/>
+  </inertial>
+  <visual>
+    <origin xyz="0.045885 -0.058276 -0.097774" rpy="0 0 0"/>
+    <geometry><mesh filename="file://$(find mod101_description)/meshes/base_cover_1.stl" scale="0.001 0.001 0.001"/></geometry>
+    <material name="accent_green"/>
+  </visual>
+  <collision>
+    <origin xyz="0.045885 -0.058276 -0.097774" rpy="0 0 0"/>
+    <geometry><mesh filename="file://$(find mod101_description)/meshes/base_cover_1.stl" scale="0.001 0.001 0.001"/></geometry>
+  </collision>
+</link>
+
+<!-- Shoulder joint module (small|big): defines shoulder_rotation_link_1,
+     servo_shoulder_1, shoulder_adapter_1 + fixed_servo_shoulder_1 + joint_shoulder. -->
+<xacro:if value="${shoulder_mount == 'big'}">
+  <xacro:mod101_shoulder_big prefix="${prefix}"/>
+</xacro:if>
+<xacro:unless value="${shoulder_mount == 'big'}">
+  <xacro:mod101_shoulder_small prefix="${prefix}"/>
+</xacro:unless>
+
+<!-- Upper-arm rail: 2020 box primitive, length = shoulder_ext_length, running
+     from this frame to the elbow joint along -X. -->
+<link name="${prefix}arm_extrusion_1">
+  <inertial>
+    <origin xyz="${arm_advance/2} 0 0" rpy="0 0 0"/>
+    <mass value="${m_arm_ext}"/>
+    <inertia ixx="${m_arm_ext*(ext_cross*ext_cross + ext_cross*ext_cross)/12}"
+             iyy="${m_arm_ext*(shoulder_ext_length*shoulder_ext_length + ext_cross*ext_cross)/12}"
+             izz="${m_arm_ext*(shoulder_ext_length*shoulder_ext_length + ext_cross*ext_cross)/12}"
+             ixy="0" iyz="0" ixz="0"/>
+  </inertial>
+  <visual>
+    <origin xyz="${arm_advance/2} 0 0" rpy="0 0 0"/>
+    <geometry><box size="${shoulder_ext_length} ${ext_cross} ${ext_cross}"/></geometry>
+    <material name="silver"/>
+  </visual>
+  <collision>
+    <origin xyz="${arm_advance/2} 0 0" rpy="0 0 0"/>
+    <geometry><box size="${shoulder_ext_length} ${ext_cross} ${ext_cross}"/></geometry>
+  </collision>
+</link>
+
+<!-- Elbow joint module (small|big): defines elbow_link_1, servo_elbow_1,
+     elbow_adapter_1 + fixed_servo_elbow_1 + joint_elbow. -->
+<xacro:if value="${elbow_mount == 'big'}">
+  <xacro:mod101_elbow_big prefix="${prefix}"/>
+</xacro:if>
+<xacro:unless value="${elbow_mount == 'big'}">
+  <xacro:mod101_elbow_small prefix="${prefix}"/>
+</xacro:unless>
+
+<!-- Forearm rail: 2020 box primitive, length = elbow_ext_length, running from
+     this frame to the wrist along +X. -->
+<link name="${prefix}forearm_extrusion_1">
+  <inertial>
+    <origin xyz="${forearm_advance/2} 0 0" rpy="0 0 0"/>
+    <mass value="${m_forearm_ext}"/>
+    <inertia ixx="${m_forearm_ext*(ext_cross*ext_cross + ext_cross*ext_cross)/12}"
+             iyy="${m_forearm_ext*(elbow_ext_length*elbow_ext_length + ext_cross*ext_cross)/12}"
+             izz="${m_forearm_ext*(elbow_ext_length*elbow_ext_length + ext_cross*ext_cross)/12}"
+             ixy="0" iyz="0" ixz="0"/>
+  </inertial>
+  <visual>
+    <origin xyz="${forearm_advance/2} 0 0" rpy="0 0 0"/>
+    <geometry><box size="${elbow_ext_length} ${ext_cross} ${ext_cross}"/></geometry>
+    <material name="silver"/>
+  </visual>
+  <collision>
+    <origin xyz="${forearm_advance/2} 0 0" rpy="0 0 0"/>
+    <geometry><box size="${elbow_ext_length} ${ext_cross} ${ext_cross}"/></geometry>
+  </collision>
+</link>
+
+<link name="${prefix}wrist_servo_adapter_1">
+  <inertial>
+    <origin xyz="-0.0019161875719076876 -0.001239865018947961 -8.234763106684806e-07" rpy="0 0 0"/>
+    <mass value="0.1802416209536359"/>
+    <inertia ixx="5.5e-05" iyy="2.2e-05" izz="5.1e-05" ixy="1e-06" iyz="0.0" ixz="0.0"/>
+  </inertial>
+  <visual>
+    <origin xyz="-0.035419 -0.074758 -0.173765" rpy="0 0 0"/>
+    <geometry><mesh filename="file://$(find mod101_description)/meshes/wrist_servo_adapter_1.stl" scale="0.001 0.001 0.001"/></geometry>
+    <material name="body_darkgrey"/>
+  </visual>
+  <collision>
+    <origin xyz="-0.035419 -0.074758 -0.173765" rpy="0 0 0"/>
+    <geometry><mesh filename="file://$(find mod101_description)/meshes/wrist_servo_adapter_1.stl" scale="0.001 0.001 0.001"/></geometry>
+  </collision>
+</link>
+
+<link name="${prefix}servo_wrist_tilt_1">
+  <inertial>
+    <origin xyz="0.02191445288807735 -0.01687680721527879 -0.010249015260752697" rpy="0 0 0"/>
+    <mass value="0.0658962961901927"/>
+    <inertia ixx="1e-05" iyy="1.4e-05" izz="1.8e-05" ixy="0.0" iyz="-0.0" ixz="0.0"/>
+  </inertial>
+  <visual>
+    <origin xyz="-0.045069 -0.090758 -0.184015" rpy="0 0 0"/>
+    <geometry><mesh filename="file://$(find mod101_description)/meshes/servo_wrist_tilt_1.stl" scale="0.001 0.001 0.001"/></geometry>
+    <material name="motor_black"/>
+  </visual>
+  <collision>
+    <origin xyz="-0.045069 -0.090758 -0.184015" rpy="0 0 0"/>
+    <geometry><mesh filename="file://$(find mod101_description)/meshes/servo_wrist_tilt_1.stl" scale="0.001 0.001 0.001"/></geometry>
+  </collision>
+</link>
+
+<link name="${prefix}wrist_roll_adapter_1">
+  <inertial>
+    <origin xyz="0.0265390165786311 0.018652019649215763 0.02086935983869931" rpy="0 0 0"/>
+    <mass value="0.19133626761871975"/>
+    <inertia ixx="0.000113" iyy="0.000128" izz="9.2e-05" ixy="-0.0" iyz="0.0" ixz="-4.5e-05"/>
+  </inertial>
+  <visual>
+    <origin xyz="-0.077819 -0.055558 -0.173765" rpy="0 0 0"/>
+    <geometry><mesh filename="file://$(find mod101_description)/meshes/wrist_roll_adapter_1.stl" scale="0.001 0.001 0.001"/></geometry>
+    <material name="body_darkgrey"/>
+  </visual>
+  <collision>
+    <origin xyz="-0.077819 -0.055558 -0.173765" rpy="0 0 0"/>
+    <geometry><mesh filename="file://$(find mod101_description)/meshes/wrist_roll_adapter_1.stl" scale="0.001 0.001 0.001"/></geometry>
+  </collision>
+</link>
+
+<link name="${prefix}servo_wrist_rotation_1">
+  <inertial>
+    <origin xyz="-0.01512262078899361 -0.010248404686314716 -0.018164491466766297" rpy="0 0 0"/>
+    <mass value="0.0658962961901927"/>
+    <inertia ixx="1.4e-05" iyy="1.8e-05" izz="1e-05" ixy="0.0" iyz="-0.0" ixz="0.0"/>
+  </inertial>
+  <visual>
+    <origin xyz="-0.137219 -0.084458 -0.202765" rpy="0 0 0"/>
+    <geometry><mesh filename="file://$(find mod101_description)/meshes/servo_wrist_rotation_1.stl" scale="0.001 0.001 0.001"/></geometry>
+    <material name="motor_black"/>
+  </visual>
+  <collision>
+    <origin xyz="-0.137219 -0.084458 -0.202765" rpy="0 0 0"/>
+    <geometry><mesh filename="file://$(find mod101_description)/meshes/servo_wrist_rotation_1.stl" scale="0.001 0.001 0.001"/></geometry>
+  </collision>
+</link>
+
+<link name="${prefix}camera_adapter_1">
+  <inertial>
+    <origin xyz="-0.015133427944392153 -0.00999962387213657 0.00491529865458315" rpy="0 0 0"/>
+    <mass value="0.07287491005104513"/>
+    <inertia ixx="1.7e-05" iyy="1.4e-05" izz="2.7e-05" ixy="0.0" iyz="-0.0" ixz="-0.0"/>
+  </inertial>
+  <visual>
+    <origin xyz="-0.135219 -0.084908 -0.220165" rpy="0 0 0"/>
+    <geometry><mesh filename="file://$(find mod101_description)/meshes/camera_adapter_1.stl" scale="0.001 0.001 0.001"/></geometry>
+    <material name="accent_green"/>
+  </visual>
+  <collision>
+    <origin xyz="-0.135219 -0.084908 -0.220165" rpy="0 0 0"/>
+    <geometry><mesh filename="file://$(find mod101_description)/meshes/camera_adapter_1.stl" scale="0.001 0.001 0.001"/></geometry>
+  </collision>
+</link>
+
+<link name="${prefix}camera_wing_1">
+  <inertial>
+    <origin xyz="0.14361888944153076 0.3347919124721062 -0.15696687867817244" rpy="0 0 0"/>
+    <mass value="0.06632884156356747"/>
+    <inertia ixx="2.7e-05" iyy="2.5e-05" izz="9e-06" ixy="0.0" iyz="-0.0" ixz="5e-06"/>
+  </inertial>
+  <visual>
+    <origin xyz="0.025688 0.259707 -0.40513" rpy="0 0 0"/>
+    <geometry><mesh filename="file://$(find mod101_description)/meshes/camera_wing_1.stl" scale="0.001 0.001 0.001"/></geometry>
+    <material name="accent_green"/>
+  </visual>
+  <collision>
+    <origin xyz="0.025688 0.259707 -0.40513" rpy="0 0 0"/>
+    <geometry><mesh filename="file://$(find mod101_description)/meshes/camera_wing_1.stl" scale="0.001 0.001 0.001"/></geometry>
+  </collision>
+</link>
+
+<link name="${prefix}wrist_camera_v1_1">
+  <inertial>
+    <origin xyz="-0.005107415957823297 0.012044156369510242 -0.01085870058537286" rpy="0 0 0"/>
+    <mass value="0.016638125458728874"/>
+    <inertia ixx="1e-06" iyy="1e-06" izz="1e-06" ixy="-0.0" iyz="0.0" ixz="-0.0"/>
+  </inertial>
+  <visual>
+    <origin xyz="-0.115073 -0.062344 -0.284896" rpy="0 0 0"/>
+    <geometry><mesh filename="file://$(find mod101_description)/meshes/wrist_camera_v1_1.stl" scale="0.001 0.001 0.001"/></geometry>
+    <material name="body_darkgrey"/>
+  </visual>
+  <collision>
+    <origin xyz="-0.115073 -0.062344 -0.284896" rpy="0 0 0"/>
+    <geometry><mesh filename="file://$(find mod101_description)/meshes/wrist_camera_v1_1.stl" scale="0.001 0.001 0.001"/></geometry>
+  </collision>
+</link>
+
+<!-- Wrist flange: the mount contract for tool packages (docs/tool-convention.md).
+     Massless frame on the wrist-roll servo's output horn; the active tool bolts
+     its root link here with an identity fixed joint. +X outward, +Z up. -->
+<link name="${prefix}wrist_flange">
+  <inertial>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <mass value="0.001"/>
+    <inertia ixx="1e-06" iyy="1e-06" izz="1e-06" ixy="0" iyz="0" ixz="0"/>
+  </inertial>
+</link>
+
+<!-- ===================== joints (canonical names, export axes) ============== -->
+
+<joint name="${prefix}fixed_servo_base_1" type="fixed">
+  <origin xyz="-0.033981 0.084076 0.113974" rpy="0 0 0"/>
+  <parent link="${prefix}base_link"/>
+  <child link="${prefix}servo_base_1"/>
+</joint>
+
+<joint name="${prefix}fixed_base_cover_1" type="fixed">
+  <origin xyz="-0.045885 0.058276 0.097774" rpy="0 0 0"/>
+  <parent link="${prefix}base_link"/>
+  <child link="${prefix}base_cover_1"/>
+</joint>
+
+<joint name="${prefix}joint_base" type="revolute">
+  <origin xyz="0.029 -0.01025 0.0032" rpy="0 0 0"/>
+  <parent link="${prefix}servo_base_1"/>
+  <child link="${prefix}shoulder_rotation_link_1"/>
+  <axis xyz="0.0 0.0 1.0"/>
+  <limit upper="1.570796" lower="-1.570796" effort="100" velocity="100"/>
+  <dynamics damping="${joint_damping}" friction="${joint_friction}"/>
+</joint>
+
+<!-- fixed_servo_shoulder_1 + joint_shoulder are defined inside the shoulder module. -->
+
+<joint name="${prefix}fixed_arm_extrusion_1" type="fixed">
+  <origin xyz="-0.02421 -0.019171 -0.001125" rpy="0 0 0"/>
+  <parent link="${prefix}shoulder_adapter_1"/>
+  <child link="${prefix}arm_extrusion_1"/>
+</joint>
+
+<!-- Upper-arm rail advance (editable via shoulder_ext_length). -->
+<joint name="${prefix}fixed_elbow_link_1" type="fixed">
+  <origin xyz="${arm_advance} 0.0 0.0" rpy="0 0 0"/>
+  <parent link="${prefix}arm_extrusion_1"/>
+  <child link="${prefix}elbow_link_1"/>
+</joint>
+
+<!-- fixed_servo_elbow_1 + joint_elbow are defined inside the elbow module. -->
+
+<joint name="${prefix}fixed_forearm_extrusion_1" type="fixed">
+  <origin xyz="0.02421 0.01917 -0.001125" rpy="0 0 0"/>
+  <parent link="${prefix}elbow_adapter_1"/>
+  <child link="${prefix}forearm_extrusion_1"/>
+</joint>
+
+<!-- Forearm rail advance (editable via elbow_ext_length). -->
+<joint name="${prefix}fixed_wrist_servo_adapter_1" type="fixed">
+  <origin xyz="${forearm_advance} 0.0 0.0" rpy="0 0 0"/>
+  <parent link="${prefix}forearm_extrusion_1"/>
+  <child link="${prefix}wrist_servo_adapter_1"/>
+</joint>
+
+<joint name="${prefix}fixed_servo_wrist_tilt_1" type="fixed">
+  <origin xyz="0.00965 0.016 0.01025" rpy="0 0 0"/>
+  <parent link="${prefix}wrist_servo_adapter_1"/>
+  <child link="${prefix}servo_wrist_tilt_1"/>
+</joint>
+
+<!-- joint_wrist_tilt: export axis 0 -1 0. -->
+<joint name="${prefix}joint_wrist_tilt" type="continuous">
+  <origin xyz="0.03275 -0.0352 -0.01025" rpy="0 0 0"/>
+  <parent link="${prefix}servo_wrist_tilt_1"/>
+  <child link="${prefix}wrist_roll_adapter_1"/>
+  <axis xyz="0.0 -1.0 0.0"/>
+  <limit effort="100" velocity="100"/>
+  <dynamics damping="${joint_damping}" friction="${joint_friction}"/>
+</joint>
+
+<!-- Wrist roll: fixed in the exports (the actuated 5th DOF + tool flange come
+     with the tool work, later). -->
+<joint name="${prefix}fixed_servo_wrist_rotation_1" type="fixed">
+  <origin xyz="0.0594 0.0289 0.029" rpy="0 0 0"/>
+  <parent link="${prefix}wrist_roll_adapter_1"/>
+  <child link="${prefix}servo_wrist_rotation_1"/>
+</joint>
+
+<!-- joint_wrist_roll: the actuated 5th DOF. The servo BODY is fixed to the
+     wrist_roll_adapter above; this joint is its output horn, driving the
+     wrist_flange (and hence the tool).
+
+     Origin/axis are derived from the export's own servo geometry rather than
+     measured separately: servo_wrist_rotation_1 is the same STS3215 part as
+     servo_base_1, rotated +90 deg about Y. Its inertia tensor is servo_base_1's
+     with ixx/izz swapped, and its COM is servo_base_1's COM under
+     (x,y,z) -> (z,y,-x) — both confirm that rotation exactly. Applying the same
+     map to joint_base's output (0.029, -0.01025, 0.0032) about axis +Z gives
+     the values below, about axis +X. +X is outward, per docs/tool-convention.md.
+
+     The flange sits ON the horn face: any adapter/spacer plate belongs to the
+     tool package, not here (tool-convention.md, "What this means for the mount
+     joint"). FIXME: confirm against CAD if a flange plate is ever added. -->
+<joint name="${prefix}joint_wrist_roll" type="continuous">
+  <origin xyz="0.0032 -0.01025 -0.029" rpy="0 0 0"/>
+  <parent link="${prefix}servo_wrist_rotation_1"/>
+  <child link="${prefix}wrist_flange"/>
+  <axis xyz="1.0 0.0 0.0"/>
+  <limit effort="100" velocity="100"/>
+  <dynamics damping="${joint_damping}" friction="${joint_friction}"/>
+</joint>
+
+<joint name="${prefix}fixed_camera_adapter_1" type="fixed">
+  <origin xyz="0.0574 0.02935 0.0464" rpy="0 0 0"/>
+  <parent link="${prefix}wrist_roll_adapter_1"/>
+  <child link="${prefix}camera_adapter_1"/>
+</joint>
+
+<joint name="${prefix}fixed_camera_wing_1" type="fixed">
+  <origin xyz="-0.160907 -0.344615 0.184965" rpy="0 0 0"/>
+  <parent link="${prefix}camera_adapter_1"/>
+  <child link="${prefix}camera_wing_1"/>
+</joint>
+
+<joint name="${prefix}fixed_wrist_camera_v1_1" type="fixed">
+  <origin xyz="0.140761 0.322051 -0.120234" rpy="0 0 0"/>
+  <parent link="${prefix}camera_wing_1"/>
+  <child link="${prefix}wrist_camera_v1_1"/>
+</joint>
+
+<xacro:if value="${use_sim}">
+  <xacro:mod101_arm_ros2control prefix="${prefix}"/>
+  <xacro:mod101_arm_gazebo prefix="${prefix}"/>
+</xacro:if>
+
+<!-- Active end-effector. Each tool macro bolts its root link to wrist_flange
+     and contributes its own joints, ros2_control block and gazebo extensions.
+     Its controllers come from mod101.xacro's plugin block; its runtime nodes
+     from mod101_tool_<tool>/launch/tool.launch.py. -->
+<xacro:if value="${tool == 'parallel'}">
+  <xacro:mod101_tool_parallel prefix="${prefix}" use_sim="${use_sim}"/>
+</xacro:if>
+<xacro:if value="${tool == 'pincopen'}">
+  <xacro:mod101_tool_pincopen prefix="${prefix}" use_sim="${use_sim}"/>
+</xacro:if>
+<xacro:if value="${tool == 'jaws'}">
+  <xacro:mod101_tool_jaws prefix="${prefix}" use_sim="${use_sim}"/>
+</xacro:if>
+<xacro:if value="${tool == 'none'}">
+  <xacro:mod101_tool_none prefix="${prefix}" use_sim="${use_sim}"/>
+</xacro:if>
+
+</xacro:macro>
+
+</robot>
