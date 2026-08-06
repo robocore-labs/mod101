@@ -1,10 +1,8 @@
 # mod101
 
+![](https://i.imgur.com/o0CHiIw.jpeg)
+
 **An open-source, universal robot arm platform.**
-
-
-
-![](https://i.imgur.com/igzezJ8.png)
 
 Robot arms are cool,  but no two people want the same one. Bolt a dremel to it
 for light machining and you need a short reach and real payload. Put a camera
