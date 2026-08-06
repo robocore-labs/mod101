@@ -28,40 +28,88 @@ direct serial, LeRobot.
 - 🌍 **Open** — MIT licensed, no proprietary parts, BOM under $135 entry-level.
 
 
-## Configurations
+## Configurator
 
-Same brackets, same extrusion, same firmware. Just swap servos.
+**Work out what arm you actually need — before you cut any aluminum or buy a
+single servo.**
 
-The exact dimensions (link lengths, extrusion size) are parametric — the **[web configurator](docs/configurator.md)** sizes the arm in real time and shows the resulting reach and payload before you cut anything.
+```bash
+source /opt/ros/jazzy/setup.bash   # the 3D preview needs this
+python3 configurator/server.py     # then open http://localhost:8000/
+```
 
-### BASE — 8× ST3215 ($134)
+Drag the sliders and the arm rebuilds itself in front of you. Make the forearm
+longer and watch the reach grow — and the payload drop. Swap the shoulder to a
+beefier servo and watch it climb back. Every change answers the question that
+actually matters when you're about to spend money: *will this arm do my job?*
 
-- 2× ST3215 shoulder pitch (doubled)
-- 2× ST3215 elbow (doubled)
-- 1× ST3215 wrist tilt
-- 1× ST3215 wrist roll
-- 1× ST3215 gripper
+![](img/config.gif)
 
-| Condition | Payload |
-|---|---|
-| Continuous (70% stall) | 547g |
-| Stall (100%) | 906g |
-| Continuous @ 70% reach | 852g |
+Four things to decide:
 
-Bottleneck: shoulder pitch (doubled elbow has 2× headroom).
+- **How long** — shoulder and forearm rail lengths, i.e. how far it reaches.
+- **How strong** — which servo at the shoulder and the elbow.
+- **What's on the end** — gripper, pincer, single jaw, or nothing.
+- **Or just start from a preset** — **S**, **M** and **L** are known-good
+  builds if you'd rather not start from scratch.
 
-### PRO — 2× STS3250 shoulder + 6× ST3215 ($211)
+And it tells you, live, what you'd get:
 
-Swap two shoulder servos from ST3215 to STS3250. Everything else stays identical.
+- **What it can lift**, at full stretch and pulled in — plus *which joint*
+  gives out first, so you know what to upgrade.
+- **How far it reaches** and **what it weighs**, from the real printed part
+  masses.
+- **What the servos cost** — usually the number that decides the build.
 
-| Condition | Payload |
-|---|---|
-| Continuous (70% stall) | 1,105g |
-| Stall (100%) | 1,703g |
-| Continuous @ 70% reach | 1,649g |
+Grab the joint sliders to pose it and check the arm actually reaches into your
+workspace. When it looks right, hit **Save**: that configuration *is* your
+robot from then on, in sim and on the bench. Nothing to copy by hand.
 
-> **Payload note.** All numbers assume worst-case: arm fully extended horizontal, sustained hold. At a 45° working angle (typical tabletop pick-and-place), available payload roughly doubles — the robot can *move* 1 kg+ through most of its workspace on BASE; it just can't *hold* it at full horizontal extension.
+Endpoint reference and internals: [`docs/configurator.md`](docs/configurator.md).
 
+
+
+## Calibration
+
+**You've built the arm. Now teach it where its joints actually stop.**
+
+![](img/calibrate.gif)
+
+Straight off the bench a servo has no idea which way it's mounted or how far
+the bracket lets it swing. Calibration is what turns six motors into a robot
+that matches the URDF — and it's the step where you find out whether you
+assembled it correctly.
+
+
+Plug the arm and go joint by joint. Each one:
+
+- **Goes limp so you can move it by hand.** Swing it stop to stop and the
+  wizard watches where it actually travels — no guessing at limits, no
+  numbers to look up. It backs off slightly from each hard stop so the servo
+  never grinds.
+- **Gets a verdict — clean, binding, or fault.** This is the part worth having.
+  A joint that catches, or an encoder that slipped during assembly, shows up
+  here as a bad sweep instead of as a crash later with a gripper full of your
+  workpiece.
+- **Powers up carefully.** It re-arms slowly and checks how hard the servo is
+  pulling before letting it move. Too much current and it disarms itself,
+  which usually means something is fighting the joint.
+- **Gets a drive test**, so you can watch it track across the range you just
+  set before trusting it.
+
+The arm is left powered down at every exit, including if you close the tab or
+yank the cable.
+
+When you're done, **Write to repo** saves the results for both ROS 2 and
+LeRobot, so the arm you calibrated is the arm your code drives.
+
+No hardware yet? Tick **Demo mode** and the whole flow runs against a
+simulated arm — a good way to see what you're in for before you order servos.
+
+Talks to the servos directly over the USB-TTL adapter (`pip install st3215`) —
+no intermediate firmware, and nothing is written to servo EEPROM. Any browser.
+Full details, including the joint/servo mapping and the tick math:
+[`docs/calibration.md`](docs/calibration.md).
 
 ## Tools
 
@@ -151,20 +199,16 @@ mobile base's lift tower).
 
 | Part | Qty | Unit Price | Subtotal |
 |---|---|---|---|
-| STS3215 servo (12V, 30 kg·cm) | 6 | $16.50 | $99.00 |
-| Waveshare SC09 gripper servo | 1 | $5.00 | $5.00 |
+| [STS3215 servo (12V, 30 kg·cm)](https://www.alibaba.com/product-detail/Low-Cost-Feetech-STS3215-Servo-7_1601611431055.html?spm=a2747.product_manager.0.0.45b471d29yemSr) | 6 | $16.50 | $99.00 |
 | 2020 aluminum extrusion (cut to length) | ~0.6m | $5.00/m | $3.00 |
 | M5 T-nuts | ~20 | — | $3.00 |
 | M5×8 bolts | ~20 | — | $2.00 |
 | PLA-CF filament (~150g) | — | — | $8.00 |
 
 | Misc hardware (bolts, nuts, wires) | — | — | $10.00 |
-| **Total** | | | **~$168** |
+| **Total** | | | **~$134** |
 
-### PRO Upgrade (+$77)
-
-Replace 2× STS3215 shoulder servos with 2× STS3250 ($55 each). Everything else unchanged.
-
+If you want to upgrade the motors for more payload, here are the options: [**STS3250 at 50kg*cm**](https://www.alibaba.com/product-detail/12V-50kg-STS3250-Coreless-Motor-Magnetic_1601756525163.html?spm=a2747.product_manager.0.0.504a71d28VYAsz) or [**the 120kg*cm beast STS3120**](https://www.alibaba.com/product-detail/Feetech-STS3120M-12V-120kg-High-Performance_1601816393864.html?spm=a2700.prosearch.normal_offer.d_title.23b267af0qokIv&priceId=600e3c99632248f89c88849464629777). Brackets are available for both, check the configurator for more details. 
 
 ## Related Projects
 
