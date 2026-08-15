@@ -1,0 +1,3 @@
+# The blank end-cap has no actuators, so it contributes no controller. The file
+# exists so move_group.launch.py can load it unconditionally, and as the
+# template for a new tool.

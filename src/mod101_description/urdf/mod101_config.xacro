@@ -1,0 +1,34 @@
+<?xml version="1.0" ?>
+<!--
+  The configured arm: the single source of truth for how this mod101 is built.
+
+  These are the args the web configurator (configurator/server.py) reads and
+  writes. Nothing else should hardcode them. Any robot that instantiates the
+  `mod101_arm` macro should include this file and pass these four values
+  through, so a configurator change reaches every consumer on the next build
+  rather than only the standalone mod101.xacro.
+
+  Consumers today:
+    mod101_description/urdf/mod101.xacro          (standalone arm)
+    base101_arm_description/urdf/arm.xacro        (arm on the base101 chassis)
+
+  Overriding on the command line still works and wins over these defaults:
+    xacro ... shoulder_ext_length:=0.18 elbow_mount:=big
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+<!-- tool: which end-effector package to pull in. The arm terminates at
+     `wrist_flange`; the selected tool's URDF attaches its root link there and
+     contributes its own joints, ros2_control hardware block, gazebo extensions,
+     controllers, and (via the gazebo launch) its own launch fragment. Must
+     match a package `mod101_tool_<tool>` shipping urdf/tool.urdf.xacro. -->
+<xacro:arg name="tool" default="jaws"/>
+
+<!-- Build parameters: two rail lengths (m) + two servo-mount variants
+     (small = STS3215/STS3250, big = ST3120). -->
+<xacro:arg name="shoulder_ext_length" default="0.1400"/>
+<xacro:arg name="elbow_ext_length"    default="0.1400"/>
+<xacro:arg name="shoulder_mount"      default="small"/>
+<xacro:arg name="elbow_mount"         default="small"/>
+
+</robot>

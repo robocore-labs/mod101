@@ -1,0 +1,25 @@
+# How MoveIt hands trajectories to ros2_control. Arm side only — the active
+# tool contributes its own gripper entry from
+# mod101_tool_<tool>/config/moveit_controllers.yaml, merged in by
+# launch/move_group.launch.py (the tool layer owns its controllers, same as it
+# owns its URDF and its ros2_control block).
+moveit_controller_manager: moveit_simple_controller_manager/MoveItSimpleControllerManager
+
+moveit_simple_controller_manager:
+  controller_names:
+    - arm_trajectory_controller
+
+  # Declared in mod101_control/config/controllers.sim.yaml. Note this is NOT the
+  # arm_controller that the plain gazebo launch spawns — that one takes
+  # Float64MultiArray and MoveIt can't drive it. The two claim the same joints,
+  # so move_group.launch.py deactivates arm_controller when it activates this.
+  arm_trajectory_controller:
+    type: FollowJointTrajectory
+    action_ns: follow_joint_trajectory
+    default: true
+    joints:
+      - joint_base
+      - joint_shoulder
+      - joint_elbow
+      - joint_wrist_tilt
+      - joint_wrist_roll

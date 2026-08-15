@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<!--
+  MoveIt semantics for the standalone mod101: one arm anchored to `world`.
+
+  The arm's own semantics live in mod101_arm_srdf.xacro as the prefix-
+  parameterised `mod101_arm_srdf` macro, so other robots can instantiate them
+  without this file's world anchor. This is the standalone wrapper, mirroring
+  how mod101.xacro wraps the mod101_arm URDF macro.
+
+  The URDF this describes is parametric (tool, rail lengths, mount sizes), so a
+  single static .srdf can't be correct for every build — hence the xacro. Args
+  must match whatever mod101.xacro was expanded with.
+-->
+<robot name="mod101" xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+<xacro:arg name="tool"   default="jaws"/>
+<xacro:arg name="prefix" default=""/>
+
+<xacro:include filename="$(find mod101_moveit_config)/srdf/mod101_arm_srdf.xacro"/>
+
+<!-- Anchors the robot for MoveIt's planning scene. mod101.xacro provides the
+     `world` link; integrators embedding the arm macro elsewhere include
+     mod101_arm_srdf.xacro directly and declare their own virtual joint. -->
+<virtual_joint name="virtual_joint" type="fixed" parent_frame="world" child_link="world"/>
+
+<xacro:mod101_arm_srdf prefix="$(arg prefix)" tool="$(arg tool)"/>
+
+</robot>

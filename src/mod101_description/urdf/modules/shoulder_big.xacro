@@ -36,8 +36,8 @@
 <link name="${prefix}shoulder_rotation_link_1">
   <inertial>
     <origin xyz="0.032744272167771385 0.0004962194281389748 -0.013844865838515547" rpy="0 0 0"/>
-    <mass value="0.5298"/>
-    <inertia ixx="0.000197" iyy="0.00027" izz="0.000248" ixy="-3e-06" iyz="-2e-06" ixz="-2.5e-05"/>
+    <mass value="0.049583984"/>
+    <inertia ixx="1.84372307e-05" iyy="2.5269301e-05" izz="2.32103209e-05" ixy="-2.80770011e-07" iyz="-1.87180007e-07" ixz="-2.33975009e-06"/>
   </inertial>
   <visual>
     <origin xyz="${-0.001130+snx} ${-0.000787+sny} ${-0.049192+snz}" rpy="0 0 0"/>
@@ -45,8 +45,10 @@
     <material name="body_darkgrey"/>
   </visual>
   <collision>
-    <origin xyz="${-0.001130+snx} ${-0.000787+sny} ${-0.049192+snz}" rpy="0 0 0"/>
-    <geometry><mesh filename="file://$(find mod101_description)/meshes/shoulder_rotation_link_big_1.stl" scale="0.001 0.001 0.001"/></geometry>
+    <origin xyz="${(-0.001130+snx) + 0.0294865} ${(-0.000787+sny) + -0.000250002} ${(-0.049192+snz) + 0.03455}" rpy="0 0 0"/>
+    <geometry>
+      <box size="0.0809691 0.0747 0.0493"/>
+    </geometry>
   </collision>
 </link>
 
@@ -62,16 +64,18 @@
     <material name="motor_black"/>
   </visual>
   <collision>
-    <origin xyz="${-0.059990+snx} ${0.015210+sny} ${-0.042608+snz}" rpy="0 0 0"/>
-    <geometry><mesh filename="file://$(find mod101_description)/meshes/servo_shoulder_big_1.stl" scale="0.001 0.001 0.001"/></geometry>
+    <origin xyz="${(-0.059990+snx) + 0.0547211} ${(0.015210+sny) + -0.000250002} ${(-0.042608+snz) + 0.0592}" rpy="0 0 0"/>
+    <geometry>
+      <box size="0.03 0.0683 0.065"/>
+    </geometry>
   </collision>
 </link>
 
 <link name="${prefix}shoulder_adapter_1">
   <inertial>
     <origin xyz="-0.020137432669050628 -0.01850241218843865 0.0002933203996578482" rpy="0 0 0"/>
-    <mass value="0.4682"/>
-    <inertia ixx="0.000165" iyy="0.000101" izz="0.000213" ixy="0.0" iyz="0.0" ixz="2e-06"/>
+    <mass value="0.0407909635"/>
+    <inertia ixx="1.43752861e-05" iyy="8.79941757e-06" izz="1.85571876e-05" ixy="0" iyz="0" ixz="1.74245893e-07"/>
   </inertial>
   <visual>
     <origin xyz="${-0.049740+snx} ${-0.019990+sny} ${-0.075358+snz}" rpy="0 0 0"/>
@@ -79,8 +83,10 @@
     <material name="body_darkgrey"/>
   </visual>
   <collision>
-    <origin xyz="${-0.049740+snx} ${-0.019990+sny} ${-0.075358+snz}" rpy="0 0 0"/>
-    <geometry><mesh filename="file://$(find mod101_description)/meshes/shoulder_adapter_big_1.stl" scale="0.001 0.001 0.001"/></geometry>
+    <origin xyz="${(-0.049740+snx) + 0.0331519} ${(-0.019990+sny) + -0.000150002} ${(-0.075358+snz) + 0.0758}" rpy="0 0 0"/>
+    <geometry>
+      <box size="0.0730383 0.0747 0.0299"/>
+    </geometry>
   </collision>
 </link>
 

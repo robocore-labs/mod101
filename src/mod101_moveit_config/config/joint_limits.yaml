@@ -1,0 +1,54 @@
+# Velocity / acceleration limits for MoveIt's time parameterisation (TOTG).
+#
+# The URDF carries effort="100" velocity="100" on every joint — placeholder
+# values from the CAD export, not real servo data. TOTG takes velocity and
+# acceleration straight from here, so leaving those in place yields trajectories
+# that ask for ~100 rad/s and are physically meaningless.
+#
+# These are deliberately CONSERVATIVE estimates for the Feetech STS/ST3215-class
+# servos: no-load spec is roughly 0.16 s/60deg (~6.5 rad/s), but that collapses
+# under load and the printed brackets don't enjoy the jerk. Start slow, raise
+# once the arm is calibrated and you've watched it track.
+#
+# The calibration wizard (docs/calibration.md) measures per-joint travel; when
+# calibration.yaml lands, position limits should come from there and this file
+# should keep only the dynamics.
+joint_limits:
+  joint_base:
+    has_velocity_limits: true
+    max_velocity: 1.5
+    has_acceleration_limits: true
+    max_acceleration: 3.0
+
+  # Shoulder carries the whole arm plus payload — the joint most likely to stall
+  # and the one the configurator flags as the payload-limiting joint.
+  joint_shoulder:
+    has_velocity_limits: true
+    max_velocity: 1.0
+    has_acceleration_limits: true
+    max_acceleration: 2.0
+
+  joint_elbow:
+    has_velocity_limits: true
+    max_velocity: 1.2
+    has_acceleration_limits: true
+    max_acceleration: 2.5
+
+  joint_wrist_tilt:
+    has_velocity_limits: true
+    max_velocity: 1.5
+    has_acceleration_limits: true
+    max_acceleration: 3.0
+
+  joint_wrist_roll:
+    has_velocity_limits: true
+    max_velocity: 2.0
+    has_acceleration_limits: true
+    max_acceleration: 4.0
+
+  # Tool drive joint. Named "6" in every mod101_tool_* package.
+  "6":
+    has_velocity_limits: true
+    max_velocity: 1.0
+    has_acceleration_limits: true
+    max_acceleration: 2.0

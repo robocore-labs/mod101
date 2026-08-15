@@ -1,0 +1,34 @@
+<?xml version="1.0"?>
+<!--
+  MoveIt semantics for the SO-101 jaws tool. Same contract as tool.ros2control /
+  tool.gazebo: one prefix-parameterised macro, invoked by mod101_moveit_config's
+  mod101.srdf.xacro when `tool:=jaws`.
+
+  Contributes planning semantics only — the `gripper` group, its end-effector
+  declaration and named states. The self-collision matrix is NOT hand-written
+  here: it depends on rail lengths and mount sizes, so it's generated per build
+  config into mod101_moveit_config/config/collisions/jaws.srdf.xacro by
+  tools/gen_collision_matrix.py.
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+<xacro:macro name="mod101_tool_jaws_srdf" params="prefix:=''">
+
+  <!-- Single revolute jaw. 0 rad closed, 2.14 rad open (tool.urdf.xacro:148). -->
+  <group name="${prefix}gripper">
+    <joint name="${prefix}6"/>
+  </group>
+
+  <group_state name="open" group="${prefix}gripper">
+    <joint name="${prefix}6" value="2.14"/>
+  </group_state>
+  <group_state name="closed" group="${prefix}gripper">
+    <joint name="${prefix}6" value="0.0"/>
+  </group_state>
+
+  <end_effector name="${prefix}jaws_ee" parent_link="${prefix}wrist_flange"
+                group="${prefix}gripper" parent_group="${prefix}arm"/>
+
+</xacro:macro>
+
+</robot>

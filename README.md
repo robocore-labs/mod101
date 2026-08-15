@@ -24,6 +24,7 @@ direct serial, LeRobot.
 - 📏 **Reaches up to 80cm and more** with long extrusions and beefy servos.
 - 🌐 **Web configurator** — `python3 configurator/server.py` and you're can use the interactive configurator to tweak the arm to your liking. 
 - 🎯 **Guided calibration** — move each joint by hand and the browser learns its limits, flags a binding joint, and writes the config for both ROS 2 and LeRobot.
+- 🧠 **MoveIt 2 ready** — motion planning, collision-aware IK and trajectory execution in one launch, with a solver that actually suits a 5-DOF arm. The SRDF is parametric too, so it follows your build.
 - 🛠️ **Real structure, not a printed shell** — 2020 aluminum extrusions + PETG-CF brackets at the joints.
 - 🌍 **Open** — MIT licensed, no proprietary parts, BOM under $135 entry-level.
 
@@ -122,7 +123,7 @@ Every end-effector is a standalone ROS 2 package (`mod101_tool_<name>`) carrying
 | `jaws` | ![](img/tools/jaws.png) | SO-101 single-jaw gripper — moving jaw rotates against the fixed wrist-roll body. Cheapest tool, just one extra servo. **Default.** | 
 | `none` | ![](img/tools/none.png) | Blank end-cap. No actuators — useful as a baseline or a template for a new tool. |
 
-Adding your own is a one-package job (URDF + ros2_control + launch). See [`docs/tool-convention.md`](docs/tool-convention.md) for the coordinate convention every tool follows, and [`docs/ros-architecture.md`](docs/ros-architecture.md#adding-a-new-tool) for the package contract.
+Adding your own is a one-package job (URDF + ros2_control + SRDF + launch). See [`docs/tool-convention.md`](docs/tool-convention.md) for the coordinate convention every tool follows, and [`docs/ros-architecture.md`](docs/ros-architecture.md#adding-a-new-tool) for the package contract.
 
 
 ## Getting started
@@ -136,13 +137,27 @@ cd ~/Work/mod101
 
 # 2. Build the arm + the tools you want
 colcon build --packages-select \
-  mod101_description mod101_control mod101_gazebo \
+  mod101_description mod101_control mod101_gazebo mod101_moveit_config \
   mod101_tool_parallel mod101_tool_pincopen mod101_tool_jaws mod101_tool_none
 source install/setup.bash
 
 # 3. Launch sim — pick a tool with the `tool:=` arg
 ros2 launch mod101_gazebo gazebo.launch.py tool:=parallel
 ```
+
+Want motion planning? `sudo apt install ros-jazzy-moveit ros-jazzy-pick-ik`, then:
+
+```bash
+ros2 launch mod101_moveit_config demo.launch.py   # Gazebo + MoveIt + RViz
+```
+
+Plan and execute from the RViz MotionPlanning panel. Full walkthrough, including
+a scripted first motion:
+[`docs/moveit-getting-started.md`](docs/moveit-getting-started.md).
+
+One thing worth knowing up front: mod101 is a 5-DOF arm, so it plans to
+**positions**, not full 6-DOF poses — the guide explains why and what that means
+for grasps.
 
 Try the configurator while sim is running:
 
@@ -187,7 +202,11 @@ mobile base's lift tower).
 ### Deeper docs
 
 - **[docs/tool-convention.md](docs/tool-convention.md)** — coordinate convention for tool URDFs (mount joint identity, `+X` outward, `+Z` up, bolt pattern at origin)
-- **[docs/ros-architecture.md](docs/ros-architecture.md)** — package layout, the tool contract, controllers, joints, MoveIt + JTC notes, real-hardware wiring, known gotchas
+- **[docs/ros-architecture.md](docs/ros-architecture.md)** — package layout, the tool contract, controllers, joints, real-hardware wiring, known gotchas
+- **[docs/moveit-getting-started.md](docs/moveit-getting-started.md)** — MoveIt walkthrough: install, first plan, first motion, troubleshooting
+- **[docs/moveit-handover.md](docs/moveit-handover.md)** — MoveIt work status: what's built, what's verified, open items, the collision-matrix decision
+- **[docs/performance-notes.md](docs/performance-notes.md)** — measured performance, where bringup time really goes, and the DDS traps that masquerade as code bugs
+- **[docs/moveit.md](docs/moveit.md)** — MoveIt 2 reference: the 5-DOF IK story, the parametric SRDF and its generated collision matrices, controller wiring, how to verify an install
 - **[docs/calibration.md](docs/calibration.md)** — the calibration wizard: serial protocol, sweep/verdict logic, joint↔servo mapping, the generated ROS + LeRobot files
 - **[docs/configurator.md](docs/configurator.md)** — endpoint reference, how the live xacro edit works
 - **[docs/calibration.md](docs/calibration.md)** — hardware bring-up: per-joint sweep wizard, and the ROS + LeRobot config it generates

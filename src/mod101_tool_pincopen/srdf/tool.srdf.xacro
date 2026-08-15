@@ -1,0 +1,35 @@
+<?xml version="1.0"?>
+<!--
+  MoveIt semantics for the PincOpen pincer. See mod101_tool_jaws/srdf for the
+  contract; the self-collision matrix is generated, not written here.
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+<xacro:macro name="mod101_tool_pincopen_srdf" params="prefix:=''">
+
+  <!-- Revolute drive joint. NOTE the sign convention is opposite to the other
+       tools: lower=-2.44 rad is OPEN, upper=0.0 is CLOSED
+       (tool.urdf.xacro:190, and the warning in config/controllers.yaml).
+       The four 4-bar joints follow via URDF <mimic> — passive, not planned. -->
+  <group name="${prefix}gripper">
+    <joint name="${prefix}6"/>
+  </group>
+
+  <passive_joint name="${prefix}pincopen_base_to_right_arm"/>
+  <passive_joint name="${prefix}pincopen_base_to_left_arm"/>
+  <passive_joint name="${prefix}pincopen_right_arm_to_right_finger"/>
+  <passive_joint name="${prefix}pincopen_left_arm_to_left_finger"/>
+
+  <group_state name="open" group="${prefix}gripper">
+    <joint name="${prefix}6" value="-2.44"/>
+  </group_state>
+  <group_state name="closed" group="${prefix}gripper">
+    <joint name="${prefix}6" value="0.0"/>
+  </group_state>
+
+  <end_effector name="${prefix}pincopen_ee" parent_link="${prefix}wrist_flange"
+                group="${prefix}gripper" parent_group="${prefix}arm"/>
+
+</xacro:macro>
+
+</robot>

@@ -9,6 +9,7 @@ find_package(ament_cmake REQUIRED)
 
 install(DIRECTORY
   urdf
+  srdf
   config
   launch
   meshes

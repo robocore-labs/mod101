@@ -9,6 +9,7 @@ Serves configurator/ as static files. Endpoints:
   GET  /masses            - return src/mod101_description/link_masses.json
                             (Part C output) so the page uses real printed masses
   GET  /tool, POST /tool  - active end-effector package + discovery
+  GET  /collisions        - status of the background self-collision regen
   GET  /urdf              - run `xacro` and return the expanded URDF, with
                             mesh URIs rewritten to /pkg/<pkg>/meshes/<file>
   GET  /pkg/<pkg>/meshes/<file> - serve binary mesh files from any package
@@ -36,6 +37,8 @@ Stdlib only. Run from project root:
 import atexit
 import http.server
 import json
+import threading
+import pathlib
 import os
 import re
 import shutil
@@ -55,7 +58,12 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
 SRC  = ROOT / 'src'
 DESC = SRC / 'mod101_description'
+# What we render for the live preview...
 XACRO = DESC / 'urdf' / 'mod101.xacro'
+# ...and what we actually edit. The four build args + tool live in their own
+# file so every consumer of the mod101_arm macro (the standalone arm, base101,
+# anything else) includes the same source of truth instead of only mod101.xacro.
+CONFIG = DESC / 'urdf' / 'mod101_config.xacro'
 
 MASSES = DESC / 'link_masses.json'
 
@@ -97,9 +105,9 @@ def list_tools() -> list[str]:
 
 
 def read_tool() -> str:
-    m = TOOL_ARG_RE.search(XACRO.read_text())
+    m = TOOL_ARG_RE.search(CONFIG.read_text())
     if not m:
-        raise RuntimeError(f'Could not find <xacro:arg name="tool"> in {XACRO}.')
+        raise RuntimeError(f'Could not find <xacro:arg name="tool"> in {CONFIG}.')
     return m['val']
 
 
@@ -111,10 +119,10 @@ def write_tool(name: str) -> None:
     def sub(m: re.Match) -> str:
         return f'{m.group(1)}{name}{m.group(3)}'
 
-    new_text, n = TOOL_ARG_RE.subn(sub, XACRO.read_text())
+    new_text, n = TOOL_ARG_RE.subn(sub, CONFIG.read_text())
     if n != 1:
         raise RuntimeError(f'Expected 1 replacement for tool arg, did {n}')
-    XACRO.write_text(new_text)
+    CONFIG.write_text(new_text)
 
 
 MOUNTS = ('small', 'big')
@@ -122,7 +130,7 @@ MOUNTS = ('small', 'big')
 
 def read_props() -> dict:
     """Return the four build args: two lengths (m) + two mounts."""
-    text = XACRO.read_text()
+    text = CONFIG.read_text()
     lens: dict[str, float] = {}
     for m in LEN_ARG_RE.finditer(text):
         lens[m['name']] = float(m['val'])
@@ -130,9 +138,9 @@ def read_props() -> dict:
     for m in MOUNT_ARG_RE.finditer(text):
         mounts[m['name']] = m['val']
     if {'shoulder_ext_length', 'elbow_ext_length'} - lens.keys():
-        raise RuntimeError(f'Both extrusion length args not found in {XACRO}.')
+        raise RuntimeError(f'Both extrusion length args not found in {CONFIG}.')
     if {'shoulder_mount', 'elbow_mount'} - mounts.keys():
-        raise RuntimeError(f'Both mount args not found in {XACRO}.')
+        raise RuntimeError(f'Both mount args not found in {CONFIG}.')
     return {
         'shoulder': lens['shoulder_ext_length'],
         'elbow': lens['elbow_ext_length'],
@@ -153,7 +161,7 @@ def write_props(shoulder_m: float, elbow_m: float,
     lengths = {'shoulder_ext_length': shoulder_m, 'elbow_ext_length': elbow_m}
     mounts = {'shoulder_mount': shoulder_mount, 'elbow_mount': elbow_mount}
 
-    text = XACRO.read_text()
+    text = CONFIG.read_text()
     text, n = LEN_ARG_RE.subn(
         lambda m: f'{m.group(1)}{lengths[m["name"]]:.4f}{m.group(4)}', text)
     if n != 2:
@@ -162,7 +170,84 @@ def write_props(shoulder_m: float, elbow_m: float,
         lambda m: f'{m.group(1)}{mounts[m["name"]]}{m.group(4)}', text)
     if n != 2:
         raise RuntimeError(f'Expected 2 mount replacements, did {n}')
-    XACRO.write_text(text)
+    CONFIG.write_text(text)
+
+
+
+# ---------------------------------------------------------------------------
+# Downstream self-collision matrices
+# ---------------------------------------------------------------------------
+# Changing a rail length or a mount moves the arm's reach, which changes which
+# link pairs can never touch. Both MoveIt configs derive their matrices from the
+# build params, so a Save invalidates them and they are regenerated here.
+#
+# mod101 stays standalone: base101 is optional and entirely absent by default.
+# If it isn't there, isn't built, or its generator fails, we log and carry on —
+# the configurator must never require a downstream consumer to work.
+REGEN_TIMEOUT = 900
+
+# Point BASE101_WS at a base101 workspace to keep its matrices in step too.
+BASE101_WS = pathlib.Path(
+    os.environ.get('BASE101_WS', pathlib.Path.home() / 'robots' / 'base101'))
+
+_regen_lock = threading.Lock()
+_regen_state = {'running': False, 'last': None}
+
+
+def _regen_targets():
+    """(label, script, workspace-setup) for each matrix generator that exists."""
+    out = [('mod101', ROOT / 'tools' / 'gen_collision_matrix.py', ROOT)]
+    b = (BASE101_WS / 'src' / 'base101_arm' / 'base101_arm_moveit_config'
+         / 'scripts' / 'gen_collision_matrix.py')
+    if b.is_file():
+        out.append(('base101', b, BASE101_WS))
+    return out
+
+
+def _regen_worker():
+    results = {}
+    for label, script, ws in _regen_targets():
+        setup = ws / 'install' / 'setup.bash'
+        if not setup.is_file():
+            results[label] = 'skipped: workspace not built'
+            print(f'[collisions] {label}: {results[label]}')
+            continue
+        # A login shell so the generator sees ROS and both overlays; base101
+        # needs the mod101 underlay sourced before its own.
+        cmd = (f'source /opt/ros/$ROS_DISTRO/setup.bash && '
+               f'source {ROOT}/install/setup.bash && '
+               f'source {setup} && python3 {script}')
+        try:
+            proc = subprocess.run(['bash', '-lc', cmd], capture_output=True,
+                                  text=True, timeout=REGEN_TIMEOUT)
+            results[label] = 'ok' if proc.returncode == 0 else \
+                f'failed ({proc.returncode})'
+            if proc.returncode != 0:
+                print(f'[collisions] {label} failed:\n{proc.stderr[-2000:]}')
+            else:
+                print(f'[collisions] {label}: regenerated')
+        except subprocess.TimeoutExpired:
+            results[label] = 'timed out'
+            print(f'[collisions] {label}: timed out after {REGEN_TIMEOUT}s')
+    with _regen_lock:
+        _regen_state['running'] = False
+        _regen_state['last'] = results
+
+
+def regen_collisions_async():
+    """Kick off regeneration unless one is already in flight."""
+    with _regen_lock:
+        if _regen_state['running']:
+            return {'running': True, 'note': 'already regenerating'}
+        _regen_state['running'] = True
+    threading.Thread(target=_regen_worker, daemon=True).start()
+    return {'running': True,
+            'targets': [label for label, _, _ in _regen_targets()]}
+
+
+def regen_status():
+    with _regen_lock:
+        return dict(_regen_state)
 
 
 def read_masses() -> dict:
@@ -372,6 +457,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             try:    return self._json(200, read_nudge())
             except Exception as e: return self._json(500, {'error': str(e)})
 
+        if path.rstrip('/') == '/collisions':
+            # Regeneration is fire-and-forget from /save and /tool; this lets
+            # the page show progress without blocking the save.
+            return self._json(200, regen_status())
+
         if path.rstrip('/') == '/tool':
             try:    return self._json(200, {'tool': read_tool(), 'available': list_tools()})
             except Exception as e: return self._json(500, {'error': str(e)})
@@ -437,7 +527,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     float(data['shoulder']), float(data['elbow']),
                     str(data.get('shoulder_mount', cur['shoulder_mount'])),
                     str(data.get('elbow_mount', cur['elbow_mount'])))
-                return self._json(200, {'ok': True, **read_props()})
+                return self._json(200, {'ok': True, **read_props(),
+                                        'collisions': regen_collisions_async()})
             except Exception as e:
                 return self._json(400, {'error': str(e)})
 
@@ -452,7 +543,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             try:
                 write_tool(str(data['tool']))
                 return self._json(200, {'ok': True, 'tool': read_tool(),
-                                        'available': list_tools()})
+                                        'available': list_tools(),
+                                        'collisions': regen_collisions_async()})
             except Exception as e:
                 return self._json(400, {'error': str(e)})
 
@@ -515,11 +607,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
 
 def main() -> None:
-    if not XACRO.exists():
-        sys.exit(f'{XACRO} not found')
+    for required in (XACRO, CONFIG):
+        if not required.exists():
+            sys.exit(f'{required} not found')
     with socketserver.TCPServer(('', PORT), Handler) as httpd:
         print(f'mod101 configurator: http://localhost:{PORT}/')
-        print(f'editing  {XACRO}')
+        print(f'editing  {CONFIG}')
         print(f'tools    {list_tools()}')
         try:    httpd.serve_forever()
         except KeyboardInterrupt: print()

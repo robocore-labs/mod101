@@ -15,8 +15,8 @@
 <link name="${prefix}shoulder_rotation_link_1">
   <inertial>
     <origin xyz="0.032744272167771385 0.0004962194281389748 -0.013844865838515547" rpy="0 0 0"/>
-    <mass value="0.34166100376418634"/>
-    <inertia ixx="0.000127" iyy="0.000174" izz="0.00016" ixy="-2e-06" iyz="-1e-06" ixz="-1.6e-05"/>
+    <mass value="0.0329454964"/>
+    <inertia ixx="1.2246285e-05" iyy="1.67783748e-05" izz="1.54283906e-05" ixy="-1.92854883e-07" iyz="-9.64274413e-08" ixz="-1.54283906e-06"/>
   </inertial>
   <visual>
     <origin xyz="0.004981 -0.073826 -0.117174" rpy="0 0 0"/>
@@ -24,8 +24,10 @@
     <material name="body_darkgrey"/>
   </visual>
   <collision>
-    <origin xyz="0.004981 -0.073826 -0.117174" rpy="0 0 0"/>
-    <geometry><mesh filename="file://$(find mod101_description)/meshes/shoulder_rotation_link_1.stl" scale="0.001 0.001 0.001"/></geometry>
+    <origin xyz="0.024161 0.000578984 -0.0183751" rpy="0 0 0"/>
+    <geometry>
+      <box size="0.0756985 0.0493 0.0498091"/>
+    </geometry>
   </collision>
 </link>
 
@@ -41,16 +43,18 @@
     <material name="motor_black"/>
   </visual>
   <collision>
-    <origin xyz="-0.053879 -0.057829 -0.11059" rpy="0 0 0"/>
-    <geometry><mesh filename="file://$(find mod101_description)/meshes/servo_shoulder_1.stl" scale="0.001 0.001 0.001"/></geometry>
+    <origin xyz="-0.0102497 0.0163 0.0202498" rpy="0 0 0"/>
+    <geometry>
+      <box size="0.0247234 0.0378 0.0452234"/>
+    </geometry>
   </collision>
 </link>
 
 <link name="${prefix}shoulder_adapter_1">
   <inertial>
     <origin xyz="-0.020137432669050628 -0.01850241218843865 0.0002933203996578482" rpy="0 0 0"/>
-    <mass value="0.2129021996409236"/>
-    <inertia ixx="7.5e-05" iyy="4.6e-05" izz="9.7e-05" ixy="0.0" iyz="0.0" ixz="1e-06"/>
+    <mass value="0.0245465762"/>
+    <inertia ixx="8.64713104e-06" iyy="5.3035737e-06" izz="1.11836228e-05" ixy="0" iyz="0" ixz="1.1529508e-07"/>
   </inertial>
   <visual>
     <origin xyz="-0.043629 -0.093029 -0.14334" rpy="0 0 0"/>
@@ -58,8 +62,10 @@
     <material name="body_darkgrey"/>
   </visual>
   <collision>
-    <origin xyz="-0.043629 -0.093029 -0.14334" rpy="0 0 0"/>
-    <geometry><mesh filename="file://$(find mod101_description)/meshes/shoulder_adapter_1.stl" scale="0.001 0.001 0.001"/></geometry>
+    <origin xyz="-0.0132667 -0.0186206 -2.32544e-07" rpy="0 0 0"/>
+    <geometry>
+      <box size="0.0538862 0.0493 0.0273769"/>
+    </geometry>
   </collision>
 </link>
 

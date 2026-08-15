@@ -1,0 +1,31 @@
+<?xml version="1.0"?>
+<!--
+  MoveIt semantics for the parallel-jaw tool. See mod101_tool_jaws/srdf for the
+  contract; the self-collision matrix is generated, not written here.
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+<xacro:macro name="mod101_tool_parallel_srdf" params="prefix:=''">
+
+  <!-- Prismatic drive joint only. `right_jaw_slider` follows via URDF <mimic>,
+       so MoveIt must not plan for it — declared passive below. Range is
+       -0.013 .. 0.013 m (tool.urdf.xacro:121); positive = open. -->
+  <group name="${prefix}gripper">
+    <joint name="${prefix}6"/>
+  </group>
+
+  <passive_joint name="${prefix}right_jaw_slider"/>
+
+  <group_state name="open" group="${prefix}gripper">
+    <joint name="${prefix}6" value="0.013"/>
+  </group_state>
+  <group_state name="closed" group="${prefix}gripper">
+    <joint name="${prefix}6" value="-0.013"/>
+  </group_state>
+
+  <end_effector name="${prefix}parallel_ee" parent_link="${prefix}wrist_flange"
+                group="${prefix}gripper" parent_group="${prefix}arm"/>
+
+</xacro:macro>
+
+</robot>

@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<!--
+  MoveIt semantics for the blank end-cap. No actuators, so no gripper group and
+  no end-effector — the arm group alone is the whole robot. Present so that
+  mod101.srdf.xacro can invoke a tool macro unconditionally, and as the template
+  for a new tool (see docs/ros-architecture.md#adding-a-new-tool).
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+<xacro:macro name="mod101_tool_none_srdf" params="prefix:=''">
+  <!-- Intentionally empty. -->
+</xacro:macro>
+
+</robot>

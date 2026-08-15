@@ -1,0 +1,42 @@
+planning_plugins:
+  - ompl_interface/OMPLPlanner
+
+# Order matters — these run after the planner, on its output.
+request_adapters:
+  - default_planning_request_adapters/ResolveConstraintFrames
+  - default_planning_request_adapters/ValidateWorkspaceBounds
+  - default_planning_request_adapters/CheckStartStateBounds
+  - default_planning_request_adapters/CheckStartStateCollision
+
+response_adapters:
+  - default_planning_response_adapters/AddTimeOptimalParameterization
+  - default_planning_response_adapters/ValidateSolution
+  - default_planning_response_adapters/DisplayMotionPath
+
+planner_configs:
+  RRTConnect:
+    type: geometric::RRTConnect
+    range: 0.0          # 0 = let OMPL pick from the state space extent
+  RRTstar:
+    type: geometric::RRTstar
+    range: 0.0
+    goal_bias: 0.05
+    delay_collision_checking: 1
+  PRM:
+    type: geometric::PRM
+    max_nearest_neighbors: 10
+
+arm:
+  planner_configs:
+    - RRTConnect
+    - RRTstar
+    - PRM
+  # 5 joints, so a short state space — RRTConnect solves these in milliseconds.
+  default_planner_config: RRTConnect
+  projection_evaluator: joints(joint_base,joint_shoulder)
+  longest_valid_segment_fraction: 0.005
+
+gripper:
+  planner_configs:
+    - RRTConnect
+  default_planner_config: RRTConnect

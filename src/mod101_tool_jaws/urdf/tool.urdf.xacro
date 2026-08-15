@@ -69,8 +69,8 @@
   <link name="${prefix}jaws_body">
     <inertial>
       <origin xyz="0.018214 -0.013763 -0.022966" rpy="0 0 0"/>
-      <mass value="0.447"/>
-      <inertia ixx="0.000264" iyy="0.000301" izz="0.000235" ixy="3.9e-05" iyz="-4e-05" ixz="8.2e-05"/>
+      <mass value="0.0437956016"/>
+      <inertia ixx="2.58658586e-05" iyy="2.94909979e-05" izz="2.30245333e-05" ixy="3.82109275e-06" iyz="-3.91906949e-06" ixz="8.03409246e-06"/>
     </inertial>
     <visual>
       <origin xyz="-0.181143 -0.004550 -0.189344" rpy="0 0 0"/>
@@ -90,8 +90,8 @@
   <link name="${prefix}jaws_servo">
     <inertial>
       <origin xyz="-0.005824 -0.004501 -0.018111" rpy="0 0 0"/>
-      <mass value="0.284"/>
-      <inertia ixx="6.6e-05" iyy="4e-05" izz="6.9e-05" ixy="0.0" iyz="0.0" ixz="-6e-06"/>
+      <mass value="0.066"/>
+      <inertia ixx="1.53380282e-05" iyy="9.29577465e-06" izz="1.60352113e-05" ixy="0" iyz="0" ixz="-1.3943662e-06"/>
     </inertial>
     <visual>
       <origin xyz="-0.201679 -0.016450 -0.189613" rpy="0 0 0"/>
@@ -111,8 +111,8 @@
   <link name="${prefix}jaws_moving">
     <inertial>
       <origin xyz="0.035386 -0.001620 -0.010188" rpy="0 0 0"/>
-      <mass value="0.159"/>
-      <inertia ixx="5.3e-05" iyy="8.7e-05" izz="4.1e-05" ixy="3e-06" iyz="-3e-06" ixz="2.3e-05"/>
+      <mass value="0.0180803214"/>
+      <inertia ixx="6.02677379e-06" iyy="9.89300604e-06" izz="4.66222124e-06" ixy="3.41138139e-07" iyz="-3.41138139e-07" ixz="2.6153924e-06"/>
     </inertial>
     <visual>
       <origin xyz="-0.181539 -0.024750 -0.159670" rpy="0 0 0"/>

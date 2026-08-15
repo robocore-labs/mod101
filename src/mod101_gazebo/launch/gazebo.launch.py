@@ -128,6 +128,8 @@ def _build(context):
         output='screen',
     )
 
+    # The delays are load-bearing, not laziness: an attempt to replace them
+    # with OnProcessExit chaining broke bringup (see docs/performance-notes.md).
     def spawner(name, *extra_args, delay):
         return TimerAction(
             period=delay,
@@ -135,16 +137,21 @@ def _build(context):
                 package='controller_manager',
                 executable='spawner',
                 arguments=[name, '--controller-manager', '/controller_manager',
+                           '--controller-manager-timeout', '60',
                            *extra_args],
                 output='screen',
             )],
         )
 
-    # Arm spawners only. JTC stays out of the launch (segfaults on Jazzy —
-    # see ros2_control issue #2400). The tool brings up its own controllers
-    # via its own launch fragment below.
+    # joint_state_broadcaster always comes up — everything downstream needs
+    # /joint_states. The position controllers are optional: MoveIt drives the
+    # arm over FollowJointTrajectory instead, and two controllers may not claim
+    # the same joints at once, so mod101_moveit_config's demo.launch.py sets
+    # spawn_controllers:=false and brings up the trajectory controllers itself.
+    spawn_controllers = LaunchConfiguration('spawn_controllers').perform(context)
     spawn_jsb = spawner('joint_state_broadcaster', delay=3.0)
-    spawn_arm = spawner('arm_controller', delay=5.0)
+    arm_spawners = ([spawner('arm_controller', delay=5.0)]
+                    if spawn_controllers.lower() == 'true' else [])
 
     # Defer to the active tool's launch — spawns its gripper controller,
     # tool-specific bridges, anything else it needs at runtime.
@@ -154,7 +161,8 @@ def _build(context):
         tool_launch_file = os.path.join(
             get_package_share_directory(tool_pkg), 'launch', 'tool.launch.py')
         tool_launch_actions.append(IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(tool_launch_file)))
+            PythonLaunchDescriptionSource(tool_launch_file),
+            launch_arguments={'spawn_controllers': spawn_controllers}.items()))
     except PackageNotFoundError:
         print(f'[mod101_gazebo] warning: tool package "{tool_pkg}" not found; '
               f'continuing without tool-side launch.')
@@ -168,7 +176,7 @@ def _build(context):
         wrist_camera_image_bridge,
         spawn_robot,
         spawn_jsb,
-        spawn_arm,
+        *arm_spawners,
         *tool_launch_actions,
     ]
 
@@ -186,5 +194,10 @@ def generate_launch_description():
                               description='shoulder servo mount: small | big'),
         DeclareLaunchArgument('elbow_mount', default_value='small',
                               description='elbow servo mount: small | big'),
+        DeclareLaunchArgument(
+            'spawn_controllers', default_value='true',
+            description='Spawn the position controllers (arm_controller and '
+                        'the tool gripper_controller). Set false when MoveIt '
+                        'will drive the arm — see mod101_moveit_config.'),
         OpaqueFunction(function=_build),
     ])

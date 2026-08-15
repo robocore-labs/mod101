@@ -11,8 +11,8 @@
 <link name="${prefix}elbow_link_1">
   <inertial>
     <origin xyz="-0.010386839428546318 0.00039485016823848085 -0.0020812304383783786" rpy="0 0 0"/>
-    <mass value="0.3445733336731394"/>
-    <inertia ixx="0.000106" iyy="8.8e-05" izz="0.000153" ixy="-2e-06" iyz="1e-06" ixz="-3e-06"/>
+    <mass value="0.0310526039"/>
+    <inertia ixx="9.55261389e-06" iyy="7.93047191e-06" izz="1.37882068e-05" ixy="-1.80237998e-07" iyz="9.01189989e-08" ixz="-2.70356997e-07"/>
   </inertial>
   <visual>
     <origin xyz="0.062581 -0.073858 -0.142215" rpy="0 0 0"/>
@@ -20,8 +20,10 @@
     <material name="body_darkgrey"/>
   </visual>
   <collision>
-    <origin xyz="0.062581 -0.073858 -0.142215" rpy="0 0 0"/>
-    <geometry><mesh filename="file://$(find mod101_description)/meshes/elbow_link_1.stl" scale="0.001 0.001 0.001"/></geometry>
+    <origin xyz="-0.0108048 0.000550375 0.00151226" rpy="0 0 0"/>
+    <geometry>
+      <box size="0.0536101 0.0493 0.029825"/>
+    </geometry>
   </collision>
 </link>
 
@@ -37,16 +39,18 @@
     <material name="motor_black"/>
   </visual>
   <collision>
-    <origin xyz="0.097041 -0.058988 -0.14589" rpy="0 0 0"/>
-    <geometry><mesh filename="file://$(find mod101_description)/meshes/servo_elbow_1.stl" scale="0.001 0.001 0.001"/></geometry>
+    <origin xyz="0.0102501 0.0154997 0.0164998" rpy="0 0 0"/>
+    <geometry>
+      <box size="0.0247234 0.0378 0.0452234"/>
+    </geometry>
   </collision>
 </link>
 
 <link name="${prefix}elbow_adapter_1">
   <inertial>
     <origin xyz="0.020137826276852483 0.018502164445195313 0.00029332039965654366" rpy="0 0 0"/>
-    <mass value="0.2129021996409237"/>
-    <inertia ixx="7.5e-05" iyy="4.6e-05" izz="9.7e-05" ixy="0.0" iyz="-0.0" ixz="-1e-06"/>
+    <mass value="0.0245465749"/>
+    <inertia ixx="8.64713056e-06" iyy="5.30357341e-06" izz="1.11836222e-05" ixy="0" iyz="-0" ixz="-1.15295074e-07"/>
   </inertial>
   <visual>
     <origin xyz="0.086791 -0.055588 -0.17489" rpy="0 0 0"/>
@@ -54,8 +58,10 @@
     <material name="body_darkgrey"/>
   </visual>
   <collision>
-    <origin xyz="0.086791 -0.055588 -0.17489" rpy="0 0 0"/>
-    <geometry><mesh filename="file://$(find mod101_description)/meshes/elbow_adapter_1.stl" scale="0.001 0.001 0.001"/></geometry>
+    <origin xyz="0.0132671 0.0186204 -2.29492e-07" rpy="0 0 0"/>
+    <geometry>
+      <box size="0.0538862 0.0493 0.0273769"/>
+    </geometry>
   </collision>
 </link>
 

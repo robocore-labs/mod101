@@ -1,0 +1,86 @@
+<?xml version="1.0"?>
+<!--
+  The reusable half of mod101's MoveIt semantics: the `mod101_arm_srdf` macro
+  plus the tool fragments and generated collision matrices it selects between.
+
+  Split out of mod101.srdf.xacro so a robot that embeds the arm can include
+  just this and supply its own virtual joint, without also inheriting the
+  standalone robot's `world` anchor and its unprefixed instantiation.
+
+  Consumers:
+    mod101_moveit_config/srdf/mod101.srdf.xacro                 (standalone arm)
+    base101_arm_moveit_config/srdf/base101_arm.srdf.xacro       (arm on base101)
+
+  Everything is prefix-parameterised so multi-arm robots can emit semantics per
+  instance the same way they emit links.
+
+  Self-collision matrix: generated per tool by tools/gen_collision_matrix.py
+  into config/collisions/<tool>.srdf.xacro (link geometry moves with the rail
+  lengths, so it is not safe to hand-freeze). Regenerate after changing build
+  params.
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+<!-- Tool semantics fragments (see mod101_tool_<name>/srdf/tool.srdf.xacro). -->
+<xacro:include filename="$(find mod101_tool_parallel)/srdf/tool.srdf.xacro"/>
+<xacro:include filename="$(find mod101_tool_pincopen)/srdf/tool.srdf.xacro"/>
+<xacro:include filename="$(find mod101_tool_jaws)/srdf/tool.srdf.xacro"/>
+<xacro:include filename="$(find mod101_tool_none)/srdf/tool.srdf.xacro"/>
+
+<!-- Generated collision matrices, one per tool. -->
+<xacro:include filename="$(find mod101_moveit_config)/config/collisions/parallel.srdf.xacro"/>
+<xacro:include filename="$(find mod101_moveit_config)/config/collisions/pincopen.srdf.xacro"/>
+<xacro:include filename="$(find mod101_moveit_config)/config/collisions/jaws.srdf.xacro"/>
+<xacro:include filename="$(find mod101_moveit_config)/config/collisions/none.srdf.xacro"/>
+
+<xacro:macro name="mod101_arm_srdf" params="prefix:='' tool:='jaws'">
+
+  <!-- ============================== groups ================================ -->
+  <!-- 5 DOF: base yaw (Z), shoulder/elbow/wrist_tilt pitch (all ±Y, parallel),
+       wrist roll (X). Terminates at wrist_flange — the tool mount contract
+       (docs/tool-convention.md), so the group is identical for every tool. -->
+  <group name="${prefix}arm">
+    <chain base_link="${prefix}base_link" tip_link="${prefix}wrist_flange"/>
+  </group>
+
+  <!-- ============================ group states ============================ -->
+  <!-- Straight up / stowed. All joints at zero is inside every limit. -->
+  <group_state name="home" group="${prefix}arm">
+    <joint name="${prefix}joint_base"       value="0.0"/>
+    <joint name="${prefix}joint_shoulder"   value="0.0"/>
+    <joint name="${prefix}joint_elbow"      value="0.0"/>
+    <joint name="${prefix}joint_wrist_tilt" value="0.0"/>
+    <joint name="${prefix}joint_wrist_roll" value="0.0"/>
+  </group_state>
+
+  <!-- Folded-forward working pose. Verified reachable and statically stable in
+       Gazebo (bullet-featherstone) before being written down. -->
+  <group_state name="ready" group="${prefix}arm">
+    <joint name="${prefix}joint_base"       value="0.0"/>
+    <joint name="${prefix}joint_shoulder"   value="1.2"/>
+    <joint name="${prefix}joint_elbow"      value="1.5"/>
+    <joint name="${prefix}joint_wrist_tilt" value="0.3"/>
+    <joint name="${prefix}joint_wrist_roll" value="0.0"/>
+  </group_state>
+
+  <!-- ============================ active tool ============================= -->
+  <xacro:if value="${tool == 'parallel'}">
+    <xacro:mod101_tool_parallel_srdf prefix="${prefix}"/>
+    <xacro:mod101_collisions_parallel prefix="${prefix}"/>
+  </xacro:if>
+  <xacro:if value="${tool == 'pincopen'}">
+    <xacro:mod101_tool_pincopen_srdf prefix="${prefix}"/>
+    <xacro:mod101_collisions_pincopen prefix="${prefix}"/>
+  </xacro:if>
+  <xacro:if value="${tool == 'jaws'}">
+    <xacro:mod101_tool_jaws_srdf prefix="${prefix}"/>
+    <xacro:mod101_collisions_jaws prefix="${prefix}"/>
+  </xacro:if>
+  <xacro:if value="${tool == 'none'}">
+    <xacro:mod101_tool_none_srdf prefix="${prefix}"/>
+    <xacro:mod101_collisions_none prefix="${prefix}"/>
+  </xacro:if>
+
+</xacro:macro>
+
+</robot>

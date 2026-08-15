@@ -49,7 +49,7 @@
 <xacro:property name="ext_cross"         value="0.020"/>  <!-- 20x20 mm -->
 <xacro:property name="extrusion_density" value="0.46"/>   <!-- kg/m -->
 
-<xacro:macro name="mod101_arm" params="prefix:='' parent:='' xyz:='0 0 0' rpy:='0 0 0' tool:='jaws' use_sim:='true' shoulder_ext_length:='0.082' elbow_ext_length:='0.098' shoulder_mount:='small' elbow_mount:='small'">
+<xacro:macro name="mod101_arm" params="prefix:='' parent:='' xyz:='0 0 0' rpy:='0 0 0' tool:='jaws' use_sim:='true' shoulder_ext_length:=0.082 elbow_ext_length:=0.098 shoulder_mount:='small' elbow_mount:='small'">
 
 <!-- Rail length IS the joint advance along local X (1:1). The extrusion link is
      a box primitive of this length, so editing the length scales the rail AND
@@ -73,20 +73,27 @@
   </joint>
 </xacro:unless>
 
+<!-- base_link is re-centred on the base plate: origin at the centre of the
+     100x120 mm footprint, on the underside mounting face. The CAD export put
+     it ~1.4 cm/7.3 cm/6.4 cm off in the corner and below the plate, which made
+     every caller hand-tune its mount xyz. Callers can now bolt the arm down
+     with the plain deck-centre / deck-top offset. -->
 <link name="${prefix}base_link">
   <inertial>
-    <origin xyz="-0.016083210300696003 0.07326726540183791 0.07387020603487769" rpy="0 0 0"/>
-    <mass value="0.8668211242819505"/>
-    <inertia ixx="0.001015" iyy="0.000946" izz="0.001687" ixy="4e-06" iyz="-3e-06" ixz="0.000152"/>
+    <origin xyz="-0.008702404 0.000111487 0.00989655" rpy="0 0 0"/>
+    <mass value="0.0832840557"/>
+    <inertia ixx="9.7521062e-05" iyy="9.08915514e-05" izz="0.000162086731" ixy="3.84319456e-07" iyz="-2.88239592e-07" ixz="1.46041393e-05"/>
   </inertial>
   <visual>
-    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <origin xyz="0.007380806 -0.073155779 -0.063973656" rpy="0 0 0"/>
     <geometry><mesh filename="file://$(find mod101_description)/meshes/base_link.stl" scale="0.001 0.001 0.001"/></geometry>
     <material name="body_darkgrey"/>
   </visual>
   <collision>
-    <origin xyz="0 0 0" rpy="0 0 0"/>
-    <geometry><mesh filename="file://$(find mod101_description)/meshes/base_link.stl" scale="0.001 0.001 0.001"/></geometry>
+    <origin xyz="0 0 0.0265" rpy="0 0 0"/>
+    <geometry>
+      <box size="0.1 0.12 0.053"/>
+    </geometry>
   </collision>
 </link>
 
@@ -102,16 +109,18 @@
     <material name="motor_black"/>
   </visual>
   <collision>
-    <origin xyz="0.033981 -0.084076 -0.113974" rpy="0 0 0"/>
-    <geometry><mesh filename="file://$(find mod101_description)/meshes/servo_base_1.stl" scale="0.001 0.001 0.001"/></geometry>
+    <origin xyz="0.0165002 -0.0102503 -0.0157003" rpy="0 0 0"/>
+    <geometry>
+      <box size="0.0452234 0.0247234 0.0378"/>
+    </geometry>
   </collision>
 </link>
 
 <link name="${prefix}base_cover_1">
   <inertial>
     <origin xyz="0.02230051687619229 0.01594291177721944 -3.4268786498758974e-07" rpy="0 0 0"/>
-    <mass value="0.1881374899503161"/>
-    <inertia ixx="6e-05" iyy="0.000108" izz="0.000142" ixy="1e-06" iyz="0.0" ixz="-0.0"/>
+    <mass value="0.0257291587"/>
+    <inertia ixx="8.20543276e-06" iyy="1.4769779e-05" izz="1.94195242e-05" ixy="1.36757213e-07" iyz="0" ixz="-0"/>
   </inertial>
   <visual>
     <origin xyz="0.045885 -0.058276 -0.097774" rpy="0 0 0"/>
@@ -119,8 +128,10 @@
     <material name="accent_green"/>
   </visual>
   <collision>
-    <origin xyz="0.045885 -0.058276 -0.097774" rpy="0 0 0"/>
-    <geometry><mesh filename="file://$(find mod101_description)/meshes/base_cover_1.stl" scale="0.001 0.001 0.001"/></geometry>
+    <origin xyz="0.0202023 0.0158002 -3.45062e-07" rpy="0 0 0"/>
+    <geometry>
+      <box size="0.0684038 0.0395731 0.0286"/>
+    </geometry>
   </collision>
 </link>
 
@@ -189,8 +200,8 @@
 <link name="${prefix}wrist_servo_adapter_1">
   <inertial>
     <origin xyz="-0.0019161875719076876 -0.001239865018947961 -8.234763106684806e-07" rpy="0 0 0"/>
-    <mass value="0.1802416209536359"/>
-    <inertia ixx="5.5e-05" iyy="2.2e-05" izz="5.1e-05" ixy="1e-06" iyz="0.0" ixz="0.0"/>
+    <mass value="0.0198664172"/>
+    <inertia ixx="6.06215668e-06" iyy="2.42486267e-06" izz="5.62127255e-06" ixy="1.1022103e-07" iyz="0" ixz="0"/>
   </inertial>
   <visual>
     <origin xyz="-0.035419 -0.074758 -0.173765" rpy="0 0 0"/>
@@ -198,8 +209,10 @@
     <material name="body_darkgrey"/>
   </visual>
   <collision>
-    <origin xyz="-0.035419 -0.074758 -0.173765" rpy="0 0 0"/>
-    <geometry><mesh filename="file://$(find mod101_description)/meshes/wrist_servo_adapter_1.stl" scale="0.001 0.001 0.001"/></geometry>
+    <origin xyz="0.000500196 -0.000549624 -2.37122e-07" rpy="0 0 0"/>
+    <geometry>
+      <box size="0.033 0.0493 0.0268"/>
+    </geometry>
   </collision>
 </link>
 
@@ -215,16 +228,18 @@
     <material name="motor_black"/>
   </visual>
   <collision>
-    <origin xyz="-0.045069 -0.090758 -0.184015" rpy="0 0 0"/>
-    <geometry><mesh filename="file://$(find mod101_description)/meshes/servo_wrist_tilt_1.stl" scale="0.001 0.001 0.001"/></geometry>
+    <origin xyz="0.0202502 -0.0162996 -0.0102502" rpy="0 0 0"/>
+    <geometry>
+      <box size="0.0452234 0.0378 0.0247234"/>
+    </geometry>
   </collision>
 </link>
 
 <link name="${prefix}wrist_roll_adapter_1">
   <inertial>
     <origin xyz="0.0265390165786311 0.018652019649215763 0.02086935983869931" rpy="0 0 0"/>
-    <mass value="0.19133626761871975"/>
-    <inertia ixx="0.000113" iyy="0.000128" izz="9.2e-05" ixy="-0.0" iyz="0.0" ixz="-4.5e-05"/>
+    <mass value="0.0264696078"/>
+    <inertia ixx="1.56325077e-05" iyy="1.77076194e-05" izz="1.27273514e-05" ixy="-0" iyz="0" ixz="-6.22533494e-06"/>
   </inertial>
   <visual>
     <origin xyz="-0.077819 -0.055558 -0.173765" rpy="0 0 0"/>
@@ -232,8 +247,10 @@
     <material name="body_darkgrey"/>
   </visual>
   <collision>
-    <origin xyz="-0.077819 -0.055558 -0.173765" rpy="0 0 0"/>
-    <geometry><mesh filename="file://$(find mod101_description)/meshes/wrist_roll_adapter_1.stl" scale="0.001 0.001 0.001"/></geometry>
+    <origin xyz="0.0256497 0.0186504 0.0177044" rpy="0 0 0"/>
+    <geometry>
+      <box size="0.073299 0.0493 0.0573908"/>
+    </geometry>
   </collision>
 </link>
 
@@ -249,16 +266,18 @@
     <material name="motor_black"/>
   </visual>
   <collision>
-    <origin xyz="-0.137219 -0.084458 -0.202765" rpy="0 0 0"/>
-    <geometry><mesh filename="file://$(find mod101_description)/meshes/servo_wrist_rotation_1.stl" scale="0.001 0.001 0.001"/></geometry>
+    <origin xyz="-0.0156998 -0.0102496 -0.0165002" rpy="0 0 0"/>
+    <geometry>
+      <box size="0.0378 0.0247234 0.0452234"/>
+    </geometry>
   </collision>
 </link>
 
 <link name="${prefix}camera_adapter_1">
   <inertial>
     <origin xyz="-0.015133427944392153 -0.00999962387213657 0.00491529865458315" rpy="0 0 0"/>
-    <mass value="0.07287491005104513"/>
-    <inertia ixx="1.7e-05" iyy="1.4e-05" izz="2.7e-05" ixy="0.0" iyz="-0.0" ixz="-0.0"/>
+    <mass value="0.011514241"/>
+    <inertia ixx="2.68600122e-06" iyy="2.21200101e-06" izz="4.26600194e-06" ixy="0" iyz="-0" ixz="-0"/>
   </inertial>
   <visual>
     <origin xyz="-0.135219 -0.084908 -0.220165" rpy="0 0 0"/>
@@ -266,16 +285,18 @@
     <material name="accent_green"/>
   </visual>
   <collision>
-    <origin xyz="-0.135219 -0.084908 -0.220165" rpy="0 0 0"/>
-    <geometry><mesh filename="file://$(find mod101_description)/meshes/camera_adapter_1.stl" scale="0.001 0.001 0.001"/></geometry>
+    <origin xyz="-0.0140503 -0.00999963 0.00747259" rpy="0 0 0"/>
+    <geometry>
+      <box size="0.042699 0.0388 0.0210544"/>
+    </geometry>
   </collision>
 </link>
 
 <link name="${prefix}camera_wing_1">
   <inertial>
     <origin xyz="0.14361888944153076 0.3347919124721062 -0.15696687867817244" rpy="0 0 0"/>
-    <mass value="0.06632884156356747"/>
-    <inertia ixx="2.7e-05" iyy="2.5e-05" izz="9e-06" ixy="0.0" iyz="-0.0" ixz="5e-06"/>
+    <mass value="0.0104777712"/>
+    <inertia ixx="4.26511024e-06" iyy="3.94917615e-06" izz="1.42170341e-06" ixy="0" iyz="-0" ixz="7.89835229e-07"/>
   </inertial>
   <visual>
     <origin xyz="0.025688 0.259707 -0.40513" rpy="0 0 0"/>
@@ -283,16 +304,18 @@
     <material name="accent_green"/>
   </visual>
   <collision>
-    <origin xyz="0.025688 0.259707 -0.40513" rpy="0 0 0"/>
-    <geometry><mesh filename="file://$(find mod101_description)/meshes/camera_wing_1.stl" scale="0.001 0.001 0.001"/></geometry>
+    <origin xyz="0.143097 0.334715 -0.148664" rpy="0 0 0"/>
+    <geometry>
+      <box size="0.0276196 0.031 0.0625861"/>
+    </geometry>
   </collision>
 </link>
 
 <link name="${prefix}wrist_camera_v1_1">
   <inertial>
     <origin xyz="-0.005107415957823297 0.012044156369510242 -0.01085870058537286" rpy="0 0 0"/>
-    <mass value="0.016638125458728874"/>
-    <inertia ixx="1e-06" iyy="1e-06" izz="1e-06" ixy="-0.0" iyz="0.0" ixz="-0.0"/>
+    <mass value="0.0166"/>
+    <inertia ixx="9.97708548e-07" iyy="9.97708548e-07" izz="9.97708548e-07" ixy="-0" iyz="0" ixz="-0"/>
   </inertial>
   <visual>
     <origin xyz="-0.115073 -0.062344 -0.284896" rpy="0 0 0"/>
@@ -300,8 +323,10 @@
     <material name="body_darkgrey"/>
   </visual>
   <collision>
-    <origin xyz="-0.115073 -0.062344 -0.284896" rpy="0 0 0"/>
-    <geometry><mesh filename="file://$(find mod101_description)/meshes/wrist_camera_v1_1.stl" scale="0.001 0.001 0.001"/></geometry>
+    <origin xyz="-0.00532676 0.0119999 -0.010453" rpy="0 0 0"/>
+    <geometry>
+      <box size="0.0149472 0.028 0.0262219"/>
+    </geometry>
   </collision>
 </link>
 
@@ -319,13 +344,13 @@
 <!-- ===================== joints (canonical names, export axes) ============== -->
 
 <joint name="${prefix}fixed_servo_base_1" type="fixed">
-  <origin xyz="-0.033981 0.084076 0.113974" rpy="0 0 0"/>
+  <origin xyz="-0.026600194 0.010920221 0.050000344" rpy="0 0 0"/>
   <parent link="${prefix}base_link"/>
   <child link="${prefix}servo_base_1"/>
 </joint>
 
 <joint name="${prefix}fixed_base_cover_1" type="fixed">
-  <origin xyz="-0.045885 0.058276 0.097774" rpy="0 0 0"/>
+  <origin xyz="-0.038504194 -0.014879779 0.033800344" rpy="0 0 0"/>
   <parent link="${prefix}base_link"/>
   <child link="${prefix}base_cover_1"/>
 </joint>

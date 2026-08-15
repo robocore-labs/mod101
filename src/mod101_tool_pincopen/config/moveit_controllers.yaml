@@ -1,0 +1,11 @@
+# MoveIt controller entry contributed by the pincopen tool. Merged into
+# mod101_moveit_config's moveit_controllers.yaml by move_group.launch.py, which
+# also appends this controller's name to controller_names.
+#
+# Backed by gripper_trajectory_controller in this package's controllers.yaml.
+gripper_trajectory_controller:
+  type: FollowJointTrajectory
+  action_ns: follow_joint_trajectory
+  default: true
+  joints:
+    - "6"

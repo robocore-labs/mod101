@@ -1,0 +1,31 @@
+# IK solver for the arm group.
+#
+# WHY NOT KDL: mod101 has 5 actuated joints — base yaw, three parallel pitches
+# (shoulder/elbow/wrist_tilt, all about ±Y), and wrist roll about X. That spans
+# position plus tool pitch, but the tool's azimuth is rigidly tied to base yaw,
+# so the arm cannot reach an arbitrary 6-DOF pose. MoveIt's default
+# KDLKinematicsPlugin solves for full pose and needs >= 6 DOF; on this arm it
+# fails or times out on essentially every goal, which reads as "MoveIt is
+# broken" rather than "that pose is unreachable".
+#
+# pick_ik is a gradient/memetic solver that optimises a weighted cost, so an
+# under-actuated chain is expressible: rotation_scale: 0.0 makes it solve
+# POSITION ONLY and accept whatever orientation the arm happens to land in.
+#
+# If you need to constrain the approach direction as well (e.g. point the tool
+# down at a table), raise rotation_scale to ~0.2-0.5 rather than 1.0 — treat
+# orientation as a soft preference, since it can never be satisfied exactly in
+# the yaw axis. rotation_scale: 1.0 reproduces the KDL failure mode.
+arm:
+  kinematics_solver: pick_ik/PickIkPlugin
+  kinematics_solver_timeout: 0.05
+  kinematics_solver_attempts: 3
+
+  mode: global                    # 'global' = memetic search, robust but slower
+  position_scale: 1.0
+  rotation_scale: 0.0             # <- the 5-DOF accommodation. See above.
+  position_threshold: 0.001       # m
+  orientation_threshold: 0.5      # rad; loose, and unused while rotation_scale=0
+  cost_threshold: 0.001
+  minimal_displacement_weight: 0.0
+  gd_step_size: 0.0001

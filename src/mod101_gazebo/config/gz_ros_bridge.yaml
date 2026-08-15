@@ -1,8 +1,9 @@
-- ros_topic_name: "/clock"
-  gz_topic_name: "/clock"
-  ros_type_name: "rosgraph_msgs/msg/Clock"
-  gz_type_name: "gz.msgs.Clock"
-  direction: GZ_TO_ROS
+# NB: /clock is deliberately NOT bridged here. gazebo.launch.py runs a dedicated
+# clock_bridge node for it, and bridging it in both places gives /clock two
+# independent publishers sampling Gazebo at different moments. Their messages
+# interleave, sim time appears to step backwards, and every sim-time subscriber
+# spams "Detected jump back in time. Clearing TF buffer." — which breaks MoveIt's
+# TF lookups. One clock publisher, always.
 
 # Wrist camera info (image stream is handled by ros_gz_image bridge in the launch).
 - ros_topic_name: "/wrist_camera/camera_info"

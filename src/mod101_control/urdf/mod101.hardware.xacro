@@ -6,7 +6,10 @@
   bring-up uses. The plugin name below is a placeholder — swap it for the real
   servo bus driver once that lands.
 -->
-<robot name="mod101_hardware" xmlns:xacro="http://www.ros.org/wiki/xacro">
+<!-- NB: the robot name must stay "mod101" — it has to match the name in
+     mod101_moveit_config's SRDF, or MoveIt refuses to load with "semantic
+     description is not specified for the same robot as the URDF". -->
+<robot name="mod101" xmlns:xacro="http://www.ros.org/wiki/xacro">
 
   <xacro:arg name="use_sim" default="false"/>
 

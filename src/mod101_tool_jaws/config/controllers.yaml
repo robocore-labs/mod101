@@ -8,6 +8,25 @@ controller_manager:
     gripper_controller:
       type: position_controllers/JointGroupPositionController
 
+    # MoveIt drives grippers over FollowJointTrajectory, not Float64MultiArray.
+    # Same arrangement as the arm's arm_controller / arm_trajectory_controller
+    # pair: both claim joint 6, so only one may be active at a time —
+    # mod101_moveit_config's launch deactivates gripper_controller when it
+    # spawns this one.
+    gripper_trajectory_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+
+gripper_trajectory_controller:
+  ros__parameters:
+    joints: ["6"]
+    command_interfaces:
+      - position
+    state_interfaces:
+      - position
+      - velocity
+    allow_partial_joints_goal: false
+    allow_integration_in_goal_trajectories: true
+
 gripper_controller:
   ros__parameters:
     joints: ["6"]

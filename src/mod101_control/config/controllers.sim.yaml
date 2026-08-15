@@ -14,10 +14,15 @@ controller_manager:
     arm_controller:
       type: position_controllers/JointGroupPositionController
 
-    # JTC retained for MoveIt — not spawned from the gazebo launch (segfaults
-    # in on_init on Jazzy; ros2_control issue #2400). Spawn from MoveIt's
-    # launch when needed:
-    #   ros2 run controller_manager spawner arm_trajectory_controller --inactive
+    # What MoveIt drives (FollowJointTrajectory). Not spawned by the plain
+    # gazebo launch, because it claims the same joints as arm_controller above
+    # and controller_manager allows only one active claim per joint — use
+    #   ros2 launch mod101_moveit_config demo.launch.py
+    # which passes spawn_controllers:=false and brings this up instead.
+    #
+    # It used to segfault in on_init under gz_ros2_control (ros2_control issue
+    # #2400); that is FIXED as of ros2_control 4.45.2 / gz_ros2_control 1.2.19,
+    # verified by mod101_moveit_config/test/moveit_smoke.py.
     arm_trajectory_controller:
       type: joint_trajectory_controller/JointTrajectoryController
 

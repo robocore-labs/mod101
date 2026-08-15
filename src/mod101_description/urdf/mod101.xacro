@@ -14,19 +14,11 @@
      gazebo extensions. Hardware overlays (mod101_control) override to false. -->
 <xacro:arg name="use_sim" default="true"/>
 
-<!-- tool: which end-effector package to pull in. The arm terminates at
-     `wrist_flange`; the selected tool's URDF attaches its root link there and
-     contributes its own joints, ros2_control hardware block, gazebo extensions,
-     controllers, and (via the gazebo launch) its own launch fragment. Must
-     match a package `mod101_tool_<tool>` shipping urdf/tool.urdf.xacro.
-     The configurator reads/writes this default. -->
-<xacro:arg name="tool" default="pincopen"/>
-
-<!-- Build parameters: two rail lengths + two servo-mount variants (small|big). -->
-<xacro:arg name="shoulder_ext_length" default="0.0820"/>
-<xacro:arg name="elbow_ext_length"    default="0.0980"/>
-<xacro:arg name="shoulder_mount"      default="small"/>
-<xacro:arg name="elbow_mount"         default="small"/>
+<!-- tool + the four build args come from the configured-arm file, which the
+     web configurator owns. Do not redeclare them here: base101 (and anything
+     else that instantiates the macro) includes the same file, so a
+     configurator change reaches every consumer on the next build. -->
+<xacro:include filename="$(find mod101_description)/urdf/mod101_config.xacro" />
 
 <xacro:include filename="$(find mod101_description)/urdf/materials.xacro" />
 <xacro:include filename="$(find mod101_description)/urdf/mod101_macro.xacro" />
