@@ -2,16 +2,16 @@
 
 `configurator/` is a self-contained static page + stdlib Python backend for
 sizing, motoring, and tooling the arm. It edits the four build args in
-`src/mod101_description/urdf/mod101.xacro` in place and shows a live three.js
+`src/mod101_description/urdf/mod101_config.xacro` in place and shows a live three.js
 view (`urdf-loader`) that re-renders on every save.
 
 ## Running
 
 ```bash
-cd ~/Work/mod101
+cd ~/robots/mod101
 source /opt/ros/jazzy/setup.bash && source install/setup.bash   # for /urdf
 python3 configurator/server.py
-# open http://localhost:8000/
+# open http://localhost:8001/
 ```
 
 Backend (`server.py`) is stdlib-only Python — no Flask, no virtualenv.
@@ -60,32 +60,84 @@ live `/urdf` view need the server.
 | Method + path | Purpose |
 |---|---|
 | `GET /load` / `POST /save` | the four build args (two lengths + two mounts) |
+| `GET /collisions` | status of the background self-collision regen |
 | `GET /masses` | `link_masses.json` (Part C output) or `{"masses": null}` |
 | `GET /tool` / `POST /tool` | active tool + discovered tools |
-| `GET /nudge` / `POST /nudge` | big-module mesh alignment offsets — see below |
 | `GET /urdf` | runs `xacro` and rewrites mesh URIs to `/pkg/<pkgname>/meshes/<file>` |
 | `GET /pkg/<pkgname>/meshes/<file>` | serves binary meshes from any package's `meshes/` dir |
 
-`GET /tool` reads the `tool` xacro arg out of `mod101.xacro` and lists every
+`GET /tool` reads the `tool` xacro arg out of `mod101_config.xacro` and lists every
 `mod101_tool_*` package under `src/`; `POST /tool` rewrites that arg's
-`default`. If the arg is missing from `mod101.xacro`, both return HTTP 500 and
+`default`. If the arg is missing from `mod101_config.xacro`, both return HTTP 500 and
 the page's tool dropdown comes up empty — that's the symptom to look for.
 
-## The nudge endpoints
+## Big-module alignment offsets
 
-`/nudge` reads and writes the `snx/sny/snz` (shoulder) and `enx/eny/enz`
-(elbow) properties in `urdf/modules/*_big.xacro`. They shift **all** of a big
-module's meshes together — cosmetic only, kinematics unchanged — to absorb a
-frame mismatch when the big parts come from a different CAD canvas than the
-small ones.
+`urdf/modules/shoulder_big.xacro` and `elbow_big.xacro` each carry three
+properties — `snx/sny/snz` and `enx/eny/enz` — that shift **all** of that
+module's meshes together. Cosmetic only; kinematics are unchanged. They exist to
+absorb a frame mismatch when the big parts come from a different CAD canvas than
+the small ones.
+
+These used to be editable over HTTP (`GET`/`POST /nudge`). That endpoint is
+**removed** — it had no UI, and hand-editing the xacro is clearer than a
+write-only API nobody could see the effect of. Edit the properties directly.
 
 **They should be zero whenever the big parts are exported in the same frame as
-the small ones**, which is the case for the current shoulder export. A stale
-non-zero nudge left over from an older export is indistinguishable, at a
+the small ones.** Current state:
+
+| Module | Offsets | |
+|---|---|---|
+| `shoulder_big.xacro` | `snx=0  sny=0  snz=0` | clean — same-frame export |
+| `elbow_big.xacro` | `enx=0  eny=-0.002  enz=-0.006` | **non-zero** — 2 mm and 6 mm of shim |
+
+A stale non-zero offset left over from an older export is indistinguishable, at a
 glance, from a genuinely broken URDF: the whole assembly floats off the arm.
 Before touching these, check the module's datums instead — the adapter's AABB
-centre should sit on the extrusion axis, and the rotation link should be
-centred on its joint axis. `shoulder_big.xacro` lists the exact numbers.
+centre should sit on the extrusion axis, and the rotation link should be centred
+on its joint axis. `shoulder_big.xacro` lists the exact numbers.
 
-There is no UI for these endpoints; they're a backend affordance, edited by
-hand or over HTTP.
+## Two buttons, because there are two costs
+
+**Save to xacro** writes the five build values into `mod101_config.xacro`. It is
+instant (~4 ms) and it does **not** rebuild anything.
+
+**Rebuild MoveIt config** regenerates the self-collision matrices, at
+`REGEN_TRIALS` (1,000,000) samples — about 20 s for all four tools. `POST
+/collisions/regen`.
+
+They were one button. That was wrong: it made a Save look cheap while quietly
+running a *fast, under-sampled* regeneration (the generator's own 10,000 default),
+which disables pairs that really can collide. Splitting them lets the rebuild be
+slow and correct, and makes the cost something you choose rather than something
+that happens to you.
+
+`GET /collisions` reports `stale` — whether the generated matrices still carry
+the same build stamp as `mod101_config.xacro`. That is read from the files
+themselves, not remembered in the server, so it survives a restart and is still
+right if you edit the xacro by hand. The UI uses it to mark the rebuild button as
+owed.
+
+**Switching tool does not make anything stale.** The generator writes one matrix
+per tool on every run, all four stamped with the current rails and mounts, so
+picking a different tool just selects an already-current file.
+
+Neither button touches a robot that embeds the arm.
+
+That is deliberate. An earlier version reached into a base101 workspace through a
+`BASE101_WS` setting, which inverted the dependency: the arm had to know where
+its consumers lived. That breaks as soon as there are two of them, one is on
+another machine, or a consumer isn't base101 at all.
+
+So each consumer owns its own regeneration, and the configurator only tells you
+to run it — the `/save`, `/tool` and `/collisions` responses all carry a
+`downstream` field with the instruction. For base101:
+
+```bash
+cd ~/robots/base101
+./src/base101_arm/base101_arm_moveit_config/scripts/sync_arm_change.sh
+```
+
+That script sources the mod101 underlay (`MOD101_WS`, default `~/robots/mod101`)
+so it reads the build args you just saved, then regenerates base101's chassis
+matrices. Arguments pass through to its `gen_collision_matrix.py`.

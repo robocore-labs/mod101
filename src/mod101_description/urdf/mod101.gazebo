@@ -50,7 +50,10 @@
 
   <sensor name="${prefix}wrist_camera" type="camera">
     <topic>${prefix}wrist_camera/image_raw</topic>
-    <gz_frame_id>${prefix}wrist_camera_v1_1</gz_frame_id>
+    <!-- Stamp images with the optical frame, not the body link: ROS
+         consumers assume REP-103 optical axes. The sensor still looks
+         along the body link's +X, which is where Gazebo aims it. -->
+    <gz_frame_id>${prefix}wrist_camera_optical_frame</gz_frame_id>
     <update_rate>30</update_rate>
     <always_on>1</always_on>
     <visualize>true</visualize>

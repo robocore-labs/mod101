@@ -400,13 +400,17 @@
   <child link="${prefix}servo_wrist_tilt_1"/>
 </joint>
 
-<!-- joint_wrist_tilt: export axis 0 -1 0. -->
-<joint name="${prefix}joint_wrist_tilt" type="continuous">
+<!-- joint_wrist_tilt: export axis 0 -1 0.
+     Travel measured on the configurator: -1.23 .. 1.54 rad. Was `continuous`
+     (no lower/upper), which left the joint unbounded in the `arm` group: pick_ik
+     has no interval to sample, rejects its own seed with "Initial guess exceeds
+     joint limits", and every plan aborts. Bounded servo travel => revolute. -->
+<joint name="${prefix}joint_wrist_tilt" type="revolute">
   <origin xyz="0.03275 -0.0352 -0.01025" rpy="0 0 0"/>
   <parent link="${prefix}servo_wrist_tilt_1"/>
   <child link="${prefix}wrist_roll_adapter_1"/>
   <axis xyz="0.0 -1.0 0.0"/>
-  <limit effort="100" velocity="100"/>
+  <limit effort="100" velocity="100" lower="-1.23" upper="1.54"/>
   <dynamics damping="${joint_damping}" friction="${joint_friction}"/>
 </joint>
 
@@ -432,13 +436,17 @@
 
      The flange sits ON the horn face: any adapter/spacer plate belongs to the
      tool package, not here (tool-convention.md, "What this means for the mount
-     joint"). FIXME: confirm against CAD if a flange plate is ever added. -->
-<joint name="${prefix}joint_wrist_roll" type="continuous">
+     joint"). FIXME: confirm against CAD if a flange plate is ever added.
+
+     Travel: 180 deg from the zero pose, i.e. 0 .. pi, matching how joint_shoulder
+     and joint_elbow are expressed. Was `continuous` (no lower/upper), which left
+     it unbounded in the `arm` group — same failure as joint_wrist_tilt. -->
+<joint name="${prefix}joint_wrist_roll" type="revolute">
   <origin xyz="0.0032 -0.01025 -0.029" rpy="0 0 0"/>
   <parent link="${prefix}servo_wrist_rotation_1"/>
   <child link="${prefix}wrist_flange"/>
   <axis xyz="1.0 0.0 0.0"/>
-  <limit effort="100" velocity="100"/>
+  <limit effort="100" velocity="100" lower="0.0" upper="3.141593"/>
   <dynamics damping="${joint_damping}" friction="${joint_friction}"/>
 </joint>
 
@@ -458,6 +466,23 @@
   <origin xyz="0.140761 0.322051 -0.120234" rpy="0 0 0"/>
   <parent link="${prefix}camera_wing_1"/>
   <child link="${prefix}wrist_camera_v1_1"/>
+</joint>
+
+<!-- Optical frame for the wrist camera (REP-103: +Z out of the lens, +X right,
+     +Y down). `wrist_camera_v1_1` is the *body* frame, +X out of the lens, which
+     is what Gazebo points the sensor along. ROS image consumers assume the
+     optical convention instead, so the sensor stamps its messages with this
+     frame — see mod101.gazebo's gz_frame_id.
+
+     Same rotation base101's chassis camera uses (chassis.xacro,
+     camera_optical_frame). Zero translation: the lens offset within the body
+     link has not been measured against CAD, so this frame sits at the link
+     origin. Fix the offset here if you need metric accuracy from the images. -->
+<link name="${prefix}wrist_camera_optical_frame"/>
+<joint name="${prefix}wrist_camera_optical_joint" type="fixed">
+  <origin xyz="0 0 0" rpy="-1.570796 0 -1.570796"/>
+  <parent link="${prefix}wrist_camera_v1_1"/>
+  <child link="${prefix}wrist_camera_optical_frame"/>
 </joint>
 
 <xacro:if value="${use_sim}">

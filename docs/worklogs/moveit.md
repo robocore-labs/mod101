@@ -1,13 +1,20 @@
 # MoveIt 2 — handover
 
+> **ARCHIVED WORKLOG — 2026-08.** This was the handover note written when
+> MoveIt support landed. It is kept for the reasoning and the measurements, not
+> as current documentation: several items here have since been resolved, and the
+> collision-matrix numbers predate `rigid_adjacency()`.
+>
+> **For current documentation see [../moveit.md](../moveit.md).**
+
 State of the MoveIt work as of 2026-08-13. What exists, what's proven, what
 isn't, and what I'd do next.
 
 Nothing here is committed — it's all in the working tree.
 
-Companion docs: [moveit-getting-started.md](moveit-getting-started.md) (the
-walkthrough), [moveit.md](moveit.md) (the reference),
-[performance-notes.md](performance-notes.md) (why bringup feels slow, and the
+Companion docs: [moveit-getting-started.md](../moveit-getting-started.md) (the
+walkthrough), [moveit.md](../moveit.md) (the reference),
+[performance-notes.md](../performance-notes.md) (why bringup feels slow, and the
 DDS traps).
 
 ---
@@ -101,6 +108,11 @@ The matrices are generated, not hand-written, because rail lengths and the
 `small|big` mount swap move geometry. I measured how much they actually change
 across the configurator's full 80–280 mm range (tool=jaws):
 
+These counts are a **historical measurement**, taken at 10,000 trials and before
+`rigid_adjacency()` existed. Today the same default build reports 167 pairs at
+1,000,000 trials. The *shape* of the result below still holds — that is what the
+section is for — but do not compare the absolute numbers against a current file.
+
 | Config | pairs | extra vs default | **missing vs default** |
 |---|---|---|---|
 | short + small (default) | 122 | — | — |
@@ -118,14 +130,29 @@ larger servos genuinely bring into contact (`arm_extrusion_1`↔`servo_shoulder_
 the small-mount matrix on a big-mount build silently blinds the planner to
 those.
 
-**Recommendation (not yet implemented):** ship the *intersection* across the
-parameter range — **114 pairs**, correct for every configuration. Cost is 8–19
-extra pairs checked (2.9–6.9% of all 276) against planning already at 0.07–0.26 s.
-Nobody has to remember to regenerate anything. Keep per-build generation as an
-opt-in optimisation (`--shoulder-ext-length`, `--out-dir` flags exist for this).
+**Resolved — the alternative won.** The generator is wired into the
+configurator's Save: `regen_collisions_async()` runs it in a background thread
+with a 900 s timeout, and `GET /collisions` reports status. Shipping an
+intersection was not needed.
 
-The alternative is wiring the generator into the configurator's `/save`, which
-costs ~15 s per tool on a Save that is currently instant.
+Three caveats worth carrying forward:
+
+- **It regenerates mod101 and nothing else.** An earlier version reached into a
+  base101 workspace via a `BASE101_WS` setting. That inverted the dependency —
+  the arm had to know where its consumers lived, which breaks with two of them,
+  or one on another machine, or a consumer that isn't base101. Consumers now own
+  their own regeneration; the Save response carries a `downstream` note naming
+  the script to run. For base101 that is
+  `base101_arm_moveit_config/scripts/sync_arm_change.sh`.
+- **A green Save is not proof.** Regeneration reports
+  `skipped: workspace not built` and carries on. Check `GET /collisions`.
+- **The 8 "missing" pairs above were two different problems.** Some were genuine
+  build-dependence, which regenerate-on-save fixes. But
+  `elbow_adapter_1`↔`elbow_link_1` was never a sampling question at all: those
+  are the two halves of the elbow hinge, one link apart across a *fixed* joint,
+  so `collisions_updater` can never mark them `Adjacent` and they always collide
+  when sampled. They fell through both nets on every build. `rigid_adjacency()`
+  in the generator now emits that class of pair from the joint graph directly.
 
 Nothing else is a precomputed artifact — URDF and SRDF are both xacro, expanded
 at launch. And `colcon build --symlink-install` means config edits need no
@@ -135,14 +162,18 @@ rebuild.
 
 **Should do**
 
-1. **Collision matrix strategy** — decide intersection vs regenerate-on-save
-   (above). This is the one real correctness gap: a big-mount build today gets a
-   matrix that under-reports collisions.
+1. ~~**Collision matrix strategy**~~ — **resolved.** Regenerate-on-save won:
+   `configurator/server.py` calls `regen_collisions_async()` on every Save. It
+   regenerates **mod101 only** — consumers own their own matrices and the Save
+   response carries a `downstream` note telling you to run theirs. The specific
+   pair this section worried about, `elbow_adapter_1`↔`elbow_link_1`, is now
+   emitted structurally by `rigid_adjacency()` rather than left to sampling.
 2. **Verify RViz visually** — first thing worth doing on native Linux.
-3. **Joint limits are estimates.** `config/joint_limits.yaml` holds conservative
-   guesses; the URDF's `velocity="100"` is placeholder CAD data.
-   `joint_wrist_tilt`/`joint_wrist_roll` are still `continuous` and should become
-   bounded `revolute` once `calibration.yaml` exists.
+3. **Joint dynamics are still estimates.** `config/joint_limits.yaml` holds
+   conservative guesses and the URDF's `velocity="100"` is placeholder CAD data.
+   Joint *travel* is no longer an estimate: the wrists are bounded `revolute`
+   (tilt −1.23 … 1.54, roll 0 … π) and the shoulder/elbow stops carry a −0.001
+   margin.
 
 **Nice to have**
 
@@ -152,7 +183,7 @@ rebuild.
 5. **The tool joint is named `6`.** Legal, but needs quoting in every YAML and
    reads badly in SRDF. `joint_gripper` would touch all four tool packages.
 6. **Bringup takes ~16 s of fixed timers.** See
-   [performance-notes.md](performance-notes.md) — there's a failed experiment
+   [performance-notes.md](../performance-notes.md) — there's a failed experiment
    documented there; read it before retrying.
 
 **Known upstream, not ours**
@@ -166,4 +197,4 @@ rebuild.
 Intermittent "controller failed to load", "Waiting for data on
 `robot_description`", or `CONTROL_FAILED` are usually **environment, not code** —
 stale FastDDS shared-memory segments, or another ROS system on your DDS domain.
-Both cost me hours. See [performance-notes.md](performance-notes.md#dds-traps).
+Both cost me hours. See [performance-notes.md](../performance-notes.md#dds-traps).

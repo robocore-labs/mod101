@@ -85,10 +85,22 @@ Arm, base outward — 5 DOF, all `<prefix>`-prefixed:
 | Joint | Type | Axis | Limits |
 |---|---|---|---|
 | `joint_base` | revolute | +Z (yaw) | ±1.5708 |
-| `joint_shoulder` | revolute | +Y (pitch) | 0 … 3.1416 |
-| `joint_elbow` | revolute | −Y (pitch) | 0 … 3.1416 |
-| `joint_wrist_tilt` | continuous | −Y (pitch) | — |
-| `joint_wrist_roll` | continuous | +X (roll) | — |
+| `joint_shoulder` | revolute | +Y (pitch) | −0.001 … 3.1416 |
+| `joint_elbow` | revolute | −Y (pitch) | −0.001 … 3.1416 |
+| `joint_wrist_tilt` | revolute | −Y (pitch) | −1.23 … 1.54 |
+| `joint_wrist_roll` | revolute | +X (roll) | 0 … 3.1416 |
+
+Two details in that table are load-bearing, not typos:
+
+- **The wrists are `revolute`, not `continuous`.** They were `continuous` (no
+  `lower`/`upper`) until measured travel landed. Unbounded joints inside the
+  `arm` group give `pick_ik` no interval to sample, so it rejects its own seed
+  with *"Initial guess exceeds joint limits"* and every goal fails.
+- **The shoulder and elbow stops are at `−0.001`, not `0.0`.** The hard stop is
+  at zero, but Gazebo settles the joint a picoradian below it and MoveIt's
+  `CheckStartStateBounds` adapter then rejects the start state and aborts the
+  pipeline before OMPL runs. 1 mrad of margin is mechanically negligible and far
+  above the noise. Real encoders behave the same way.
 
 One yaw, three *parallel* pitches, one roll. That spans position plus tool
 pitch, but the tool's azimuth is rigidly tied to `joint_base` — the arm cannot
@@ -104,7 +116,7 @@ export, not servo spec — real dynamics limits live in
 ## Build
 
 ```bash
-cd ~/Work/mod101
+cd ~/robots/mod101
 colcon build --packages-select \
   mod101_description mod101_control mod101_gazebo mod101_moveit_config \
   mod101_tool_parallel mod101_tool_pincopen mod101_tool_jaws mod101_tool_none

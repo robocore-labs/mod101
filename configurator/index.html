@@ -276,6 +276,43 @@
     color: var(--text-secondary);
   }
 
+  /* Self-collision regeneration status. The backend regenerates mod101's
+     matrices on Save; consumers regenerate themselves, so the downstream
+     instruction is surfaced here rather than buried in the JSON response. */
+  #collision-status { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+  #collision-status .downstream {
+    color: var(--text-tertiary);
+    border-left: 2px solid var(--warn);
+    padding-left: 8px;
+  }
+  button#regen.due {
+    border-color: var(--warn);
+    color: var(--warn);
+    opacity: 1;
+  }
+  button#regen:disabled { opacity: .55; cursor: default; }
+
+  #collision-status .downstream strong { display: block; margin-bottom: 2px; }
+  #collision-status .downstream.due {
+    color: var(--warn);
+    border-left-color: var(--warn);
+  }
+  #collision-status .downstream-why {
+    color: var(--text-quaternary);
+    padding-left: 10px;
+  }
+  #collision-status .cmd {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    color: var(--text-secondary);
+    background: var(--bg-card-2);
+    border: 1px solid var(--border-faint);
+    border-radius: 4px;
+    padding: 4px 6px;
+    overflow-x: auto;
+    white-space: pre;
+  }
+
   .ok   { color: var(--accent); }
   .warn { color: var(--warn); }
   .bad  { color: var(--error); }
@@ -368,9 +405,11 @@
         <div class="viewer-bar">
           <button id="reload" class="ghost">Reload preview</button>
           <button id="save">Save to xacro</button>
+          <button id="regen" class="ghost">Rebuild MoveIt config</button>
           <span class="note" id="viewer-status">Loading URDF…</span>
           <span class="note" id="copy-feedback"></span>
         </div>
+        <div id="collision-status" hidden></div>
       </div>
     </div>
 
@@ -719,6 +758,117 @@ function setFeedback(text, cls = 'note') {
   el.className = 'note ' + cls;
 }
 
+// ---------------------------------------------------------------------------
+// Self-collision regeneration status
+// ---------------------------------------------------------------------------
+// Save kicks a background regen and returns immediately, so a green "Saved"
+// says nothing about whether the matrices actually rebuilt — it can report
+// `skipped: workspace not built` and carry on by design. Poll /collisions until
+// it settles and show the real outcome, plus the downstream instruction for any
+// robot that embeds this arm (the configurator never regenerates those).
+let collisionTimer = null;
+
+function renderCollisions(state) {
+  const el  = $('collision-status');
+  const btn = $('regen');
+  el.textContent = '';
+  el.hidden = false;
+
+  const last    = state.last || null;
+  const running = !!state.running;
+  const stale   = state.stale === true;
+
+  if (btn) {
+    btn.disabled    = running;
+    btn.textContent = running ? 'Rebuilding…' : 'Rebuild MoveIt config';
+    btn.classList.toggle('due', stale && !running);
+  }
+
+  // --- what the matrices are doing right now --------------------------
+  let head, cls;
+  if (running) {
+    head = `Rebuilding self-collision matrices (${(state.trials || 0).toLocaleString()} samples)… `
+         + 'this takes a few minutes.';
+    cls  = 'warn';
+  } else if (stale) {
+    head = 'MoveIt config is out of date — the arm changed since the matrices were built.';
+    cls  = 'bad';
+  } else if (last) {
+    const failed = Object.entries(last).filter(([, v]) => v !== 'ok');
+    head = failed.length
+      ? failed.map(([k, v]) => `${k}: ${v}`).join(' · ')
+      : 'MoveIt config rebuilt and up to date.';
+    cls  = failed.length ? 'bad' : 'ok';
+  } else {
+    head = 'MoveIt config matches the current arm.';
+    cls  = 'ok';
+  }
+  const line = document.createElement('div');
+  line.className = 'note ' + cls;
+  line.textContent = head;
+  el.appendChild(line);
+
+  // --- consumers regenerate themselves; we can only say so -------------
+  if (!state.downstream) return;
+  const note = document.createElement('div');
+  note.className = 'note downstream' + (stale ? ' due' : '');
+  const title = document.createElement('strong');
+  title.textContent = stale
+    ? 'Then sync any robot that embeds this arm:'
+    : 'If a robot embeds this arm, it regenerates its own matrices:';
+  note.appendChild(title);
+  el.appendChild(note);
+
+  const cmd = document.createElement('div');
+  cmd.className = 'cmd';
+  cmd.textContent =
+    'cd ~/robots/base101\n'
+    + './src/base101_arm/base101_arm_moveit_config/scripts/sync_arm_change.sh';
+  el.appendChild(cmd);
+
+  const why = document.createElement('div');
+  why.className = 'note downstream-why';
+  why.textContent = stale
+    ? 'Its matrices were built for the previous arm. A longer arm reaches parts '
+    + 'of the chassis that were never sampled, so stale pairs stay disabled and '
+    + 'the planner will route straight through them.'
+    : state.downstream;
+  el.appendChild(why);
+}
+
+$('regen').addEventListener('click', async () => {
+  setFeedback('Rebuilding MoveIt config — this takes a few minutes…');
+  try {
+    const r = await fetch('/collisions/regen', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    if (!r.ok) throw new Error((await r.json()).error || r.statusText);
+    renderCollisions(await r.json());
+    pollCollisions();
+  } catch (e) {
+    setFeedback(`Rebuild failed to start: ${e.message || e}`, 'bad');
+  }
+});
+
+async function pollCollisions() {
+  clearInterval(collisionTimer);
+  const tick = async () => {
+    try {
+      const r = await fetch('/collisions');
+      if (!r.ok) throw new Error('no backend');
+      const state = await r.json();
+      renderCollisions(state);
+      if (!state.running) clearInterval(collisionTimer);
+    } catch {
+      clearInterval(collisionTimer);   // no backend: stay quiet
+    }
+  };
+  await tick();
+  collisionTimer = setInterval(tick, 1500);
+}
+
 // Reload preview: re-fetch /urdf and rebuild the 3D view (picks up edits made
 // to the xacro on disk, or a fresh render after Save). The viewer module
 // listens for 'xacro-saved' and re-runs loadUrdf().
@@ -755,6 +905,7 @@ $('save').addEventListener('click', async () => {
       `elbow=${(data.elbow * 1000).toFixed(0)} mm/${data.elbow_mount}. ` +
       `Rebuild mod101_description for sim.`, 'ok');
     window.dispatchEvent(new CustomEvent('xacro-saved'));
+    pollCollisions();   // refreshes `stale` -> prompts the rebuild
   } catch (e) {
     setFeedback(
       `Save failed: ${e.message || e}. Start the backend: python3 configurator/server.py`, 'bad');
@@ -773,6 +924,7 @@ $('tool-select').addEventListener('change', async () => {
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.error || resp.statusText);
     setFeedback(`Tool set to "${data.tool}". Viewer reloaded.`, 'ok');
+    pollCollisions();
     window.dispatchEvent(new CustomEvent('xacro-saved'));
   } catch (e) {
     setFeedback(`Tool switch failed: ${e.message || e}. Backend needs python3 configurator/server.py.`, 'bad');
@@ -820,6 +972,7 @@ $('tool-select').addEventListener('change', async () => {
       ? 'Loaded current args + real masses from disk.'
       : 'Loaded current args (using estimated masses — run tools/estimate_masses.py).',
       'ok');
+    pollCollisions();
   } catch {
     setFeedback('Backend not detected — Copy works, Save needs python3 configurator/server.py.', 'warn');
     const sel = $('tool-select');

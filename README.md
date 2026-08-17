@@ -36,7 +36,7 @@ single servo.**
 
 ```bash
 source /opt/ros/jazzy/setup.bash   # the 3D preview needs this
-python3 configurator/server.py     # then open http://localhost:8000/
+python3 configurator/server.py     # then open http://localhost:8001/
 ```
 
 Drag the sliders and the arm rebuilds itself in front of you. Make the forearm
@@ -132,8 +132,8 @@ You'll need ROS 2 Jazzy on Ubuntu 24.04. Everything else (Gazebo Harmonic, `ros2
 
 ```bash
 # 1. Clone next to (or into) a colcon workspace
-git clone https://github.com/<you>/mod101.git ~/Work/mod101
-cd ~/Work/mod101
+git clone https://github.com/<you>/mod101.git ~/robots/mod101
+cd ~/robots/mod101
 
 # 2. Build the arm + the tools you want
 colcon build --packages-select \
@@ -162,7 +162,7 @@ for grasps.
 Try the configurator while sim is running:
 
 ```bash
-python3 configurator/server.py  # http://localhost:8000/
+python3 configurator/server.py  # http://localhost:8001/
 ```
 
 
@@ -201,15 +201,25 @@ mobile base's lift tower).
 
 ### Deeper docs
 
+**Get it moving**
+
+- **[docs/moveit-getting-started.md](docs/moveit-getting-started.md)** — the walkthrough: install to first executed motion, ~15 minutes, no hardware
+- **[docs/moveit.md](docs/moveit.md)** — the MoveIt reference: the 5-DOF IK story, what to regenerate when you change the build, controller wiring, and what every planning failure means
+
+**Change it**
+
+- **[docs/configurator.md](docs/configurator.md)** — sizing the arm: endpoint reference, how the live xacro edit works, what a Save does and doesn't do
 - **[docs/tool-convention.md](docs/tool-convention.md)** — coordinate convention for tool URDFs (mount joint identity, `+X` outward, `+Z` up, bolt pattern at origin)
-- **[docs/ros-architecture.md](docs/ros-architecture.md)** — package layout, the tool contract, controllers, joints, real-hardware wiring, known gotchas
-- **[docs/moveit-getting-started.md](docs/moveit-getting-started.md)** — MoveIt walkthrough: install, first plan, first motion, troubleshooting
-- **[docs/moveit-handover.md](docs/moveit-handover.md)** — MoveIt work status: what's built, what's verified, open items, the collision-matrix decision
-- **[docs/performance-notes.md](docs/performance-notes.md)** — measured performance, where bringup time really goes, and the DDS traps that masquerade as code bugs
-- **[docs/moveit.md](docs/moveit.md)** — MoveIt 2 reference: the 5-DOF IK story, the parametric SRDF and its generated collision matrices, controller wiring, how to verify an install
-- **[docs/calibration.md](docs/calibration.md)** — the calibration wizard: serial protocol, sweep/verdict logic, joint↔servo mapping, the generated ROS + LeRobot files
-- **[docs/configurator.md](docs/configurator.md)** — endpoint reference, how the live xacro edit works
-- **[docs/calibration.md](docs/calibration.md)** — hardware bring-up: per-joint sweep wizard, and the ROS + LeRobot config it generates
+- **[docs/calibration.md](docs/calibration.md)** — hardware bring-up: the per-joint sweep wizard, and the ROS + LeRobot config it generates
+
+**Understand it**
+
+- **[docs/ros-architecture.md](docs/ros-architecture.md)** — package layout, the tool contract, controllers, the joint table, real-hardware wiring, known gotchas
+- **[docs/performance-notes.md](docs/performance-notes.md)** — measured performance, where bringup time really goes, and the middleware traps that masquerade as code bugs
+
+**History** — kept for reasoning and measurements, not current documentation
+
+- **[docs/worklogs/moveit.md](docs/worklogs/moveit.md)** — the original MoveIt handover note and the collision-matrix measurements behind today's design
 
 
 ## BOM

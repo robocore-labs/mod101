@@ -6,16 +6,25 @@ mod101_tool_<tool>, and this launch then defers to
 mod101_tool_<tool>/launch/tool.launch.py to spawn any tool-specific controllers
 and nodes (gripper controllers, image bridges, suction-pump drivers, …).
 
-Launch args:
+Launch args. All of them default to **whatever the configurator last saved** in
+mod101_description/urdf/mod101_config.xacro — pass one only to override it for a
+single run:
 
-    tool                                     mod101_tool_<tool>, default jaws
+    tool                                     mod101_tool_<tool>
     shoulder_ext_length / elbow_ext_length   2020 rail length, m
     shoulder_mount / elbow_mount             small | big
+
+These used to be hardcoded here (0.082 / 0.098 / small / jaws) and were passed to
+xacro unconditionally, which silently overrode the configurator: Gazebo and
+robot_state_publisher got the stock arm while mod101_moveit_config — which reads
+the config file — planned for the configured one. Same joint names, so nothing
+errored; the tool simply ended up somewhere other than where MoveIt thought.
 
 e.g.  ros2 launch mod101_gazebo gazebo.launch.py tool:=parallel shoulder_mount:=big
 """
 
 import os
+import re
 from ament_index_python.packages import (
     get_package_prefix,
     get_package_share_directory,
@@ -35,10 +44,31 @@ from launch_ros.actions import Node
 import xacro
 
 
+BUILD_ARGS = ('tool', 'shoulder_ext_length', 'elbow_ext_length',
+              'shoulder_mount', 'elbow_mount')
+
+
+def _configured_tool():
+    """The tool the configurator last saved, from mod101_config.xacro."""
+    cfg = os.path.join(get_package_share_directory('mod101_description'),
+                       'urdf', 'mod101_config.xacro')
+    m = re.search(r'<xacro:arg\s+name="tool"\s+default="([^"]+)"', open(cfg).read())
+    return m.group(1) if m else 'jaws'
+
+
+def _drop_unset(mappings):
+    """Args left empty fall through to mod101_config.xacro's defaults.
+
+    The configurator writes that file, so a launch must not shadow it with a
+    stale hardcoded number. Anything explicitly passed still wins. Mirrors
+    mod101_moveit_config/launch/{demo,move_group}.launch.py.
+    """
+    return {k: v for k, v in mappings.items() if v != ''}
+
+
 def _build(context):
-    params = {k: LaunchConfiguration(k).perform(context) for k in (
-        'tool', 'shoulder_ext_length', 'elbow_ext_length',
-        'shoulder_mount', 'elbow_mount')}
+    params = _drop_unset(
+        {k: LaunchConfiguration(k).perform(context) for k in BUILD_ARGS})
     tool = params['tool']
 
     pkg_description = get_package_share_directory('mod101_description')
@@ -183,16 +213,21 @@ def _build(context):
 
 def generate_launch_description():
     return LaunchDescription([
+        # tool needs a concrete value here: it selects the resource path and the
+        # tool-side launch, both resolved before xacro runs.
         DeclareLaunchArgument(
-            'tool', default_value='jaws',
-            description='End-effector package suffix (matches mod101_tool_<tool>).'),
-        DeclareLaunchArgument('shoulder_ext_length', default_value='0.082',
+            'tool', default_value=_configured_tool(),
+            description='End-effector package suffix (matches mod101_tool_<tool>). '
+                        'Defaults to whatever the configurator last saved.'),
+        # Empty = "whatever the configurator last saved". _drop_unset() keeps
+        # unset args out of the xacro mappings so mod101_config.xacro wins.
+        DeclareLaunchArgument('shoulder_ext_length', default_value='',
                               description='upper-arm 2020 rail length, m'),
-        DeclareLaunchArgument('elbow_ext_length', default_value='0.098',
+        DeclareLaunchArgument('elbow_ext_length', default_value='',
                               description='forearm 2020 rail length, m'),
-        DeclareLaunchArgument('shoulder_mount', default_value='small',
+        DeclareLaunchArgument('shoulder_mount', default_value='',
                               description='shoulder servo mount: small | big'),
-        DeclareLaunchArgument('elbow_mount', default_value='small',
+        DeclareLaunchArgument('elbow_mount', default_value='',
                               description='elbow servo mount: small | big'),
         DeclareLaunchArgument(
             'spawn_controllers', default_value='true',

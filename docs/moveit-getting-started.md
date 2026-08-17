@@ -23,7 +23,7 @@ why. Installing MoveIt without it gives you a stack that fails every goal.
 ## 2. Build
 
 ```bash
-cd ~/Work/mod101
+cd ~/robots/mod101
 colcon build --packages-select \
   mod101_description mod101_control mod101_gazebo mod101_moveit_config \
   mod101_tool_parallel mod101_tool_pincopen mod101_tool_jaws mod101_tool_none
@@ -54,7 +54,7 @@ pipeline all loaded. If you don't get it, jump to
 In a second terminal:
 
 ```bash
-source ~/Work/mod101/install/setup.bash
+source ~/robots/mod101/install/setup.bash
 python3 $(ros2 pkg prefix --share mod101_moveit_config)/test/moveit_smoke.py
 ```
 
@@ -102,27 +102,23 @@ The last one fails, as it should.
 
 **mod101 plans to positions, not poses.**
 
-Five joints: base yaw, then shoulder, elbow and wrist-tilt — which are all
-pitch joints about *parallel* axes — then wrist roll. Add that up and the arm
-can put the tool tip anywhere in its envelope, and pitch the tool up or down.
-What it cannot do is aim the tool sideways independently: the direction it
-points around vertical is whatever `joint_base` is set to.
+Its three pitch joints are parallel, so the arm can put the tool tip anywhere in
+its envelope and pitch it up or down — but it cannot aim the tool sideways
+independently. That direction is whatever `joint_base` is set to. A full 6-DOF
+pose goal is unsatisfiable except by luck.
 
-So a full 6-DOF pose goal is unsatisfiable except by luck. That's geometry, not
-configuration — no solver setting fixes it.
+| In your code | Result |
+|---|---|
+| `set_position_target(x, y, z)` | works |
+| joint-space goals | always work |
+| `set_pose_target(pose)` | usually fails |
 
-That's why `move_to_position.py` takes `x y z` and no orientation, and why
-`config/kinematics.yaml` runs pick_ik with `rotation_scale: 0.0`. In your own
-code the equivalent rule is:
+That's why `move_to_position.py` takes `x y z` and no orientation. It is geometry,
+not configuration — no solver setting fixes it, though `rotation_scale` can turn
+orientation into a soft preference.
 
-- `set_position_target(x, y, z)` — works
-- `set_pose_target(pose)` — will usually fail
-- joint-space goals — always work
-
-If you need to *bias* the tool's approach direction (say, roughly downward at a
-table), raise `rotation_scale` to 0.2–0.5 in `config/kinematics.yaml`. That
-makes orientation a soft preference the solver trades against position. Setting
-it to 1.0 puts you back to failing every goal.
+**Why, and how to bias the approach direction:**
+[moveit.md § The 5-DOF problem](moveit.md#the-5-dof-problem--read-this-first).
 
 ## 6. Now with physics and a GUI
 
@@ -147,22 +143,28 @@ the MotionPlanning panel's group dropdown.
 
 ## 7. If you changed the arm's dimensions
 
-The configurator writes rail lengths and mount sizes into `mod101.xacro`, and
-those move link geometry around — which changes which link pairs can actually
-collide. The self-collision matrix is generated, not hand-written, so
-**regenerate it after any build change**:
+Rail lengths and mount sizes move link geometry around, which changes which link
+pairs can actually collide. The self-collision matrix is generated, not
+hand-written, so **regenerate it after any build change**:
 
 ```bash
-python3 tools/gen_collision_matrix.py
-colcon build --packages-select mod101_moveit_config
-source install/setup.bash
+python3 tools/gen_collision_matrix.py --trials 1000000
 ```
 
 Skip this and you get one of two bad outcomes: pairs disabled that shouldn't be
 (the planner drives the forearm through the base), or pairs enabled that
 shouldn't be (everything reports self-collision and nothing plans).
 
+The configurator's Save does this for you — for mod101 only. If you have a robot
+that embeds the arm, it runs its own sync step. Full rules, including what
+*doesn't* regenerate itself:
+[moveit.md § When you change the build](moveit.md#when-you-change-the-build).
+
 ## Troubleshooting
+
+The two you are most likely to hit first are below. The full table — including
+the failures that look identical but aren't — is in
+[moveit.md § When planning fails](moveit.md#when-planning-fails).
 
 **Every goal fails with `NO_IK_SOLUTION` (-31) even for close points.**
 `pick_ik` probably isn't installed, or `kinematics.yaml` got reverted to KDL.

@@ -14,7 +14,7 @@ not carried over — that's base101 chassis hardware, not ST-series servos.
 
 ```bash
 pip install st3215                 # once
-python3 configurator/server.py     # http://localhost:8000/calibrate.html
+python3 configurator/server.py     # http://localhost:8001/calibrate.html
 ```
 
 Your user needs read/write on the serial device — on Debian/Ubuntu that means

@@ -4,12 +4,18 @@
 Serves configurator/ as static files. Endpoints:
   GET  /load              - read the four build args (shoulder/elbow rail
                             length + shoulder/elbow mount) from
-                            src/mod101_description/urdf/mod101.xacro
-  POST /save              - write those four values back in-place
+                            src/mod101_description/urdf/mod101_config.xacro
+  POST /save              - write those four values back in-place (fast; does
+                            NOT rebuild the collision matrices)
   GET  /masses            - return src/mod101_description/link_masses.json
                             (Part C output) so the page uses real printed masses
   GET  /tool, POST /tool  - active end-effector package + discovery
-  GET  /collisions        - status of the background self-collision regen
+  GET  /collisions        - self-collision matrix status: running, last result,
+                            and `stale` (do the generated matrices still match
+                            the args on disk?). mod101 only; consumers run their
+                            own — see DOWNSTREAM_NOTE
+  POST /collisions/regen  - rebuild the matrices. Slow (minutes at
+                            REGEN_TRIALS); its own button in the UI
   GET  /urdf              - run `xacro` and return the expanded URDF, with
                             mesh URIs rewritten to /pkg/<pkg>/meshes/<file>
   GET  /pkg/<pkg>/meshes/<file> - serve binary mesh files from any package
@@ -175,20 +181,29 @@ def write_props(shoulder_m: float, elbow_m: float,
 
 
 # ---------------------------------------------------------------------------
-# Downstream self-collision matrices
+# Self-collision matrix
 # ---------------------------------------------------------------------------
 # Changing a rail length or a mount moves the arm's reach, which changes which
-# link pairs can never touch. Both MoveIt configs derive their matrices from the
-# build params, so a Save invalidates them and they are regenerated here.
+# link pairs can never touch. mod101's own matrix derives from the build params,
+# so a Save invalidates it — but does NOT rebuild it. Writing the xacro is
+# instant and rebuilding takes minutes, so they are separate actions with
+# separate buttons, and `stale` tells the UI when the second one is owed.
 #
-# mod101 stays standalone: base101 is optional and entirely absent by default.
-# If it isn't there, isn't built, or its generator fails, we log and carry on —
-# the configurator must never require a downstream consumer to work.
+# THIS REGENERATES mod101 AND NOTHING ELSE. It used to reach into a base101
+# workspace as well, which inverted the dependency: the arm knew about a robot
+# that embeds it. A consumer can live anywhere, be absent, be unbuilt, or not be
+# base101 at all — so each consumer owns its own regeneration and the
+# configurator only tells you to run it. See DOWNSTREAM_NOTE.
 REGEN_TIMEOUT = 900
 
-# Point BASE101_WS at a base101 workspace to keep its matrices in step too.
-BASE101_WS = pathlib.Path(
-    os.environ.get('BASE101_WS', pathlib.Path.home() / 'robots' / 'base101'))
+# Surfaced in /save, /tool and /collisions responses so the page can tell you
+# what still needs doing. A pointer, deliberately not an integration.
+DOWNSTREAM_NOTE = (
+    'Robots that embed the mod101_arm macro keep their own self-collision '
+    'matrices and are NOT regenerated from here. Re-run that workspace\'s sync '
+    'script after this change. For base101 that is '
+    '`base101_arm_moveit_config/scripts/sync_arm_change.sh`.'
+)
 
 _regen_lock = threading.Lock()
 _regen_state = {'running': False, 'last': None}
@@ -196,15 +211,18 @@ _regen_state = {'running': False, 'last': None}
 
 def _regen_targets():
     """(label, script, workspace-setup) for each matrix generator that exists."""
-    out = [('mod101', ROOT / 'tools' / 'gen_collision_matrix.py', ROOT)]
-    b = (BASE101_WS / 'src' / 'base101_arm' / 'base101_arm_moveit_config'
-         / 'scripts' / 'gen_collision_matrix.py')
-    if b.is_file():
-        out.append(('base101', b, BASE101_WS))
-    return out
+    return [('mod101', ROOT / 'tools' / 'gen_collision_matrix.py', ROOT)]
 
 
-def _regen_worker():
+# The configurator asks for a thorough run, not the generator's quick default.
+# See MATRIX_TRIALS in gen_collision_matrix.py's docstring for the convergence
+# data: at 10,000 the matrix wrongly disables pairs that really can collide,
+# which is the dangerous direction. A Save is rare and now has its own button,
+# so it can afford to be slow and right.
+REGEN_TRIALS = 1_000_000
+
+
+def _regen_worker(trials=REGEN_TRIALS):
     results = {}
     for label, script, ws in _regen_targets():
         setup = ws / 'install' / 'setup.bash'
@@ -212,11 +230,9 @@ def _regen_worker():
             results[label] = 'skipped: workspace not built'
             print(f'[collisions] {label}: {results[label]}')
             continue
-        # A login shell so the generator sees ROS and both overlays; base101
-        # needs the mod101 underlay sourced before its own.
+        # A login shell so the generator sees ROS and this workspace's overlay.
         cmd = (f'source /opt/ros/$ROS_DISTRO/setup.bash && '
-               f'source {ROOT}/install/setup.bash && '
-               f'source {setup} && python3 {script}')
+               f'source {setup} && python3 {script} --trials {trials}')
         try:
             proc = subprocess.run(['bash', '-lc', cmd], capture_output=True,
                                   text=True, timeout=REGEN_TIMEOUT)
@@ -234,20 +250,56 @@ def _regen_worker():
         _regen_state['last'] = results
 
 
-def regen_collisions_async():
-    """Kick off regeneration unless one is already in flight."""
+MATRIX_DIR = SRC / 'mod101_moveit_config' / 'config' / 'collisions'
+STAMP_RE = re.compile(
+    r'shoulder_ext_length=(?P<sl>[\d.]+)\s+elbow_ext_length=(?P<el>[\d.]+)\s+'
+    r'shoulder_mount=(?P<sm>\w+)\s+elbow_mount=(?P<em>\w+)')
+
+
+def matrices_stale() -> bool | None:
+    """Do the generated matrices still match the args on disk?
+
+    Read from the generated files' own build stamp rather than remembering
+    whether a Save happened, so it survives a server restart and is still right
+    if someone edits the xacro by hand. None = can't tell (no matrices yet).
+    """
+    try:
+        cur = read_props()
+    except Exception:
+        return None
+    for f in sorted(MATRIX_DIR.glob('*.srdf.xacro')):
+        m = STAMP_RE.search(f.read_text())
+        if not m:
+            return None
+        if (abs(float(m['sl']) - cur['shoulder']) > 1e-6
+                or abs(float(m['el']) - cur['elbow']) > 1e-6
+                or m['sm'] != cur['shoulder_mount']
+                or m['em'] != cur['elbow_mount']):
+            return True
+    return False
+
+
+def regen_collisions_async(trials: int = REGEN_TRIALS):
+    """Kick off regeneration of mod101's own matrices unless one is in flight.
+
+    Consumers are never touched — `downstream` is what you have to run yourself.
+    """
     with _regen_lock:
         if _regen_state['running']:
-            return {'running': True, 'note': 'already regenerating'}
+            return {'running': True, 'note': 'already regenerating',
+                    'downstream': DOWNSTREAM_NOTE, 'trials': trials}
         _regen_state['running'] = True
-    threading.Thread(target=_regen_worker, daemon=True).start()
+    threading.Thread(target=_regen_worker, args=(trials,), daemon=True).start()
     return {'running': True,
-            'targets': [label for label, _, _ in _regen_targets()]}
+            'targets': [label for label, _, _ in _regen_targets()],
+            'downstream': DOWNSTREAM_NOTE, 'trials': trials}
 
 
 def regen_status():
     with _regen_lock:
-        return dict(_regen_state)
+        state = dict(_regen_state)
+    return {**state, 'downstream': DOWNSTREAM_NOTE,
+            'stale': matrices_stale(), 'trials': REGEN_TRIALS}
 
 
 def read_masses() -> dict:
@@ -255,51 +307,6 @@ def read_masses() -> dict:
     if not MASSES.is_file():
         return {'masses': None}
     return {'masses': json.loads(MASSES.read_text())}
-
-
-# Big-module fine-alignment nudge (xyz, m), one per swappable big module. Each
-# module xacro carries three property values (e.g. snx/sny/snz) that shift all
-# its meshes together. Backend-only — there is no UI for these; they're driven
-# by hand or over HTTP. Should stay zero for same-frame exports: see
-# docs/configurator.md, "The nudge endpoints".
-MODULES_DIR = DESC / 'urdf' / 'modules'
-NUDGE = {
-    'shoulder': {'file': MODULES_DIR / 'shoulder_big.xacro', 'props': ('snx', 'sny', 'snz')},
-    'elbow':    {'file': MODULES_DIR / 'elbow_big.xacro',    'props': ('enx', 'eny', 'enz')},
-}
-
-
-def _nudge_re(prop: str) -> re.Pattern:
-    return re.compile(rf'(<xacro:property\s+name="{prop}"\s+value=")(?P<val>[^"]+)(")')
-
-
-def read_nudge() -> dict:
-    out = {}
-    for mod, spec in NUDGE.items():
-        text = spec['file'].read_text()
-        vals = []
-        for p in spec['props']:
-            m = _nudge_re(p).search(text)
-            vals.append(float(m['val']) if m else 0.0)
-        out[mod] = vals
-    return out
-
-
-def write_nudge(module: str, xyz) -> None:
-    if module not in NUDGE:
-        raise ValueError(f'unknown module {module!r}; expected {list(NUDGE)}')
-    if len(xyz) != 3:
-        raise ValueError('nudge needs [x, y, z]')
-    for v in xyz:
-        if not (-0.1 <= float(v) <= 0.1):
-            raise ValueError(f'nudge {v} m out of range [-0.1, 0.1]')
-    spec = NUDGE[module]
-    text = spec['file'].read_text()
-    for p, v in zip(spec['props'], xyz):
-        text, n = _nudge_re(p).subn(lambda m: f'{m.group(1)}{float(v):.6f}{m.group(3)}', text)
-        if n != 1:
-            raise RuntimeError(f'expected 1 replacement for {p}, did {n}')
-    spec['file'].write_text(text)
 
 
 def read_calibration() -> dict:
@@ -453,10 +460,6 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             try:    return self._json(200, read_masses())
             except Exception as e: return self._json(500, {'error': str(e)})
 
-        if path.rstrip('/') == '/nudge':
-            try:    return self._json(200, read_nudge())
-            except Exception as e: return self._json(500, {'error': str(e)})
-
         if path.rstrip('/') == '/collisions':
             # Regeneration is fire-and-forget from /save and /tool; this lets
             # the page show progress without blocking the save.
@@ -527,24 +530,31 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     float(data['shoulder']), float(data['elbow']),
                     str(data.get('shoulder_mount', cur['shoulder_mount'])),
                     str(data.get('elbow_mount', cur['elbow_mount'])))
+                # Deliberately does NOT regenerate. Writing the xacro is
+                # instant; rebuilding the matrices takes minutes at
+                # REGEN_TRIALS. They are separate buttons so the cost is
+                # visible instead of hiding inside a Save that looks cheap.
                 return self._json(200, {'ok': True, **read_props(),
-                                        'collisions': regen_collisions_async()})
-            except Exception as e:
-                return self._json(400, {'error': str(e)})
-
-        if path == '/nudge':
-            try:
-                write_nudge(str(data['module']), [float(v) for v in data['xyz']])
-                return self._json(200, {'ok': True, **read_nudge()})
+                                        'collisions': regen_status()})
             except Exception as e:
                 return self._json(400, {'error': str(e)})
 
         if path == '/tool':
             try:
                 write_tool(str(data['tool']))
+                # No regeneration: the generator writes one matrix per tool on
+                # every run, all four stamped with the current rails/mounts.
+                # Switching tool selects an already-current file.
                 return self._json(200, {'ok': True, 'tool': read_tool(),
                                         'available': list_tools(),
-                                        'collisions': regen_collisions_async()})
+                                        'collisions': regen_status()})
+            except Exception as e:
+                return self._json(400, {'error': str(e)})
+
+        if path == '/collisions/regen':
+            try:
+                trials = int(data.get('trials', REGEN_TRIALS))
+                return self._json(200, regen_collisions_async(trials))
             except Exception as e:
                 return self._json(400, {'error': str(e)})
 
@@ -606,11 +616,18 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         return self._json(404, {'error': f'unknown bus endpoint {path}'})
 
 
+class Server(socketserver.TCPServer):
+    # Without SO_REUSEADDR the listening socket sits in TIME_WAIT for ~60 s
+    # after a Ctrl-C, and an immediate restart dies with "Address already in
+    # use" — which reads like a second server is running when none is.
+    allow_reuse_address = True
+
+
 def main() -> None:
     for required in (XACRO, CONFIG):
         if not required.exists():
             sys.exit(f'{required} not found')
-    with socketserver.TCPServer(('', PORT), Handler) as httpd:
+    with Server(('', PORT), Handler) as httpd:
         print(f'mod101 configurator: http://localhost:{PORT}/')
         print(f'editing  {CONFIG}')
         print(f'tools    {list_tools()}')
