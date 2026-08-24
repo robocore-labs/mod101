@@ -26,8 +26,8 @@
 
 <!-- Build parameters: two rail lengths (m) + two servo-mount variants
      (small = STS3215/STS3250, big = ST3120). -->
-<xacro:arg name="shoulder_ext_length" default="0.2400"/>
-<xacro:arg name="elbow_ext_length"    default="0.2800"/>
+<xacro:arg name="shoulder_ext_length" default="0.1400"/>
+<xacro:arg name="elbow_ext_length"    default="0.1400"/>
 <xacro:arg name="shoulder_mount"      default="small"/>
 <xacro:arg name="elbow_mount"         default="small"/>
 
