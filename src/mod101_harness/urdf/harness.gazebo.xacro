@@ -1,0 +1,75 @@
+<?xml version="1.0" ?>
+<!--
+  Gazebo extensions for the harness body: per-link visual/friction, plus the
+  depth camera (RGBD) sensor on the RealSense.
+
+  Pattern mirrors mod101_description/urdf/mod101.gazebo (gz_link helper + the
+  wrist-camera <sensor> block).
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+<xacro:macro name="harness_gazebo" params="prefix:=''">
+
+  <xacro:property name="silver_color" value="Gazebo/Silver"/>
+
+  <xacro:macro name="hz_link" params="name">
+    <gazebo reference="${prefix}${name}">
+      <material>${silver_color}</material>
+      <mu1>0.2</mu1>
+      <mu2>0.2</mu2>
+      <self_collide>true</self_collide>
+    </gazebo>
+  </xacro:macro>
+
+  <gazebo reference="${prefix}base_link">
+    <material>${silver_color}</material>
+    <mu1>0.2</mu1>
+    <mu2>0.2</mu2>
+    <self_collide>true</self_collide>
+    <gravity>true</gravity>
+  </gazebo>
+
+  <xacro:hz_link name="yaw_bracket_1"/>
+  <xacro:hz_link name="yaw_servo_1"/>
+  <xacro:hz_link name="yaw_mount_1"/>
+  <xacro:hz_link name="pitch_servo_1"/>
+  <xacro:hz_link name="pitch_link__1"/>
+  <xacro:hz_link name="mod_101_adapter_1"/>
+  <xacro:hz_link name="tower_1"/>
+  <xacro:hz_link name="back_1"/>
+
+  <!-- Depth camera. rgbd_camera publishes color image, depth image, camera_info
+       and a registered point cloud under <topic>. Stamp with the optical frame
+       so ROS consumers see REP-103 axes; the sensor still looks along
+       realsense_1 +X, which is where Gazebo aims it. If the viewer shows the
+       lens pointing along another axis, add a <pose> rotation on the sensor. -->
+  <gazebo reference="${prefix}realsense_1">
+    <material>${silver_color}</material>
+    <mu1>0.2</mu1>
+    <mu2>0.2</mu2>
+    <self_collide>true</self_collide>
+
+    <sensor name="${prefix}depth_camera" type="rgbd_camera">
+      <topic>harness/depth_camera</topic>
+      <gz_frame_id>${prefix}realsense_optical_frame</gz_frame_id>
+      <update_rate>30</update_rate>
+      <always_on>1</always_on>
+      <visualize>true</visualize>
+      <camera>
+        <horizontal_fov>1.047</horizontal_fov> <!-- ~60 deg -->
+        <image>
+          <width>640</width>
+          <height>480</height>
+          <format>R8G8B8</format>
+        </image>
+        <clip>
+          <near>0.05</near>
+          <far>8.0</far>
+        </clip>
+      </camera>
+    </sensor>
+  </gazebo>
+
+</xacro:macro>
+
+</robot>

@@ -1,0 +1,306 @@
+<?xml version="1.0" ?>
+<robot name="mod101_harness" xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+<!--
+  RAW CAD EXPORT, kept verbatim (harness alone + a stand-in mod_101_base_1 that
+  marks where the arm bolts on). NOT built by anything: the live description is
+  the ported urdf/harness_body.xacro. Kept only as the re-export baseline and to
+  document the untouched joint origins/axes. See urdf/harness_body.xacro header.
+-->
+<xacro:include filename="$(find mod101_harness)/export/materials.xacro" />
+<xacro:include filename="$(find mod101_harness)/export/mod101_harness.raw.ros2control" />
+<xacro:include filename="$(find mod101_harness)/export/mod101_harness.raw.gazebo" />
+<link name="base_link">
+  <inertial>
+    <origin xyz="0.7183668847290359 -0.1898371852815478 -0.018503159635172448" rpy="0 0 0"/>
+    <mass value="0.4359046662837625"/>
+    <inertia ixx="3.7e-05" iyy="0.003738" izz="0.003738" ixy="-0.0" iyz="-0.0" ixz="0.0"/>
+  </inertial>
+  <visual>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="file://$(find mod101_harness)/meshes/base_link.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+    <material name="silver"/>
+  </visual>
+  <collision>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="file://$(find mod101_harness)/meshes/base_link.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+  </collision>
+</link>
+
+<link name="yaw_bracket_1">
+  <inertial>
+    <origin xyz="-0.24048767950999106 0.02833424258398279 -0.10053283234598204" rpy="0 0 0"/>
+    <mass value="0.01768001501876205"/>
+    <inertia ixx="4e-06" iyy="3e-06" izz="1e-06" ixy="-0.0" iyz="0.0" ixz="0.0"/>
+  </inertial>
+  <visual>
+    <origin xyz="-1.116019 0.218172 -0.374755" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="file://$(find mod101_harness)/meshes/yaw_bracket_1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+    <material name="silver"/>
+  </visual>
+  <collision>
+    <origin xyz="-1.116019 0.218172 -0.374755" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="file://$(find mod101_harness)/meshes/yaw_bracket_1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+  </collision>
+</link>
+
+<link name="yaw_servo_1">
+  <inertial>
+    <origin xyz="-0.01626256682350069 -0.010250178675302313 -0.015852716380520993" rpy="0 0 0"/>
+    <mass value="0.2781207151088369"/>
+    <inertia ixx="3.8e-05" iyy="7.1e-05" izz="6e-05" ixy="-0.0" iyz="0.0" ixz="1e-06"/>
+  </inertial>
+  <visual>
+    <origin xyz="-0.865117 0.179587 -0.289497" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="file://$(find mod101_harness)/meshes/yaw_servo_1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+    <material name="silver"/>
+  </visual>
+  <collision>
+    <origin xyz="-0.865117 0.179587 -0.289497" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="file://$(find mod101_harness)/meshes/yaw_servo_1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+  </collision>
+</link>
+
+<link name="yaw_mount_1">
+  <inertial>
+    <origin xyz="-0.0008752813552826977 3.643010852427686e-07 0.002835565808725571" rpy="0 0 0"/>
+    <mass value="0.01768001501876205"/>
+    <inertia ixx="1e-06" iyy="3e-06" izz="4e-06" ixy="0.0" iyz="-0.0" ixz="0.0"/>
+  </inertial>
+  <visual>
+    <origin xyz="-0.836117 0.189837 -0.292697" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="file://$(find mod101_harness)/meshes/yaw_mount_1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+    <material name="silver"/>
+  </visual>
+  <collision>
+    <origin xyz="-0.836117 0.189837 -0.292697" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="file://$(find mod101_harness)/meshes/yaw_mount_1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+  </collision>
+</link>
+
+<link name="pitch_servo_1">
+  <inertial>
+    <origin xyz="0.015852602679255368 -0.010250214439629785 0.016262453122235343" rpy="0 0 0"/>
+    <mass value="0.2781207151088369"/>
+    <inertia ixx="6e-05" iyy="7.1e-05" izz="3.8e-05" ixy="0.0" iyz="-0.0" ixz="1e-06"/>
+  </inertial>
+  <visual>
+    <origin xyz="-0.819967 0.179587 -0.305947" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="file://$(find mod101_harness)/meshes/pitch_servo_1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+    <material name="silver"/>
+  </visual>
+  <collision>
+    <origin xyz="-0.819967 0.179587 -0.305947" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="file://$(find mod101_harness)/meshes/pitch_servo_1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+  </collision>
+</link>
+
+<link name="pitch_link__1">
+  <inertial>
+    <origin xyz="-0.018217940621004014 -0.00292124752604056 0.018998095012473626" rpy="0 0 0"/>
+    <mass value="0.14731389111767698"/>
+    <inertia ixx="2.7e-05" iyy="7.5e-05" izz="5.8e-05" ixy="-0.0" iyz="3e-06" ixz="0.0"/>
+  </inertial>
+  <visual>
+    <origin xyz="-0.854017 0.189837 -0.334947" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="file://$(find mod101_harness)/meshes/pitch_link__1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+    <material name="silver"/>
+  </visual>
+  <collision>
+    <origin xyz="-0.854017 0.189837 -0.334947" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="file://$(find mod101_harness)/meshes/pitch_link__1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+  </collision>
+</link>
+
+<link name="realsense_1">
+  <inertial>
+    <origin xyz="-0.021091708113011975 -0.011657624516847098 -2.35569412897485e-05" rpy="0 0 0"/>
+    <mass value="0.0720014321602746"/>
+    <inertia ixx="7e-06" iyy="4.6e-05" izz="4.7e-05" ixy="-0.0" iyz="-0.0" ixz="0.0"/>
+  </inertial>
+  <visual>
+    <origin xyz="-0.858317 0.200337 -0.367343" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="file://$(find mod101_harness)/meshes/realsense_1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+    <material name="silver"/>
+  </visual>
+  <collision>
+    <origin xyz="-0.858317 0.200337 -0.367343" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="file://$(find mod101_harness)/meshes/realsense_1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+  </collision>
+</link>
+
+<link name="mod_101_adapter_1">
+  <inertial>
+    <origin xyz="0.3290322101958174 -0.013258210571603646 0.07482693375623085" rpy="0 0 0"/>
+    <mass value="0.5806071982549674"/>
+    <inertia ixx="0.000181" iyy="0.000387" izz="0.000507" ixy="0.0" iyz="0.0" ixz="1e-06"/>
+  </inertial>
+  <visual>
+    <origin xyz="-0.320033 0.316579 0.090851" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="file://$(find mod101_harness)/meshes/mod_101_adapter_1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+    <material name="silver"/>
+  </visual>
+  <collision>
+    <origin xyz="-0.320033 0.316579 0.090851" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="file://$(find mod101_harness)/meshes/mod_101_adapter_1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+  </collision>
+</link>
+
+<link name="mod_101_base_1">
+  <inertial>
+    <origin xyz="-0.03163848079424014 0.02870220773748383 0.009896401508084707" rpy="0 0 0"/>
+    <mass value="0.8668211242819504"/>
+    <inertia ixx="0.000946" iyy="0.001015" izz="0.001687" ixy="-4e-06" iyz="-0.000152" ixz="-3e-06"/>
+  </inertial>
+  <visual>
+    <origin xyz="-0.677817 0.349837 0.005103" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="file://$(find mod101_harness)/meshes/mod_101_base_1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+    <material name="silver"/>
+  </visual>
+  <collision>
+    <origin xyz="-0.677817 0.349837 0.005103" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="file://$(find mod101_harness)/meshes/mod_101_base_1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+  </collision>
+</link>
+
+<link name="tower_1">
+  <inertial>
+    <origin xyz="0.010000022826068933 0.009999792166619115 0.15999970226778837" rpy="0 0 0"/>
+    <mass value="0.4359046662837625"/>
+    <inertia ixx="0.003738" iyy="0.003738" izz="3.7e-05" ixy="0.0" iyz="0.0" ixz="0.0"/>
+  </inertial>
+  <visual>
+    <origin xyz="-0.878367 0.199837 0.028503" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="file://$(find mod101_harness)/meshes/tower_1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+    <material name="silver"/>
+  </visual>
+  <collision>
+    <origin xyz="-0.878367 0.199837 0.028503" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="file://$(find mod101_harness)/meshes/tower_1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+  </collision>
+</link>
+
+<link name="back_1">
+  <inertial>
+    <origin xyz="-0.2932579855783596 -0.44833419350146253 0.07234785241212485" rpy="0 0 0"/>
+    <mass value="0.2451971061160035"/>
+    <inertia ixx="0.000672" iyy="2.1e-05" izz="0.000672" ixy="0.0" iyz="0.0" ixz="-0.0"/>
+  </inertial>
+  <visual>
+    <origin xyz="-0.941625 -0.158497 0.090851" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="file://$(find mod101_harness)/meshes/back_1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+    <material name="silver"/>
+  </visual>
+  <collision>
+    <origin xyz="-0.941625 -0.158497 0.090851" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="file://$(find mod101_harness)/meshes/back_1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+  </collision>
+</link>
+
+<joint name="Rigid 12" type="fixed">
+  <origin xyz="0.237652 -0.018335 0.403258" rpy="0 0 0"/>
+  <parent link="tower_1"/>
+  <child link="yaw_bracket_1"/>
+</joint>
+
+<joint name="Rigid 17" type="fixed">
+  <origin xyz="-0.250902 0.038585 -0.085258" rpy="0 0 0"/>
+  <parent link="yaw_bracket_1"/>
+  <child link="yaw_servo_1"/>
+</joint>
+
+<joint name="Revolute 18" type="continuous">
+  <origin xyz="-0.029 -0.01025 0.0032" rpy="0 0 0"/>
+  <parent link="yaw_servo_1"/>
+  <child link="yaw_mount_1"/>
+  <axis xyz="0.0 -0.0 1.0"/>
+</joint>
+
+<joint name="Rigid 19" type="fixed">
+  <origin xyz="-0.01615 0.01025 0.01325" rpy="0 0 0"/>
+  <parent link="yaw_mount_1"/>
+  <child link="pitch_servo_1"/>
+</joint>
+
+<joint name="Revolute 20" type="continuous">
+  <origin xyz="0.03405 -0.01025 0.029" rpy="0 0 0"/>
+  <parent link="pitch_servo_1"/>
+  <child link="pitch_link__1"/>
+  <axis xyz="-1.0 0.0 -0.0"/>
+</joint>
+
+<joint name="Rigid 21" type="fixed">
+  <origin xyz="0.0043 -0.0105 0.032396" rpy="0 0 0"/>
+  <parent link="pitch_link__1"/>
+  <child link="realsense_1"/>
+</joint>
+
+<joint name="Rigid 28" type="fixed">
+  <origin xyz="-0.621592 -0.475076 0.0" rpy="0 0 0"/>
+  <parent link="back_1"/>
+  <child link="mod_101_adapter_1"/>
+</joint>
+
+<joint name="Rigid 29" type="fixed">
+  <origin xyz="0.357784 -0.033258 0.085748" rpy="0 0 0"/>
+  <parent link="mod_101_adapter_1"/>
+  <child link="mod_101_base_1"/>
+</joint>
+
+<joint name="Rigid 30" type="fixed">
+  <origin xyz="0.878367 -0.199837 -0.028503" rpy="0 0 0"/>
+  <parent link="base_link"/>
+  <child link="tower_1"/>
+</joint>
+
+<joint name="Rigid 31" type="fixed">
+  <origin xyz="0.941625 0.158497 -0.090851" rpy="0 0 0"/>
+  <parent link="base_link"/>
+  <child link="back_1"/>
+</joint>
+
+</robot>

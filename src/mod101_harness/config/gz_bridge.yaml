@@ -1,0 +1,24 @@
+# ros_gz parameter_bridge topics. /clock is bridged by a dedicated node in the
+# launch (never here — two publishers make sim time step backwards and break
+# MoveIt's TF). Colour + depth image streams go through the ros_gz_image
+# image_bridge in the launch; this file carries the non-image sensor topics.
+
+# --- harness RGBD depth camera (sensor <topic> = harness/depth_camera) ---
+- ros_topic_name: "/harness/depth_camera/camera_info"
+  gz_topic_name: "/harness/depth_camera/camera_info"
+  ros_type_name: "sensor_msgs/msg/CameraInfo"
+  gz_type_name: "gz.msgs.CameraInfo"
+  direction: GZ_TO_ROS
+
+- ros_topic_name: "/harness/depth_camera/points"
+  gz_topic_name: "/harness/depth_camera/points"
+  ros_type_name: "sensor_msgs/msg/PointCloud2"
+  gz_type_name: "gz.msgs.PointCloudPacked"
+  direction: GZ_TO_ROS
+
+# --- mod101 wrist camera info (image via image_bridge in the launch) ---
+- ros_topic_name: "/wrist_camera/camera_info"
+  gz_topic_name: "/wrist_camera/camera_info"
+  ros_type_name: "sensor_msgs/msg/CameraInfo"
+  gz_type_name: "gz.msgs.CameraInfo"
+  direction: GZ_TO_ROS

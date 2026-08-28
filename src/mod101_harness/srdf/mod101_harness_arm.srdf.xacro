@@ -1,0 +1,47 @@
+<?xml version="1.0"?>
+<!--
+  MoveIt semantics for the mod101 arm on the harness.
+
+  The arm's own semantics come from the reusable `mod101_arm_srdf` macro
+  (mod101_moveit_config) with NO prefix, so the arm groups/joints/links are
+  exactly `arm`, `joint_*`, `base_link`... - every mod101_moveit_config and
+  mod101_tool_* config file applies unchanged. This file adds the world anchor,
+  the harness pan/tilt group, and the arm<->harness adjacency disables.
+
+  Args must match whatever mod101_harness_arm.xacro was expanded with.
+-->
+<robot name="mod101_harness_arm" xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <xacro:arg name="tool" default="jaws"/>
+
+  <xacro:include filename="$(find mod101_moveit_config)/srdf/mod101_arm_srdf.xacro"/>
+
+  <!-- Planning-scene anchor. mod101_harness_arm.xacro provides `world` and fixes
+       the harness base_link to it. -->
+  <virtual_joint name="virtual_joint" type="fixed" parent_frame="world" child_link="world"/>
+
+  <!-- 5-DOF arm: group `arm`, chain base_link -> wrist_flange, plus the active
+       tool's semantics and generated self-collision matrix. -->
+  <xacro:mod101_arm_srdf prefix="" tool="$(arg tool)"/>
+
+  <!-- ============================ pan/tilt head =========================== -->
+  <group name="pan_tilt">
+    <joint name="hn_pan_joint"/>
+    <joint name="hn_tilt_joint"/>
+  </group>
+
+  <group_state name="centred" group="pan_tilt">
+    <joint name="hn_pan_joint"  value="0.0"/>
+    <joint name="hn_tilt_joint" value="0.0"/>
+  </group_state>
+
+  <!-- ===================== arm <-> harness adjacencies ==================== -->
+  <!-- The arm base bolts straight onto the adapter; the tower/back stringers
+       run right beside it. These pairs never collide in practice. -->
+  <disable_collisions link1="base_link"     link2="hn_mod_101_adapter_1" reason="Adjacent"/>
+  <disable_collisions link1="base_link"     link2="hn_back_1"            reason="Adjacent"/>
+  <disable_collisions link1="base_link"     link2="hn_tower_1"           reason="Never"/>
+  <disable_collisions link1="servo_base_1"  link2="hn_mod_101_adapter_1" reason="Adjacent"/>
+  <disable_collisions link1="servo_base_1"  link2="hn_back_1"            reason="Never"/>
+
+</robot>

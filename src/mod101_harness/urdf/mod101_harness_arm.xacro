@@ -1,0 +1,150 @@
+<?xml version="1.0" ?>
+<!--
+  mod101 arm standing on the camera-tower harness.
+
+  This is a thin OVERLAY over mod101 - it adds harness structure, an actuated
+  pan/tilt head and a depth camera, and reuses everything else:
+    - the arm is the reusable `mod101_arm` macro with NO prefix, so its links,
+      joints and (sim) ros2_control block are byte-identical to standalone
+      mod101 - mod101_control's and mod101_moveit_config's configs apply as-is;
+    - the only NEW actuated joints are `hn_pan_joint` / `hn_tilt_joint`; their
+      ros2_control interface is the small inline block below and their one
+      controller is config/pan_tilt_controllers.yaml. No other control config
+      lives in this package.
+
+  Build parameters (tool, rail lengths, mount sizes) come from
+  mod101_description/urdf/mod101_config.xacro (the web configurator owns it).
+
+  use_sim=true  -> Gazebo: gazebo extensions + GazeboSimSystem ros2_control +
+                   the gz_ros2_control plugin.
+  use_sim=false -> hardware: a single placeholder <ros2_control> system for the
+                   arm + pan/tilt (swap the plugin - see mod101_control/urdf/
+                   mod101.hardware.xacro for the same pattern on the bare arm).
+-->
+<robot name="mod101_harness_arm" xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <xacro:arg name="use_sim" default="true"/>
+
+  <!-- tool + the four build args (shoulder_ext_length, elbow_ext_length,
+       shoulder_mount, elbow_mount). -->
+  <xacro:include filename="$(find mod101_description)/urdf/mod101_config.xacro"/>
+
+  <!-- mod101 palette also supplies `silver`, which the harness body uses. -->
+  <xacro:include filename="$(find mod101_description)/urdf/materials.xacro"/>
+  <xacro:include filename="$(find mod101_description)/urdf/mod101_macro.xacro"/>
+
+  <xacro:include filename="$(find mod101_harness)/urdf/harness_body.xacro"/>
+  <xacro:include filename="$(find mod101_harness)/urdf/harness.gazebo.xacro"/>
+
+  <xacro:property name="hp" value="hn_"/>   <!-- harness link/joint prefix -->
+
+  <!-- =============================== anchor ================================ -->
+  <!-- The harness export's `base_link` frame sits ~0.72 m +X / ~0.19 m -Y from
+       the physical structure (every other link carries a compensating visual
+       origin; base_link's mesh/COM is at (0.72, -0.19, -0.02)). This joint
+       cancels that so the model lands on the world origin with the base plate
+       near z=0. Tune the Z term if the plate doesn't sit on the floor. -->
+  <xacro:property name="harness_anchor_xyz" value="-0.718367 0.189837 0.018503"/>
+
+  <link name="world"/>
+  <joint name="harness_world_joint" type="fixed">
+    <origin xyz="${harness_anchor_xyz}" rpy="0 0 0"/>
+    <parent link="world"/>
+    <child link="${hp}base_link"/>
+  </joint>
+
+  <xacro:harness_body prefix="${hp}"/>
+  <xacro:if value="$(arg use_sim)">
+    <xacro:harness_gazebo prefix="${hp}"/>
+  </xacro:if>
+
+  <!-- =============================== the arm =============================== -->
+  <!-- Replaces the stand-in `mod_101_base_1`. Pose derived by rigidly aligning
+       the export's mod_101_base_1.stl against mod101's own base_link.stl (same
+       100x120x53 mm part): the arm is mounted YAWED -90 deg about Z, alignment
+       residual 0.9 mm RMS. Translation is then corrected for the mod101_arm
+       macro's re-centred base_link frame (visual origin 0.00738 -0.07316
+       -0.06397, rotated by the same -90 deg). The export's `Rigid 29`
+       (0.357784 -0.033258 0.085748, rpy 0) is the stand-in's raw corner frame
+       and is NOT the right mount pose. -->
+  <xacro:property name="arm_mount_xyz" value="0.326034 -0.013258 0.085748"/>
+  <xacro:property name="arm_mount_rpy" value="0 0 -1.5707963"/>
+
+  <xacro:mod101_arm prefix="" parent="${hp}mod_101_adapter_1"
+                    xyz="${arm_mount_xyz}" rpy="${arm_mount_rpy}"
+                    tool="$(arg tool)" use_sim="$(arg use_sim)"
+                    shoulder_ext_length="$(arg shoulder_ext_length)"
+                    elbow_ext_length="$(arg elbow_ext_length)"
+                    shoulder_mount="$(arg shoulder_mount)"
+                    elbow_mount="$(arg elbow_mount)"/>
+
+  <!-- ===================== pan/tilt ros2_control =========================== -->
+  <!-- The head is the only thing the harness adds that ros2_control has to know
+       about. Two joints, one block, both modes. -->
+  <xacro:if value="$(arg use_sim)">
+    <ros2_control name="harness_pan_tilt" type="system">
+      <hardware>
+        <plugin>gz_ros2_control/GazeboSimSystem</plugin>
+      </hardware>
+      <joint name="${hp}pan_joint">
+        <command_interface name="position"/>
+        <state_interface name="position"/>
+        <state_interface name="velocity"/>
+      </joint>
+      <joint name="${hp}tilt_joint">
+        <command_interface name="position"/>
+        <state_interface name="position"/>
+        <state_interface name="velocity"/>
+      </joint>
+    </ros2_control>
+  </xacro:if>
+
+  <xacro:unless value="$(arg use_sim)">
+    <!-- Hardware. One placeholder system covering the arm (5) + the head (2).
+         TODO: replace mock_components/GenericSystem with the real servo-bus
+         plugin (mirrors mod101_control/urdf/mod101.hardware.xacro). The active
+         tool still emits its own <ros2_control> for joint `6`. -->
+    <ros2_control name="mod101_harness_hardware" type="system">
+      <hardware>
+        <plugin>mock_components/GenericSystem</plugin>
+      </hardware>
+      <xacro:macro name="hw_joint" params="name">
+        <joint name="${name}">
+          <command_interface name="position"/>
+          <state_interface name="position"/>
+          <state_interface name="velocity"/>
+        </joint>
+      </xacro:macro>
+      <xacro:hw_joint name="joint_base"/>
+      <xacro:hw_joint name="joint_shoulder"/>
+      <xacro:hw_joint name="joint_elbow"/>
+      <xacro:hw_joint name="joint_wrist_tilt"/>
+      <xacro:hw_joint name="joint_wrist_roll"/>
+      <xacro:hw_joint name="${hp}pan_joint"/>
+      <xacro:hw_joint name="${hp}tilt_joint"/>
+    </ros2_control>
+  </xacro:unless>
+
+  <!-- ============================ sim plugin ============================== -->
+  <!-- gz_ros2_control: exactly once per robot. Reuses mod101's arm controller
+       set verbatim (the arm is unprefixed), adds the head controller, and the
+       active tool's - same conditional block as mod101.xacro. -->
+  <xacro:if value="$(arg use_sim)">
+    <gazebo>
+      <plugin filename="gz_ros2_control-system" name="gz_ros2_control::GazeboSimROS2ControlPlugin">
+        <parameters>$(find mod101_control)/config/controllers.sim.yaml</parameters>
+        <parameters>$(find mod101_harness)/config/pan_tilt_controllers.yaml</parameters>
+        <xacro:if value="${'$(arg tool)' == 'parallel'}">
+          <parameters>$(find mod101_tool_parallel)/config/controllers.yaml</parameters>
+        </xacro:if>
+        <xacro:if value="${'$(arg tool)' == 'pincopen'}">
+          <parameters>$(find mod101_tool_pincopen)/config/controllers.yaml</parameters>
+        </xacro:if>
+        <xacro:if value="${'$(arg tool)' == 'jaws'}">
+          <parameters>$(find mod101_tool_jaws)/config/controllers.yaml</parameters>
+        </xacro:if>
+      </plugin>
+    </gazebo>
+  </xacro:if>
+
+</robot>

@@ -199,6 +199,34 @@ plugin once and supplies controller YAML with the prefixed joint names. The
 reference integration is the base101 dual-arm workspace (two arms on a
 mobile base's lift tower).
 
+
+## Optional: `mod101_harness`
+
+`mod101_harness` is an **optional overlay** package (built with the rest,
+depended on by nothing): the arm on a bench test harness — 2020 extrusion base,
+camera tower with an actuated pan/tilt head and a RealSense depth camera. It
+reuses mod101's arm description and controller set unchanged and adds only the
+harness structure, the two `hn_pan_joint` / `hn_tilt_joint` joints (one extra
+controller, `config/pan_tilt_controllers.yaml`) and the depth camera. Two
+launch files:
+
+```bash
+# whole robot in Gazebo: arm + pan/tilt + RealSense depth (RGB/depth/points on
+# /harness/depth_camera/*) + the arm's wrist camera, all bridged
+ros2 launch mod101_harness sim.launch.py
+
+# prepared-for-hardware skeleton: robot_state_publisher + controller_manager on
+# a mock_components placeholder, same controllers spawned. Runs as fake hardware
+# as-is; swap the plugin in urdf/mod101_harness_arm.xacro to go live.
+ros2 launch mod101_harness hardware.launch.py
+```
+
+Same `tool:=` / rail-length / mount args as `mod101_gazebo`. No MoveIt launch —
+point `mod101_moveit_config`'s `move_group` at this package's xacro/srdf if you
+want planning. The arm mount pose was solved by rigidly aligning the export's
+stand-in base against `base_link.stl`; `urdf/harness_body.xacro` is the ported
+geometry, `export/` the untouched baseline for the next re-export.
+
 ### Deeper docs
 
 **Get it moving**
