@@ -7,12 +7,25 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Tomorrow:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://esm.sh/three@0.158.0",
+    "three/": "https://esm.sh/three@0.158.0/",
+    "urdf-loader": "https://esm.sh/urdf-loader@0.12.6?deps=three@0.158.0"
+  }
+}
+</script>
 <link rel="stylesheet" href="theme.css">
 <style>
-  /* Ported from link101/link-base101/web/calibrate.html (Axon calibration
-     wizard) and restyled onto the Robocore tokens in theme.css. The DDSM210
-     wheel control from axon-config.html is deliberately not carried over —
-     it's base101 chassis hardware, not ST-series servos. */
+  /* Two tabs, one bus. HARDWARE owns the serial chain — find servos, name them,
+     drive them, watch them. MODEL owns the same three.js scene as the build page
+     (viewer.js) and calibrates each joint against the URDF it will actually be
+     driven by, so a travel range that doesn't match its `<limit>` is visible
+     while the joint is being swept rather than at the first planner failure.
+
+     Wizard flow ported from link101/link-base101/web/calibrate.html and restyled
+     onto the Robocore tokens in theme.css. Every joint here is a single servo. */
 
   * { box-sizing: border-box; }
   html, body { height: 100%; }
@@ -30,8 +43,8 @@
     line-height: 1.5;
   }
 
-  .app { max-width: 1400px; margin: 0 auto; padding: 14px 18px 48px; }
-  header.top { display: flex; align-items: center; gap: 16px; margin-bottom: 14px; }
+  .app { max-width: 1600px; margin: 0 auto; padding: 14px 18px 48px; }
+  header.top { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; flex-wrap: wrap; }
   header.top .spacer { flex: 1; }
 
   h1 {
@@ -50,8 +63,20 @@
     margin: 0;
   }
 
+  /* in-page tabs — same pill as .nav, but buttons */
+  .tabs { display: flex; gap: 4px; padding: 3px; border: 1px solid var(--border-hairline); border-radius: var(--radius-pill); background: rgba(255,255,255,.03); }
+  .tabs button {
+    background: none; box-shadow: none; color: var(--text-tertiary);
+    padding: 5px 16px; border-radius: var(--radius-pill);
+    font-family: var(--font-label); font-size: 10px; letter-spacing: 1.4px;
+  }
+  .tabs button:hover:not(.active) { color: var(--text-primary); background: rgba(255,255,255,.06); opacity: 1; }
+  .tabs button.active { color: #fff; background: var(--accent); box-shadow: var(--shadow-accent-glow); }
+  .pane[hidden] { display: none; }
+
   .cols { display: grid; grid-template-columns: minmax(0,1fr) 330px; gap: 12px; align-items: start; }
-  @media (max-width: 1100px) { .cols { grid-template-columns: 1fr; } }
+  .cols.model { grid-template-columns: minmax(0,1fr) 470px; }
+  @media (max-width: 1180px) { .cols, .cols.model { grid-template-columns: 1fr; } }
   .side { position: sticky; top: 14px; }
 
   .panel {
@@ -61,6 +86,7 @@
     padding: 14px 16px;
     margin-bottom: 12px;
   }
+  .panel.tight { padding: 10px 12px; }
   .panel-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
   .panel-head .spacer { flex: 1; }
 
@@ -93,6 +119,7 @@
     letter-spacing: 1.2px; text-transform: uppercase;
     padding: 2px 9px; border-radius: var(--radius-pill);
     border: 1px solid var(--accent); color: var(--accent);
+    white-space: nowrap;
   }
   .chip.ok   { border-color: var(--accent);    color: var(--accent); }
   .chip.warn { border-color: var(--amber-500); color: var(--amber-500); }
@@ -134,6 +161,7 @@
     font-family: var(--font-body); font-size: 12px;
   }
   td.num { font-variant-numeric: tabular-nums; color: var(--text-primary); }
+  tr.sel td { background: var(--teal-tint-08); }
 
   .note { color: var(--text-quaternary); font-size: 11px; margin: 6px 0 0; line-height: 1.5; }
   .prompt { font-size: 14px; margin: 4px 0 10px; }
@@ -160,16 +188,12 @@
   .pip.active { border-color: var(--accent); color: var(--accent); }
   .pip.clean  { border-color: var(--accent); color: var(--accent); }
   .pip.bad    { border-color: var(--red-500); color: var(--red-500); }
+  .pip.moving .dot { background: var(--amber-500); box-shadow: 0 0 8px var(--amber-500); }
   .pip small { font-family: var(--font-mono); letter-spacing: 0; text-transform: none; opacity: .7; }
 
   /* gauges */
   .track { height: 10px; border-radius: var(--radius-pill); background: var(--bg-surface); border: 1px solid var(--border-subtle); overflow: hidden; }
   .track .fill { height: 100%; background: var(--accent); width: 0; transition: width .12s; }
-  .gauge { position: relative; height: 44px; border-radius: var(--radius-xs); background: var(--bg-surface); border: 1px solid var(--border-subtle); margin: 8px 0; }
-  .gauge .band { position: absolute; top: 0; bottom: 0; background: var(--teal-tint-12); }
-  .gauge .ktick { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--text-quaternary); }
-  .gauge .live { position: absolute; top: 4px; bottom: 4px; width: 3px; border-radius: 2px; background: var(--amber-500); transition: left .08s; }
-  .gauge.balanced .live { background: var(--accent); box-shadow: 0 0 8px var(--teal-glow); }
 
   .kv { display: flex; gap: 22px; flex-wrap: wrap; margin: 10px 0; }
   .kv div { font-family: var(--font-label); font-size: 9px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-tertiary); font-weight: 700; }
@@ -185,9 +209,8 @@
   .curbar.high .f { background: var(--red-500); }
 
   .verdict { border-radius: var(--radius-sm); padding: 10px 13px; border: 1px solid var(--border-hairline); margin: 8px 0; font-size: 12.5px; }
-  .verdict.clean   { border-color: var(--accent);    background: var(--teal-tint-08); }
-  .verdict.binding,
-  .verdict.fault   { border-color: var(--red-500);   background: rgba(239,68,68,.08); }
+  .verdict.clean { border-color: var(--accent);  background: var(--teal-tint-08); }
+  .verdict.fault { border-color: var(--red-500); background: rgba(239,68,68,.08); }
   .verdict b { color: var(--text-primary); }
 
   .banner {
@@ -200,31 +223,103 @@
     white-space: pre-wrap; background: var(--bg-surface);
     color: var(--text-secondary); border: 1px solid var(--border-subtle);
     border-radius: var(--radius-sm); padding: 9px 11px;
-    height: 150px; overflow: auto;
+    height: 132px; overflow: auto;
     font-family: var(--font-mono); font-size: 11px; line-height: 1.6;
   }
   .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 
-  /* joint status sidebar */
-  #jointStatus { max-height: calc(100vh - 9rem); overflow: auto; }
-  .jstat { border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); background: var(--bg-surface); padding: 8px 10px; margin-bottom: 8px; }
-  .jstat:last-child { margin-bottom: 0; }
-  .jstat.active { border-color: var(--accent); }
-  .jstat-name { display: flex; align-items: center; gap: 6px; font-family: var(--font-label); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 7px; }
-  .jstat-name small { color: var(--text-quaternary); font-family: var(--font-mono); font-weight: 400; letter-spacing: 0; text-transform: none; }
-  .jmotors { display: flex; gap: 7px; }
-  .jmotor { flex: 1; min-width: 0; border: 1px solid var(--border-faint); border-radius: var(--radius-xs); padding: 6px 8px; background: var(--bg-card); }
-  .jmh { display: flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 11px; font-weight: 500; margin-bottom: 5px; }
+  /* ---- 3D model pane ---- */
+  .viewer-wrap { position: relative; height: calc(100vh - 210px); min-height: 460px; border-radius: var(--radius-sm); overflow: hidden; border: 1px solid var(--border-subtle); }
+  #viewer { position: absolute; inset: 0; }
+  #viewer canvas { display: block; width: 100%; height: 100%; }
+  .viewer-overlay {
+    position: absolute; top: 12px; left: 12px; width: 330px;
+    background: rgba(0,0,0,.66); border: 1px solid var(--border-hairline);
+    border-radius: var(--radius-sm); padding: 11px 13px;
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  }
+  .viewer-overlay h3 {
+    font-family: var(--font-label); font-size: 11px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 1.5px;
+    color: var(--text-secondary); margin: 0 0 8px;
+  }
+  .viewer-foot { position: absolute; left: 12px; right: 12px; bottom: 10px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .viewer-foot .note { margin: 0; background: rgba(0,0,0,.55); padding: 4px 9px; border-radius: var(--radius-xs); }
+
+  /* URDF-vs-hardware travel bars: one shared scale, two stacked bands, one
+     live needle through both — the whole point of the model tab in one widget. */
+  .limbar { margin: 8px 0 2px; }
+  .lrow { display: grid; grid-template-columns: 62px 1fr 108px; gap: 8px; align-items: center; margin: 4px 0; }
+  .llab { font-family: var(--font-label); font-size: 9px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-tertiary); font-weight: 700; }
+  .ltrack { position: relative; height: 13px; border-radius: 3px; background: var(--bg-surface); border: 1px solid var(--border-subtle); overflow: hidden; }
+  .lband { position: absolute; top: 0; bottom: 0; border-radius: 2px; }
+  .lband.urdf { background: rgba(148,163,184,.35); }
+  .lband.hw   { background: var(--teal-tint-20); border: 1px solid var(--accent); }
+  .lband.over { background: rgba(239,68,68,.45); }
+  .lzero { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--text-quaternary); }
+  .lneedle { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--amber-500); box-shadow: 0 0 6px var(--amber-500); transition: left .07s linear; }
+  .lval { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-secondary); text-align: right; font-variant-numeric: tabular-nums; }
+  .lscale { display: flex; justify-content: space-between; font-family: var(--font-mono); font-size: 9.5px; color: var(--text-quaternary); padding-left: 70px; }
+
+  .fit td.v { font-family: var(--font-label); font-size: 9px; letter-spacing: 1px; text-transform: uppercase; }
+  .fit tr.bad-row td { color: var(--red-500); }
+
+  /* ---- the servo card ------------------------------------------------
+     One card per servo on the bus. The servo is the component: its identity,
+     what joint it is mapped to, what it is doing right now, and how to move
+     it are one object, because on the bench they are one question. */
+  .servos { display: grid; grid-template-columns: repeat(auto-fill, minmax(400px, 1fr)); gap: 10px; }
+  .servo {
+    border: 1px solid var(--border-subtle); border-radius: var(--radius-sm);
+    background: var(--bg-surface); padding: 9px 11px 10px;
+    cursor: pointer; position: relative;
+  }
+  .servo.sel { border-color: var(--accent); }
+  .servo input, .servo select, .servo summary { cursor: auto; }
+  /* The wizard's current joint, so the model tab's position is legible here. */
+  .servo.active::before {
+    content: ""; position: absolute; left: -1px; top: 9px; bottom: 9px; width: 2px;
+    border-radius: 2px; background: var(--accent);
+  }
+  .svh { display: flex; align-items: center; gap: 7px; margin-bottom: 8px; }
+  .svh .spacer { flex: 1; }
+  .svid { font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary); }
+  .svname {
+    font-family: var(--font-label); font-size: 10px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 1px; color: var(--text-primary);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
   .jdot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-quaternary); flex: none; }
   .jdot.on { background: var(--accent); box-shadow: 0 0 0 2px var(--teal-tint-20); }
+
+  .svmap { display: grid; grid-template-columns: 1fr 1fr; gap: 5px 8px; margin-bottom: 8px; }
+  .svmap label {
+    display: grid; grid-template-columns: 3.6rem 1fr; gap: 6px; align-items: center;
+    font-family: var(--font-label); font-size: 9px; text-transform: uppercase;
+    letter-spacing: 1px; color: var(--text-tertiary); font-weight: 700;
+  }
+  .svmap select, .svmap input { width: 100%; min-width: 0; }
+
+  .svtel {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(92px,1fr)); gap: 2px 10px;
+    border-top: 1px solid var(--border-faint); border-bottom: 1px solid var(--border-faint);
+    padding: 6px 0; margin-bottom: 8px;
+  }
   .jmf { display: flex; justify-content: space-between; gap: 6px; font-family: var(--font-mono); font-size: 10.5px; color: var(--text-quaternary); line-height: 1.7; }
   .jmf b { color: var(--text-secondary); font-variant-numeric: tabular-nums; font-weight: 500; }
   .jmf.hot b { color: var(--red-500); }
 
-  /* setup / mapping tables */
-  .maptable input[type=text] { width: 100%; min-width: 90px; }
-  .maptable select { width: 100%; }
-  .maptable td { padding: 4px 6px; }
+  .svdrive { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .svdrive .spacer { flex: 1; }
+  /* Jog is a pair of buttons, not a slider: one press is one small step, so
+     there is no gesture here that can run a joint into its hard stop. */
+  .jog {
+    font-family: var(--font-mono); font-size: 15px; line-height: 1;
+    padding: 5px 12px; min-width: 2.4rem;
+  }
+  .jog:disabled { opacity: .35; }
+  .svstep { font-family: var(--font-mono); font-size: 11px; }
+  .svprof { margin-top: 8px; }
 
   details.fold > summary {
     cursor: pointer; list-style: none;
@@ -250,8 +345,15 @@
       <a href="/">Build</a>
       <a href="/calibrate.html" class="active">Calibrate</a>
     </nav>
+    <div class="tabs" id="tabs">
+      <button data-tab="hw" class="active">Hardware</button>
+      <button data-tab="model">Model check</button>
+    </div>
     <span class="spacer"></span>
     <span class="status" id="status">disconnected</span>
+    <!-- E-stop lives in the header, not in a tab: whichever tab is showing,
+         the way to drop torque has to be one click away. -->
+    <button id="estop" class="danger" disabled>■ Disarm all</button>
   </header>
 
   <div class="banner" id="fwBanner">
@@ -259,125 +361,179 @@
     disarms on its own, but that is a reaction, not a limit. Bench-test before trusting this on a loaded arm.
   </div>
 
-  <div class="cols">
-  <main>
+  <!-- ================================================================
+       TAB 1 — HARDWARE: the serial chain and nothing else.
+       ================================================================ -->
+  <section class="pane" id="pane-hw">
 
-    <div class="panel">
-      <div class="bar">
-        <label class="lbl" for="portSel">bus</label>
-        <select id="portSel" style="min-width:260px"><option value="">— scanning —</option></select>
-        <button class="ghost sm" id="refreshPorts">↻</button>
-        <button id="connect">Connect</button>
-        <button id="estop" class="danger" disabled>■ Disarm all</button>
-        <span class="spacer"></span>
-        <label class="status" style="cursor:pointer"><input type="checkbox" id="demo" style="margin-right:6px"> Demo mode</label>
-        <button id="selftest" class="ghost sm">Self-test</button>
-      </div>
-      <div class="bar" style="margin-top:10px">
-        <span class="note" style="margin:0">Servos are driven straight over the serial chain by
-          <code>configurator/motors.py</code> — no intermediate firmware, any browser.</span>
-        <span class="spacer"></span>
-        <button id="exportBtn" class="ghost sm">Export JSON</button>
-        <button id="importBtn" class="ghost sm">Import JSON</button>
-        <input type="file" id="importFile" accept="application/json" hidden>
-      </div>
-    </div>
-
-    <!-- ============ Servo setup ============ -->
-    <div class="panel">
-      <div class="panel-head">
-        <h2>Servo setup</h2>
-        <span class="chip mute" id="setupCount">no bus</span>
-        <span class="spacer"></span>
-        <button class="ghost sm" id="rescan" disabled>Rescan bus</button>
-        <button class="ghost sm" id="rebuild">Rebuild joints</button>
-      </div>
-      <p class="note" style="margin-top:0">
-        One row per servo found on the bus. The mapping is this page's own — there is no config stored on the
-        arm — and the defaults follow <code>mod101_description/urdf/mod101_macro.xacro</code>.
-        <b>Mirror</b> pairs a second servo to the same joint (0 = single).
-        <b>Sign</b> flips a joint whose servo counts opposite to its URDF axis;
-        <code>joint_wrist_tilt</code> is <code>0 -1 0</code>, hence −1 by default. Edits persist locally and
-        travel with the exported JSON — press <b>Rebuild joints</b> after changing a mirror.
-      </p>
-      <div style="overflow-x:auto">
-        <table class="maptable" id="setupTable">
-          <thead><tr>
-            <th>ID</th><th>Mirror</th><th>Model</th>
-            <th>ROS joint</th><th>LeRobot</th><th>Sign</th><th>Position</th>
-          </tr></thead>
-          <tbody id="setupBody"><tr><td colspan="7" class="note">Connect, or tick Demo mode.</td></tr></tbody>
-        </table>
-      </div>
-      <details class="fold" style="margin-top:10px">
-        <summary>Reassign a servo ID</summary>
-        <div class="row" style="margin-top:8px">
-          <span class="unit">from <input type="number" id="idFrom" min="0" max="253" value="1" style="width:4.5rem"></span>
-          <span class="unit">to <input type="number" id="idTo" min="0" max="253" value="1" style="width:4.5rem"></span>
-          <button class="ghost sm" id="setId" disabled>Set ID</button>
-          <span class="note" style="margin:0">Writes EEPROM. Only one servo on the bus at a time, or they all take the new ID.</span>
+      <div class="panel">
+        <div class="bar">
+          <label class="lbl" for="portSel">bus</label>
+          <select id="portSel" style="min-width:260px"><option value="">— scanning —</option></select>
+          <button class="ghost sm" id="refreshPorts">↻</button>
+          <button id="connect">Connect</button>
+          <button class="ghost sm" id="rescan" disabled>Rescan bus</button>
+          <span class="spacer"></span>
+          <label class="status" style="cursor:pointer"><input type="checkbox" id="demo" style="margin-right:6px"> Demo mode</label>
+          <button id="selftest" class="ghost sm">Self-test</button>
         </div>
-      </details>
-    </div>
-
-    <div id="rail" class="rail"></div>
-
-    <!-- The single live wizard stage; re-rendered per state. -->
-    <div id="stage"></div>
-
-    <!-- ============ Exports ============ -->
-    <div class="panel">
-      <div class="panel-head">
-        <h2>Generate configs</h2>
-        <span class="chip mute" id="genState">nothing calibrated</span>
-        <span class="spacer"></span>
-        <button class="ghost sm" id="genPreview">Preview</button>
-        <button id="genWrite" disabled>Write to repo</button>
+        <div class="bar" style="margin-top:10px">
+          <span class="note" style="margin:0">Servos are driven straight over the serial chain by
+            <code>configurator/motors.py</code> — no intermediate firmware, any browser.</span>
+          <span class="spacer"></span>
+          <button id="exportBtn" class="ghost sm">Export JSON</button>
+          <button id="importBtn" class="ghost sm">Import JSON</button>
+          <input type="file" id="importFile" accept="application/json" hidden>
+        </div>
       </div>
-      <p class="note" style="margin-top:0">
-        Turns the calibrated tick ranges into <code>src/mod101_control/config/calibration.yaml</code> (ROS, radians
-        relative to each joint's home) and a LeRobot calibration JSON. STS3215 encoders are 4096 ticks/rev and
-        direct-drive, so ticks convert straight to radians — the same counts serve both stacks.
-      </p>
-      <div id="genOut"></div>
-    </div>
 
-    <div class="panel">
-      <div class="panel-head"><h2>Console</h2></div>
-      <div id="log"></div>
-    </div>
-  </main>
+      <!-- ============ The servos ============
+           One card per servo, and the card is the whole component: identity,
+           the joint it is mapped to, live telemetry, and the controls that
+           move it. These used to be three panels — a mapping table, a
+           separate "drive a servo" pane and a status sidebar — which meant
+           three places to look at while turning one motor. -->
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Servos</h2>
+          <span class="chip mute" id="setupCount">no bus</span>
+          <span class="spacer"></span>
+          <button class="ghost sm" id="rebuild">Rebuild joints</button>
+        </div>
+        <p class="note" style="margin-top:0">
+          One card per servo found on the bus, and one joint per servo. The mapping is this page's own — there
+          is no config stored on the arm — and the defaults follow
+          <code>mod101_description/urdf/mod101_macro.xacro</code>. <b>ROS joint</b> is picked from the joints
+          the loaded URDF actually declares, which is what the model tab checks against.
+          <b>Sign</b> flips a joint whose servo counts opposite to its URDF axis;
+          <code>joint_wrist_tilt</code> is <code>0 -1 0</code>, hence −1 by default. Edits persist locally and
+          travel with the exported JSON.
+        </p>
+        <p class="note">
+          Jogging is raw bus control, independent of any calibration: <b>−</b> and <b>+</b> command one step
+          from where the servo is, over the full 0…4095 encoder range and <b>not</b> a calibrated travel
+          limit. One press is one step and nothing repeats while held, because on an assembled arm the way
+          into a hard stop is a control that keeps going — but the steps do add up, so watch the joint and
+          keep the disarm button in reach.
+        </p>
+        <div id="servoList" class="servos"><p class="note" style="margin:0">Connect, or tick Demo mode.</p></div>
+        <details class="fold" style="margin-top:12px">
+          <summary>Reassign a servo ID</summary>
+          <div class="row" style="margin-top:8px">
+            <span class="unit">from <input type="number" id="idFrom" min="0" max="253" value="1" style="width:4.5rem"></span>
+            <span class="unit">to <input type="number" id="idTo" min="0" max="253" value="1" style="width:4.5rem"></span>
+            <button class="ghost sm" id="setId" disabled>Set ID</button>
+            <span class="note" style="margin:0">Writes EEPROM. Only one servo on the bus at a time, or they all take the new ID.</span>
+          </div>
+        </details>
+      </div>
 
-  <aside class="side">
-    <div class="panel">
-      <div class="panel-head"><h2>Joint status</h2><span class="spacer"></span><span class="note" style="margin:0" id="jsHint">not connected</span></div>
-      <div id="jointStatus"></div>
+  </section>
+
+  <!-- ================================================================
+       TAB 2 — MODEL CHECK: the same scene as the build page, driven by
+       the live servos, with each joint's measured travel put next to the
+       <limit> the URDF declares for it.
+       ================================================================ -->
+  <section class="pane" id="pane-model" hidden>
+    <div class="cols model">
+      <main>
+        <div class="panel tight">
+          <div class="viewer-wrap">
+            <div id="viewer"></div>
+            <div class="viewer-overlay">
+              <h3 id="ovTitle">no joint selected</h3>
+              <div id="ovBars"><p class="note" style="margin:0">Connect the bus (or tick Demo mode) and pick a joint.</p></div>
+            </div>
+            <div class="viewer-foot">
+              <span class="note" id="viewer-status">Loading URDF…</span>
+              <span class="spacer" style="flex:1"></span>
+              <label class="note" style="cursor:pointer"><input type="checkbox" id="follow" checked style="margin-right:5px">follow motion</label>
+              <button class="ghost sm" id="reframe">Reframe</button>
+              <button class="ghost sm" id="reloadUrdf">Reload URDF</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <h2>URDF ↔ hardware fit</h2>
+            <span class="chip mute" id="fitState">nothing measured</span>
+            <span class="spacer"></span>
+            <button class="ghost sm" id="fitSnippet">URDF limit block</button>
+          </div>
+          <p class="note" style="margin-top:0">
+            Every actuated joint the URDF declares, against the travel actually measured on the arm. A joint
+            where the URDF allows <b>more</b> travel than the hardware has is the dangerous direction — a
+            planner will happily command into a hard stop.
+          </p>
+          <div style="overflow-x:auto">
+            <table class="fit" id="fitTable">
+              <thead><tr><th>URDF joint</th><th>servo</th><th>URDF range</th><th>measured</th><th>Δ lower</th><th>Δ upper</th><th>fit</th></tr></thead>
+              <tbody id="fitBody"><tr><td colspan="7" class="note">Load the URDF and calibrate a joint.</td></tr></tbody>
+            </table>
+          </div>
+          <div id="fitOut"></div>
+        </div>
+      </main>
+
+      <aside>
+        <div id="rail" class="rail"></div>
+
+        <!-- The single live wizard stage; re-rendered per state. -->
+        <div id="stage"></div>
+
+        <!-- ============ Exports ============ -->
+        <div class="panel">
+          <div class="panel-head">
+            <h2>Generate configs</h2>
+            <span class="chip mute" id="genState">nothing calibrated</span>
+            <span class="spacer"></span>
+            <button class="ghost sm" id="genPreview">Preview</button>
+            <button id="genWrite" disabled>Write to repo</button>
+          </div>
+          <p class="note" style="margin-top:0">
+            Turns the calibrated tick ranges into <code>src/mod101_control/config/calibration.yaml</code> (ROS,
+            radians relative to each joint's home) and a LeRobot calibration JSON. STS3215 encoders are 4096
+            ticks/rev and direct-drive, so ticks convert straight to radians — the same counts serve both stacks.
+          </p>
+          <div id="genOut"></div>
+        </div>
+      </aside>
     </div>
-  </aside>
+  </section>
+
+  <div class="panel">
+    <div class="panel-head"><h2>Console</h2></div>
+    <div id="log"></div>
   </div>
 </div>
-
-<script>
+<script type="module">
 "use strict";
+import { createViewer } from './viewer.js';
+
 const $ = (id) => document.getElementById(id);
 function log(m){ const e=$("log"); e.textContent += m+"\n"; e.scrollTop=e.scrollHeight; }
+// A thrown error used to kill the rest of the module silently, which showed up
+// as "the page just doesn't do anything". Put it where the operator can see it.
+window.addEventListener("error", e=>log(`! script error: ${e.message} (${(e.filename||"").split("/").pop()}:${e.lineno})`));
+window.addEventListener("unhandledrejection", e=>log(`! unhandled: ${e.reason && e.reason.message || e.reason}`));
 
 // ======================================================================
 // Constants
 // ======================================================================
-const DEADBAND = 10;        // servo position deadband (ticks)
-const SPREAD_THRESH = 25;   // max sum-spread for a "clean" pair
 const MARGIN = 30;          // ticks pulled in from each hard stop
-const JUMP_THRESH = 400;    // single-servo discontinuity => encoder slip/fault
+const JUMP_THRESH = 400;    // position discontinuity => encoder slip/fault
 const TEMP_TRIP = 70;       // °C hard stop
 const TEMP_WARN = 64;
-const ARM_LOW_MA = 250;     // arm-check: each servo current must be below this
-const ARM_MATCH_MA = 100;   // arm-check: pair currents must agree within this
+const ARM_LOW_MA = 250;     // arm-check: servo current must be below this
 const ARM_SPEED = 200, ARM_ACCEL = 8;   // gentle re-arm profile
-const TEST_DELTA_OK = 50;   // live mirror-sum error (ticks) considered balanced under power
 const TICKS = 4096;
 const TICK_RAD = (2*Math.PI)/TICKS;     // STS3215: 4096 counts/rev, direct drive
 const LEROBOT_CENTER = 2047;            // LeRobot homes a joint to mid-scale
+const FIT_TOL = 2*Math.PI/180;          // URDF vs measured: 2° counts as 1-to-1
+const MOTION_TICKS = 12;                // per-sample delta that reads as "moving"
+const MOTION_HOLD = 900;                // ms a joint stays flagged as moving
 
 // Wrap helpers: servo position wraps at the 0/4095 seam. modTick wraps a value
 // into 0..4095; wrapSigned gives the signed shortest delta (-2048..2047);
@@ -385,6 +541,9 @@ const LEROBOT_CENTER = 2047;            // LeRobot homes a joint to mid-scale
 const modTick=(v)=>((Math.round(v)%TICKS)+TICKS)%TICKS;
 const wrapSigned=(x)=>{ x=((x%TICKS)+TICKS)%TICKS; return x>TICKS/2? x-TICKS : x; };
 function makeUnwrap(){ let last=null, off=0; return (raw)=>{ if(last!=null){ const d=raw-last; if(d>TICKS/2) off-=TICKS; else if(d<-TICKS/2) off+=TICKS; } last=raw; return raw+off; }; }
+const deg=(r)=>(r*180/Math.PI);
+const degs=(r)=>`${r>=0?"+":""}${deg(r).toFixed(1)}°`;
+const esc=(s)=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 
 // ======================================================================
 // mod101 joint mapping
@@ -394,78 +553,49 @@ function makeUnwrap(){ let last=null, off=0; return (raw)=>{ if(last!=null){ con
 // which servo is which joint; it lives in localStorage and in the export.
 // `sign` reconciles the servo's counting direction with the URDF joint axis:
 // joint_wrist_tilt's axis is `0 -1 0`, so its default is -1. The tool joint is
-// literally named `6` per docs/tool-convention.md.
+// literally named `6` per docs/tool-convention.md. One servo, one joint.
 // ======================================================================
 const SERVO_MODELS = ["sts3215","sts3250","st3120"];
 const DEFAULT_MAP = {
-  1: { ros:"joint_base",       lerobot:"shoulder_pan",  sign:+1, model:"sts3215", mirror:0 },
-  2: { ros:"joint_shoulder",   lerobot:"shoulder_lift", sign:+1, model:"sts3215", mirror:0 },
-  3: { ros:"joint_elbow",      lerobot:"elbow_flex",    sign:+1, model:"sts3215", mirror:0 },
-  4: { ros:"joint_wrist_tilt", lerobot:"wrist_flex",    sign:-1, model:"sts3215", mirror:0 },
-  5: { ros:"joint_wrist_roll", lerobot:"wrist_roll",    sign:+1, model:"sts3215", mirror:0 },
-  6: { ros:"6",                lerobot:"gripper",       sign:+1, model:"sts3215", mirror:0 },
+  1: { ros:"joint_base",       lerobot:"shoulder_pan",  sign:+1, model:"sts3215" },
+  2: { ros:"joint_shoulder",   lerobot:"shoulder_lift", sign:+1, model:"sts3215" },
+  3: { ros:"joint_elbow",      lerobot:"elbow_flex",    sign:+1, model:"sts3215" },
+  4: { ros:"joint_wrist_tilt", lerobot:"wrist_flex",    sign:-1, model:"sts3215" },
+  5: { ros:"joint_wrist_roll", lerobot:"wrist_roll",    sign:+1, model:"sts3215" },
+  6: { ros:"6",                lerobot:"gripper",       sign:+1, model:"sts3215" },
 };
 const MAP_KEY = "mod101.calibration.map";
 let jointMap = loadMap();
 function loadMap(){
-  try{ const s=localStorage.getItem(MAP_KEY); if(s) return Object.assign({}, DEFAULT_MAP, JSON.parse(s)); }catch(e){}
+  try{
+    const s=localStorage.getItem(MAP_KEY);
+    if(s){
+      const saved=JSON.parse(s);
+      // Older saves carried a `mirror` field from when a joint could be two
+      // servos. Drop it on read so it can't come back through localStorage.
+      for(const v of Object.values(saved)) delete v.mirror;
+      return Object.assign({}, DEFAULT_MAP, saved);
+    }
+  }catch(e){}
   return JSON.parse(JSON.stringify(DEFAULT_MAP));
 }
 function saveMap(){ try{ localStorage.setItem(MAP_KEY, JSON.stringify(jointMap)); }catch(e){} }
 function mapFor(id){
-  if(!jointMap[id]) jointMap[id] = { ros:`servo_${id}`, lerobot:`servo_${id}`, sign:+1, model:"sts3215", mirror:0 };
-  if(jointMap[id].mirror===undefined) jointMap[id].mirror=0;
+  if(!jointMap[id]) jointMap[id] = { ros:`servo_${id}`, lerobot:`servo_${id}`, sign:+1, model:"sts3215" };
   return jointMap[id];
 }
 
 // ======================================================================
 // Calibration math — PURE, no DOM, unit-tested below
 // ======================================================================
-function median(a){
-  if(!a.length) return 0;
-  const s=[...a].sort((x,y)=>x-y), n=s.length;
-  return n%2 ? s[(n-1)/2] : (s[n/2-1]+s[n/2])/2;
-}
-// pair: as primary p rises, mirror m must not rise (within deadband jitter).
-// Noise-robust: bin by position and compare per-bin medians, so per-sample
-// jitter can't false-fire a "reversal" — only a genuine step (slip) trips it.
-function monotonicNonIncreasing(samples){
-  const s=[...samples].sort((a,b)=>a.p-b.p);
-  if(s.length<4) return true;
-  const BIN=64, bins=new Map();
-  for(const x of s){ const b=Math.round(x.p/BIN); if(!bins.has(b)) bins.set(b,[]); bins.get(b).push(x.m); }
-  const meds=[...bins.keys()].sort((a,b)=>a-b).map(k=>median(bins.get(k)));
-  for(let i=1;i<meds.length;i++){ if(meds[i] > meds[i-1] + DEADBAND) return false; }
-  return true;
-}
-function computePairCalibration(samples){
-  const S = samples.map(s=>s.p+s.m);
-  const K = Math.round(median(S));
-  const spread = (Math.max(...S) - Math.min(...S));
-  const monotonic = monotonicNonIncreasing(samples);
-  const ps = samples.map(s=>s.p);
-  const min_p = Math.min(...ps) + MARGIN;
-  const max_p = Math.max(...ps) - MARGIN;
-  const center_p = Math.round((min_p + max_p)/2);
-  const center_m = K - center_p;                 // bakes the offset into the pair
-  let verdict, divergeAngle=null, faultId=null;
-  if (spread <= SPREAD_THRESH && monotonic) verdict = "clean";
-  else if (!monotonic) { verdict = "fault";      // encoder / slip / damage
-    const s=[...samples].sort((a,b)=>a.p-b.p);
-    for(let i=1;i<s.length;i++){ if(s[i].m > s[i-1].m + DEADBAND){ divergeAngle=s[i].p; break; } }
-  } else { verdict = "binding";                  // non-coaxial / mechanical bind
-    let worst=-1; for(const s of samples){ const d=Math.abs(s.p+s.m-K); if(d>worst){worst=d;divergeAngle=s.p;} }
-  }
-  return {kind:"pair", K, spread, monotonic, min_p, max_p, center_p, center_m, verdict, divergeAngle, faultId, n:samples.length};
-}
-function computeSingleCalibration(samples){
+function computeCalibration(samples){
   const ps = samples.map(s=>s.p);
   const min_p = Math.min(...ps) + MARGIN;
   const max_p = Math.max(...ps) - MARGIN;
   const center_p = Math.round((min_p + max_p)/2);
   let fault=false, faultAt=null;
   for(let i=1;i<samples.length;i++){ if(Math.abs(samples[i].p-samples[i-1].p) > JUMP_THRESH){ fault=true; faultAt=samples[i].p; break; } }
-  return {kind:"single", min_p, max_p, center_p, verdict: fault?"fault":"clean", faultAt, n:samples.length};
+  return {min_p, max_p, center_p, verdict: fault?"fault":"clean", faultAt, n:samples.length};
 }
 
 // ----- Tick -> engineering units. Pure; exercised by the self-test. -----
@@ -489,16 +619,27 @@ function lerobotEntry(id, r, m){
     range_max: Math.max(r.min_p, r.max_p) + homing,
   };
 }
+// Measured travel vs the URDF's own <limit>. The asymmetry matters: a URDF that
+// allows MORE than the hardware has is the one that drives a joint into its
+// stop, so it's the failure. Less is merely wasted travel.
+function fitVerdict(measured, urdf){
+  const dLower = measured.lower - urdf.lower;   // >0 => urdf reaches further down
+  const dUpper = measured.upper - urdf.upper;   // <0 => urdf reaches further up
+  const over  = (dLower >  FIT_TOL) || (dUpper < -FIT_TOL);
+  const under = (dLower < -FIT_TOL) || (dUpper >  FIT_TOL);
+  const status = over ? "over-travel" : under ? "conservative" : "1:1";
+  return { dLower, dUpper, status, ok: !over };
+}
 
 // ----- test fixtures (synthetic) -----
-function genPairSweep(K, jitter, bindSlope, breakAt){
+function genSweep(jitter, breakAt){
   const out=[]; let p=1200;
   for(let k=0;k<240;k++){
     p += (k<120? 12 : -12);                      // up then down, hand-driven
-    const noise=()=> (((k*131+7)%17)-8);         // deterministic pseudo-noise
-    let m = K - p + (bindSlope? Math.round(bindSlope*(p-2200)) : 0) + (jitter? noise():0);
-    if(breakAt!=null && p>breakAt) m += 600;      // injected encoder slip
-    out.push({p, m});
+    const noise=(((k*131+7)%17)-8);              // deterministic pseudo-noise
+    let v = p + (jitter? noise:0);
+    if(breakAt!=null && p>breakAt) v += 600;     // injected encoder slip
+    out.push({p:v});
   }
   return out;
 }
@@ -506,21 +647,12 @@ function runCalibrationTests(){
   const T=[]; const approx=(a,b,t)=>Math.abs(a-b)<=t;
   const assert=(name,cond,detail)=>{ T.push({name,ok:!!cond,detail}); };
 
-  let r=computePairCalibration(genPairSweep(4096,false,0,null));
-  assert("perfect pair -> K~4096, spread~0, clean", approx(r.K,4096,4)&&r.spread<=2&&r.verdict==="clean", `K=${r.K} spread=${r.spread} ${r.verdict}`);
+  let s=computeCalibration(genSweep(true,null));
+  assert("clean hand sweep -> travel captured", s.verdict==="clean"&&s.max_p>s.min_p, `${s.verdict} [${s.min_p},${s.max_p}]`);
+  assert("home sits mid-travel", approx(s.center_p,(s.min_p+s.max_p)/2,1), `center=${s.center_p}`);
 
-  r=computePairCalibration(genPairSweep(4536,true,0,null));
-  assert("real elbow K~4536 -> clean offset (bake it, not damage)", approx(r.K,4536,12)&&r.verdict==="clean", `K=${r.K} spread=${r.spread} ${r.verdict}`);
-  assert("elbow centers sum to K", r.center_p+r.center_m===r.K, `${r.center_p}+${r.center_m}=${r.center_p+r.center_m} vs K=${r.K}`);
-
-  r=computePairCalibration(genPairSweep(4096,true,0.35,null));
-  assert("binding (position-dependent) -> reject @angle", r.verdict==="binding"&&r.divergeAngle!=null, `spread=${r.spread} ${r.verdict} @${r.divergeAngle}`);
-
-  r=computePairCalibration(genPairSweep(4096,true,0,2600));
-  assert("slip/fault (non-monotonic) -> reject", r.verdict==="fault", `${r.verdict} @${r.divergeAngle}`);
-
-  let s=computeSingleCalibration(genPairSweep(4096,true,0,null).map(x=>({p:x.p})));
-  assert("single clean sweep", s.verdict==="clean"&&s.max_p>s.min_p, `${s.verdict} [${s.min_p},${s.max_p}]`);
+  s=computeCalibration(genSweep(true,2600));
+  assert("encoder slip -> fault @pos", s.verdict==="fault"&&s.faultAt!=null, `${s.verdict} @${s.faultAt}`);
 
   // --- unit conversion ---
   const quarter={min_p:2048-1024, max_p:2048+1024, center_p:2048};
@@ -537,6 +669,17 @@ function runCalibrationTests(){
   L=rosLimits({min_p:4000, max_p:96, center_p:0},+1);
   assert("seam-crossing arc stays contiguous", approx(L.lower,-96*TICK_RAD,1e-6)&&approx(L.upper,96*TICK_RAD,1e-6),
          `[${L.lower.toFixed(4)}, ${L.upper.toFixed(4)}]`);
+
+  // --- urdf fit ---
+  const urdf={lower:-Math.PI/2, upper:Math.PI/2};
+  let f=fitVerdict({lower:-Math.PI/2, upper:Math.PI/2}, urdf);
+  assert("identical ranges -> 1:1", f.status==="1:1"&&f.ok, f.status);
+  f=fitVerdict({lower:-1.0, upper:Math.PI/2}, urdf);       // hardware stops short
+  assert("hardware short of urdf -> over-travel (unsafe)", f.status==="over-travel"&&!f.ok, `${f.status} dLower=${f.dLower.toFixed(3)}`);
+  f=fitVerdict({lower:-2.0, upper:2.0}, urdf);             // hardware has spare
+  assert("hardware wider than urdf -> conservative (safe)", f.status==="conservative"&&f.ok, f.status);
+  f=fitVerdict({lower:-Math.PI/2+0.01, upper:Math.PI/2-0.01}, urdf);
+  assert("sub-degree difference still reads 1:1", f.status==="1:1", f.status);
 
   const pass=T.filter(t=>t.ok).length;
   log(`-- self-test: ${pass}/${T.length} passed --`);
@@ -576,7 +719,7 @@ async function setTorque(id,on){ if(demoMode){ demoTorque[id]=on; return; } retu
 async function moveServo(id,pos){ if(demoMode){ demoGoal[id]=pos; return; } return api(`/servo/${id}/move`,{pos:Math.round(pos)}); }
 async function setServoCfg(id,speed,accel){ if(demoMode) return; return api(`/servo/${id}/profile`,{speed,accel}); }
 
-async function torqueJoint(joint,on){ for(const id of joint.ids) await setTorque(id,on); }
+async function torqueJoint(joint,on){ await setTorque(joint.id,on); }
 async function failSafeDisarm(){
   if(demoMode){ for(const k in demoTorque) demoTorque[k]=false; return; }
   if(!busConnected) return;
@@ -585,28 +728,237 @@ async function failSafeDisarm(){
 const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
 
 // ======================================================================
-// Demo mode — synthetic hardware so the gauge/verdict/arm-check animate
-// without a bench. Models a 6-single-servo mod101 arm.
+// Demo mode — synthetic hardware so the gauges, the verdicts and the 3D model
+// all animate without a bench. Six single servos.
 // ======================================================================
 let demoMode=false;
 const demoGoal={}, demoTorque={};
-let demoSweep={active:false, p:1200, dir:1, k:0, K:4536, bind:0, brk:null};
-function demoStartSweep(joint){ demoSweep={active:true,p:1500,dir:1,k:0,
-  K: joint.mirror?4536:0, bind:0, brk:null}; }
+let demoSweep={active:false, p:1200, dir:1, k:0};
+function demoStartSweep(){ demoSweep={active:true,p:1500,dir:1,k:0}; }
 function demoRead(id){
   if(demoSweep.active){ demoSweep.k++; demoSweep.p+=demoSweep.dir*12;
     if(demoSweep.p>3100) demoSweep.dir=-1; if(demoSweep.p<1200) demoSweep.dir=1; }
-  const j = wiz.joints[wiz.cur] || {primary:id,mirror:null};
+  const j = wiz.joints[wiz.cur] || {id};
   const noise=(((demoSweep.k*131+id*7)%15)-7);
   let pos;
   if(!demoSweep.active && demoTorque[id] && demoGoal[id]!=null){
     pos = demoGoal[id] + (noise%3);            // driven: settle near goal
-  } else if(id===j.primary) pos=Math.round(demoSweep.p);
-  else if(id===j.mirror) pos=Math.round(demoSweep.K - demoSweep.p + noise);
-  else pos=2048;
+  } else if(id===j.id && demoSweep.active) pos=Math.round(demoSweep.p);
+  else pos = demoGoal[id]!=null? demoGoal[id] : 2048;
   const goal=demoGoal[id];
   const cur = (goal!=null && demoTorque[id]) ? 40+Math.abs(((demoSweep.k*13+id)%30)) : 8;
-  return {id, online:true, pos, speed:0, current_ma:cur, voltage_mv:12100, load_dpct:Math.round(cur/8), temp_c:34};
+  return {id, online:true, pos:modTick(pos), speed:0, current_ma:cur, voltage_mv:12100, load_dpct:Math.round(cur/8), temp_c:34};
+}
+
+// ======================================================================
+// The 3D model — same scene as the build page (viewer.js), but posed from
+// live servo telemetry instead of sliders.
+//
+// Anchoring: a servo tick only becomes a joint angle once we know which tick IS
+// the joint's zero. Before a joint is calibrated we don't, so the anchor starts
+// at wherever the arm was when we first saw it, and during a sweep it tracks the
+// midpoint of the travel seen so far — the model re-centres itself as the sweep
+// grows, and lands on the real home the moment the sweep is accepted. Limits are
+// deliberately NOT enforced on the model: a joint driven past its URDF <limit>
+// has to be visible, because that mismatch is what this tab exists to find.
+// ======================================================================
+const viewer = createViewer($("viewer"), {
+  onStatus:(text,kind)=>{ const e=$("viewer-status"); if(e){ e.textContent=text; e.className="note "+kind; } },
+});
+let urdfJoints=[];                 // [{name, joint, lower, upper, bounded, isLinear}]
+let urdfByName=new Map();
+const anchors={};                  // servo id -> tick that maps to model zero
+const liveRad={};                  // servo id -> last angle pushed to the model
+const lastSeen={};                 // servo id -> last raw tick (motion detector)
+const movingUntil={};              // servo id -> timestamp while it counts as moving
+
+async function loadModel(){
+  try{
+    await viewer.load();
+    viewer.setIgnoreLimits(true);
+    urdfJoints=viewer.actuatedJoints();
+    urdfByName=new Map(urdfJoints.map(j=>[j.name,j]));
+    log(`urdf: ${urdfJoints.length} actuated joints [${urdfJoints.map(j=>j.name).join(", ")}]`);
+    // The bus can come up before the URDF does (demo mode adopts servos
+    // synchronously), and everything joint-shaped — the ROS-joint picker, the
+    // stage's limit line, the highlight — is rendered from urdfByName. Re-render
+    // it once the model is really here rather than leaving a stale "not in the
+    // URDF" behind.
+    renderServos(); renderFit();
+    if(wiz.joints.length && (wiz.state==="idle"||wiz.state==="global")) enterJoint();
+    else { focusJoint(focusedId ?? wiz.joints[wiz.cur]?.id ?? null); }
+  }catch(e){ log("! urdf load failed: "+(e.message||e)); }
+}
+
+function urdfFor(id){ return urdfByName.get(mapFor(id).ros) || null; }
+
+// Every telemetry sample funnels through here, so the model tracks whatever the
+// poller, a sweep or a drive-test happens to be reading.
+function driveModel(t){
+  if(!t || !t.online || t.pos<0) return;
+  if(anchors[t.id]==null) anchors[t.id]=t.pos;
+  const m=mapFor(t.id);
+  const rad = m.sign * wrapSigned(t.pos - anchors[t.id]) * TICK_RAD;
+  liveRad[t.id]=rad;
+  viewer.setJoint(m.ros, rad);
+
+  const prev=lastSeen[t.id];
+  lastSeen[t.id]=t.pos;
+  if(prev!=null && Math.abs(wrapSigned(t.pos-prev))>=MOTION_TICKS) noteMotion(t.id);
+}
+
+// "Highlight each motion": whichever joint is actually turning gets the glow and
+// its rail pip lights up. The wizard's own joint always wins while it's running,
+// so a sweep can't have the highlight stolen by bus noise elsewhere.
+function noteMotion(id){
+  movingUntil[id]=performance.now()+MOTION_HOLD;
+  const pip=document.querySelector(`#rail .pip[data-sid="${id}"]`);
+  if(pip){ pip.classList.add("moving"); setTimeout(()=>{ if(performance.now()>=(movingUntil[id]||0)) pip.classList.remove("moving"); }, MOTION_HOLD+50); }
+  if(!$("follow").checked) return;
+  if(wiz.state==="sweeping" || wiz.state==="arm_check") return;
+  const j=wiz.joints[wiz.cur];
+  if(j && j.id===id) return;                     // already highlighted
+  focusJoint(id);
+}
+
+// Point the scene at one servo's joint: highlight the link it drives and show
+// its travel bars in the overlay.
+let focusedId=null;
+function focusJoint(id){
+  focusedId=id;
+  viewer.highlight(id==null? null : mapFor(id).ros);
+  renderOverlay();
+}
+
+// ---- the URDF-vs-measured travel bars --------------------------------
+function limbarHTML(){
+  return `<div class="limbar">
+    <div class="lrow"><span class="llab">urdf</span>
+      <div class="ltrack"><div class="lband urdf"></div><div class="lband over" data-ovlo></div><div class="lband over" data-ovhi></div><div class="lzero"></div></div>
+      <span class="lval" data-urdf>—</span></div>
+    <div class="lrow"><span class="llab">measured</span>
+      <div class="ltrack"><div class="lband hw"></div><div class="lzero"></div><div class="lneedle"></div></div>
+      <span class="lval" data-hw>—</span></div>
+    <div class="lscale"><span data-lo>—</span><span data-live>—</span><span data-hi>—</span></div>
+  </div>`;
+}
+// urdf/hw: {lower,upper} in radians or null. live: radians or null.
+function updateLimbar(host, urdf, hw, live){
+  if(!host) return;
+  const vals=[];
+  if(urdf){ vals.push(urdf.lower, urdf.upper); }
+  if(hw){ vals.push(hw.lower, hw.upper); }
+  if(live!=null) vals.push(live);
+  vals.push(0);
+  let lo=Math.min(...vals), hi=Math.max(...vals);
+  const pad=Math.max((hi-lo)*0.06, 0.05); lo-=pad; hi+=pad;
+  const pct=(v)=>Math.max(0,Math.min(100,((v-lo)/(hi-lo))*100));
+  const put=(sel,a,b)=>{ const el=host.querySelector(sel); if(!el) return;
+    if(a==null){ el.style.display="none"; return; }
+    el.style.display=""; el.style.left=pct(a)+"%"; el.style.width=Math.max(0,pct(b)-pct(a))+"%"; };
+
+  put(".lband.urdf", urdf? urdf.lower:null, urdf? urdf.upper:null);
+  put(".lband.hw",   hw?   hw.lower:null,   hw?   hw.upper:null);
+  // Red where the URDF reaches past the measured travel — the direction that
+  // sends a planned move into a hard stop.
+  put("[data-ovlo]", (urdf&&hw&&urdf.lower<hw.lower-FIT_TOL)? urdf.lower:null, hw? hw.lower:0);
+  put("[data-ovhi]", (urdf&&hw&&urdf.upper>hw.upper+FIT_TOL)? hw.upper:null, urdf? urdf.upper:0);
+  host.querySelectorAll(".lzero").forEach(el=>el.style.left=pct(0)+"%");
+  const needle=host.querySelector(".lneedle");
+  if(needle){ needle.style.display = live==null? "none":""; if(live!=null) needle.style.left=pct(live)+"%"; }
+  const set=(sel,txt)=>{ const el=host.querySelector(sel); if(el) el.textContent=txt; };
+  set("[data-urdf]", urdf? `${degs(urdf.lower)} … ${degs(urdf.upper)}` : "not in urdf");
+  set("[data-hw]",   hw?   `${degs(hw.lower)} … ${degs(hw.upper)}`     : "not measured");
+  set("[data-lo]", degs(lo)); set("[data-hi]", degs(hi));
+  set("[data-live]", live==null? "—" : `live ${degs(live)}`);
+}
+
+// Measured travel for a servo, in radians, or null until it's been swept.
+function measuredLimits(id){
+  const r=wiz.results[id];
+  if(!r || r.verdict!=="clean") return null;
+  return rosLimits(r, mapFor(id).sign);
+}
+// While a sweep is running the travel isn't accepted yet, but it IS interesting
+// live — show what has been covered so far, relative to the moving anchor.
+function sweepLimits(id){
+  const sw=wiz.sweep;
+  if(!sw || !isFinite(sw.minP) || sw.maxP<=sw.minP) return null;
+  const m=mapFor(id), a=anchors[id];
+  if(a==null) return null;
+  const x=m.sign*wrapSigned(modTick(sw.minP)-a)*TICK_RAD;
+  const y=m.sign*wrapSigned(modTick(sw.maxP)-a)*TICK_RAD;
+  return { lower:Math.min(x,y), upper:Math.max(x,y) };
+}
+
+function renderOverlay(){
+  const id = focusedId ?? (wiz.joints[wiz.cur]?.id ?? null);
+  const title=$("ovTitle"), host=$("ovBars");
+  if(id==null){ title.textContent="no joint selected"; host.innerHTML=`<p class="note" style="margin:0">Connect the bus (or tick Demo mode) and pick a joint.</p>`; return; }
+  const m=mapFor(id), u=urdfByName.get(m.ros);
+  title.innerHTML=`${esc(m.ros)} <span class="unit">#${id}</span>`+(u?"":` <span class="chip bad">not in urdf</span>`);
+  if(!host.querySelector(".limbar")) host.innerHTML=limbarHTML();
+  updateLimbar(host, u? {lower:u.lower,upper:u.upper}:null,
+                     measuredLimits(id) || (wiz.state==="sweeping"? sweepLimits(id):null),
+                     liveRad[id] ?? null);
+}
+
+// ---- the fit table ---------------------------------------------------
+// Both directions of "1-to-1": a URDF joint with no servo behind it, and a servo
+// pointed at a joint the URDF doesn't declare.
+function fitRows(){
+  const rows=[];
+  const byJoint=new Map();
+  for(const s of (wiz.cfg?.servos||[])) byJoint.set(mapFor(s.id).ros, s.id);
+  for(const u of urdfJoints){
+    const id=byJoint.get(u.name) ?? null;
+    const hw=id==null? null : measuredLimits(id);
+    rows.push({ name:u.name, id, urdf:{lower:u.lower,upper:u.upper}, hw,
+                fit: hw? fitVerdict(hw,{lower:u.lower,upper:u.upper}) : null,
+                note: id==null? "no servo mapped" : hw? null : "not measured" });
+  }
+  for(const s of (wiz.cfg?.servos||[])){
+    const name=mapFor(s.id).ros;
+    if(!urdfByName.has(name)) rows.push({ name, id:s.id, urdf:null, hw:measuredLimits(s.id), fit:null, note:"not in urdf" });
+  }
+  return rows;
+}
+function renderFit(){
+  const rows=fitRows(), body=$("fitBody");
+  if(!rows.length){ body.innerHTML=`<tr><td colspan="7" class="note">Load the URDF and calibrate a joint.</td></tr>`;
+    $("fitState").textContent="nothing measured"; $("fitState").className="chip mute"; return; }
+  body.innerHTML=rows.map(r=>{
+    const rng=(x)=>x? `${degs(x.lower)} … ${degs(x.upper)}` : "—";
+    const v = r.fit? r.fit.status : (r.note||"—");
+    const cls = r.fit? (r.fit.status==="1:1"?"ok":r.fit.ok?"warn":"bad") : "";
+    return `<tr class="${r.fit&&!r.fit.ok?"bad-row":""}">`+
+      `<td>${esc(r.name)}</td><td class="num">${r.id??"—"}</td>`+
+      `<td class="num">${rng(r.urdf)}</td><td class="num">${rng(r.hw)}</td>`+
+      `<td class="num">${r.fit? degs(r.fit.dLower):"—"}</td>`+
+      `<td class="num">${r.fit? degs(r.fit.dUpper):"—"}</td>`+
+      `<td class="v ${cls}">${esc(v)}</td></tr>`;
+  }).join("");
+  const measured=rows.filter(r=>r.fit);
+  const bad=measured.filter(r=>!r.fit.ok).length;
+  const exact=measured.filter(r=>r.fit.status==="1:1").length;
+  const st=$("fitState");
+  if(!measured.length){ st.textContent="nothing measured"; st.className="chip mute"; }
+  else if(bad){ st.textContent=`${bad} over-travel`; st.className="chip bad"; }
+  else { st.textContent=`${exact}/${measured.length} exact`; st.className="chip ok"; }
+}
+// Paste-ready <limit> lines for the joints that have actually been measured.
+function renderFitSnippet(){
+  const rows=fitRows().filter(r=>r.hw && r.urdf);
+  if(!rows.length){ $("fitOut").innerHTML=`<p class="note">Nothing measured yet.</p>`; return; }
+  const body=rows.map(r=>
+    `<!-- ${r.name}: measured ${degs(r.hw.lower)} … ${degs(r.hw.upper)} -->\n`+
+    `<limit effort="100" lower="${r.hw.lower.toFixed(6)}" upper="${r.hw.upper.toFixed(6)}" velocity="100"/>`
+  ).join("\n");
+  $("fitOut").innerHTML=
+    `<div class="row" style="margin-top:10px"><span class="chip mute">measured travel as URDF limits</span></div>`+
+    `<pre style="${PRE_STYLE}margin:6px 0 0">${esc(body)}</pre>`+
+    `<p class="note">Hand-edit into <code>mod101_description/urdf/mod101_macro.xacro</code> if you want the
+      URDF to match the arm exactly. Nothing here writes the URDF — the build page owns that file.</p>`;
 }
 
 // ======================================================================
@@ -614,92 +966,273 @@ function demoRead(id){
 // ======================================================================
 const wiz = { joints:[], cur:0, state:"idle", results:{}, cfg:null, sweep:null };
 
-// Build the joint list from the servo IDs found on the bus plus the local map.
-// A servo named as someone else's `mirror` is a follower and gets no joint.
+// One servo, one joint — the joint's name comes from the local map.
 function buildJoints(ids){
-  const followers=new Set(ids.map(id=>mapFor(id).mirror).filter(m=>m>0));
-  return ids.filter(id=>!followers.has(id)).map((id,i)=>{
-    const m=mapFor(id);
-    const mir = m.mirror>0 ? m.mirror : null;
-    return { idx:i, name:m.ros, primary:id, mirror:mir, ids: mir?[id,mir]:[id] };
-  });
+  return ids.map((id,i)=>({ idx:i, id, name:mapFor(id).ros }));
 }
 // Client-side working config: min/max/home/profile per servo. There is no
 // config on the arm, so this is seeded fresh and only ever lives here and in
 // the generated repo files.
 function buildCfg(ids){
-  return { servos: ids.map(id=>({ id, joint:mapFor(id).ros, mirror:mapFor(id).mirror||0,
-                                  min:0, max:4095, center:2048, speed:800, accel:20 })) };
+  return { servos: ids.map(id=>({ id, joint:mapFor(id).ros, min:0, max:4095, center:2048, speed:800, accel:20 })) };
 }
-function jointResult(j){ return wiz.results[j.primary]; }
+function jointResult(j){ return wiz.results[j.id]; }
 function allClean(){ return wiz.joints.length>0 && wiz.joints.every(j=>{ const r=jointResult(j); return r&&r.verdict==="clean"&&r.baked; }); }
 
 function adoptServos(ids){
   ids=[...ids].sort((a,b)=>a-b);
   wiz.cfg=buildCfg(ids); wiz.joints=buildJoints(ids); wiz.cur=0; wiz.results={};
-  log(`bus: ${ids.length} servos [${ids.join(", ")}] -> ${wiz.joints.length} joints`);
-  renderSidebar(); renderSetup(); startPoller(); enterJoint();
+  for(const k of Object.keys(anchors)) delete anchors[k];
+  log(`bus: ${ids.length} servos [${ids.join(", ")}]`);
+  renderServos(); renderFit(); startPoller(); enterJoint();
+  // Keep the selection across a rescan when that servo is still on the bus.
+  if(ids.length) selectServo(ids.includes(ctlId)? ctlId : ids[0]);
 }
 function rebuildJoints(){
   if(!wiz.cfg) return;
   const ids=wiz.cfg.servos.map(s=>s.id);
   wiz.joints=buildJoints(ids); wiz.cur=0;
-  wiz.cfg.servos.forEach(s=>{ s.joint=mapFor(s.id).ros; s.mirror=mapFor(s.id).mirror||0; });
-  renderSidebar(); renderSetup(); renderRail(); enterJoint();
+  wiz.cfg.servos.forEach(s=>{ s.joint=mapFor(s.id).ros; });
+  renderServos(); renderRail(); renderFit(); enterJoint();
   log(`rebuilt: ${wiz.joints.length} joints`);
 }
 
 // ======================================================================
-// Servo setup table
+// HARDWARE TAB — the servo cards
 // ======================================================================
-function renderSetup(){
-  const body=$("setupBody");
+// One card per servo, and the servo IS the component. Everything true of a
+// servo lives on its own card: which one it is, whether it is answering, the
+// joint it happens to be mapped to, what it reads right now, and the buttons
+// that move it. That used to be three panels — a mapping table, a separate
+// "drive a servo" pane and a status sidebar — which is three places to watch
+// while turning one motor, and only one of the three said which joint the
+// motor even was.
+//
+// The ROS-joint field is a picker over the joints the loaded URDF actually
+// declares, not free text: a typo there is a joint that silently never matches
+// the model, which is exactly the failure the model tab is meant to catch. A
+// name that isn't in the URDF (older map, tool joint `6`) stays selectable.
+function rosJointOptions(current){
+  const names=urdfJoints.map(j=>j.name);
+  if(current && !names.includes(current)) names.unshift(current);
+  if(!names.length) return `<option>${esc(current||"")}</option>`;
+  return names.map(n=>`<option${n===current?" selected":""}>${esc(n)}</option>`).join("");
+}
+
+// Jog step, in encoder ticks, shared by every card. Deliberately small — the
+// coarsest offer is 25 ticks ≈ 2.2° — because this is raw bus control with no
+// travel limit behind it, and the previous slider let one drag cross a joint's
+// whole range into its hard stop.
+const JOG_KEY = "mod101.calibration.jogstep";
+const JOG_STEPS = [1, 5, 10, 25];
+let jogStep = 5;
+try{ const v=parseInt(localStorage.getItem(JOG_KEY)||"",10); if(JOG_STEPS.includes(v)) jogStep=v; }catch(e){}
+
+let ctlId=null;                 // selected card — also what the model highlights
+const torqueState={};           // servo id -> armed
+const goalTick={};              // servo id -> last goal commanded from here
+const jogBusy={};               // servo id -> a step is in flight
+
+function stepOptions(){
+  return JOG_STEPS.map(n=>
+    `<option value="${n}"${n===jogStep?" selected":""}>${n} tick${n===1?"":"s"} · ${deg(n*TICK_RAD).toFixed(1)}°</option>`
+  ).join("");
+}
+
+function servoCardHTML(s){
+  const m=mapFor(s.id);
+  return `<article class="servo" data-sid="${s.id}">
+    <div class="svh">
+      <span class="jdot"></span><span class="svid">#${s.id}</span>
+      <span class="svname f-jname">${esc(m.ros||"unmapped")}</span>
+      <span class="spacer"></span>
+      <span class="chip mute f-tq">idle</span>
+    </div>
+    <div class="svmap">
+      <label>joint <select data-f="ros">${rosJointOptions(m.ros)}</select></label>
+      <label>lerobot <input type="text" data-f="lerobot" value="${esc(m.lerobot)}"></label>
+      <label>model <select data-f="model">${SERVO_MODELS.map(k=>`<option${k===m.model?" selected":""}>${k}</option>`).join("")}</select></label>
+      <label>sign <select data-f="sign"><option value="1"${m.sign>0?" selected":""}>+1</option><option value="-1"${m.sign<0?" selected":""}>-1</option></select></label>
+    </div>
+    <div class="svtel">
+      <div class="jmf"><span>pos</span><b class="f-pos">—</b></div>
+      <div class="jmf"><span>angle</span><b class="f-rad">—</b></div>
+      <div class="jmf"><span>vel</span><b class="f-vel">—</b></div>
+      <div class="jmf"><span>goal</span><b class="f-goal">—</b></div>
+      <div class="jmf"><span>cur</span><span><b class="f-cur">—</b> mA</span></div>
+      <div class="jmf"><span>volt</span><span><b class="f-volt">—</b> V</span></div>
+      <div class="jmf"><span>load</span><span><b class="f-load">—</b> %</span></div>
+      <div class="jmf f-trow"><span>temp</span><span><b class="f-temp">—</b> C</span></div>
+    </div>
+    <div class="svdrive">
+      <button class="ghost sm f-torque">Torque on</button>
+      <button class="ghost sm f-here">Hold here</button>
+      <span class="spacer"></span>
+      <button class="ghost jog f-minus" title="one step down" disabled>−</button>
+      <select class="svstep f-step">${stepOptions()}</select>
+      <button class="ghost jog f-plus" title="one step up" disabled>+</button>
+    </div>
+    <details class="fold svprof"><summary>speed / accel</summary>
+      <div class="row" style="margin-top:7px">
+        <span class="unit">speed <input type="number" class="f-speed" min="1" max="3400" value="${s.speed||800}" style="width:5.5rem"></span>
+        <span class="unit">accel <input type="number" class="f-accel" min="1" max="254" value="${s.accel||20}" style="width:5rem"></span>
+        <button class="ghost sm f-apply">Apply</button>
+      </div>
+    </details>
+  </article>`;
+}
+
+function cardFor(id){ return document.querySelector(`#servoList .servo[data-sid="${id}"]`); }
+
+// The torque chip, the button label and whether the jog pair is live. Jogging is
+// gated on torque because an STS servo ignores a goal it isn't armed for: with
+// the torque off the buttons would look like they work and do nothing.
+function paintDrive(id){
+  const card=cardFor(id); if(!card) return;
+  const on=!!torqueState[id];
+  const q=(c)=>card.querySelector(c);
+  q(".f-torque").textContent = on? "Torque off" : "Torque on";
+  const chip=q(".f-tq");
+  chip.textContent = on? "armed" : "idle";
+  chip.className = "chip f-tq "+(on? "ok" : "mute");
+  q(".f-minus").disabled = !on;
+  q(".f-plus").disabled  = !on;
+  q(".f-goal").textContent = goalTick[id]!=null? goalTick[id] : "—";
+}
+function paintAllDrive(){ for(const s of (wiz.cfg?.servos||[])) paintDrive(s.id); }
+
+// Every torque change goes through here, so a card can never claim a servo is
+// armed after a sweep, a drive-test or the E-stop dropped it.
+function setTorqueState(id,on){ torqueState[id]=on; paintDrive(id); }
+
+// Where the next step counts from. Armed, the servo is still chasing its last
+// goal, so counting from the present position would stall inside the motion
+// already in flight — each press would ask for less than a step. Unarmed the
+// joint can be moved by hand, which makes the tracked goal stale and the present
+// position the only honest origin.
+async function jogOrigin(id){
+  if(torqueState[id] && goalTick[id]!=null) return goalTick[id];
+  try{ const t=await readServo(id); if(t && t.online && t.pos>=0) return t.pos; }catch(e){}
+  return goalTick[id] ?? 2048;
+}
+// One press, one step, and the next press waits for this one to be acknowledged.
+// Clamped rather than wrapped: 0 and 4095 are the ends of the encoder, and a
+// button that silently jumped a joint half a turn across the seam would be the
+// single most dangerous control on this page.
+async function jog(id,dir){
+  if(jogBusy[id]) return;
+  jogBusy[id]=true;
+  try{
+    const to=Math.max(0, Math.min(TICKS-1, Math.round(await jogOrigin(id) + dir*jogStep)));
+    goalTick[id]=to;
+    await moveServo(id,to);
+    paintDrive(id);
+  }catch(e){ log("! jog: "+e.message); }
+  finally{ jogBusy[id]=false; }
+}
+
+function wireServoCard(card,s){
+  const id=s.id, m=mapFor(id), q=(c)=>card.querySelector(c);
+
+  // Clicking the card selects it (which is what the model tab highlights);
+  // clicking a control inside it does that control's job and nothing else.
+  card.onclick=(e)=>{ if(!e.target.closest("input,select,button,summary")) selectServo(id); };
+
+  card.querySelectorAll("[data-f]").forEach(el=>{
+    el.onchange=()=>{
+      const f=el.dataset.f;
+      m[f] = (f==="sign") ? Number(el.value) : el.value.trim();
+      saveMap();
+      if(f==="ros"){
+        const j=wiz.joints.find(x=>x.id===id); if(j) j.name=m.ros;
+        s.joint=m.ros;
+        q(".f-jname").textContent = m.ros || "unmapped";
+        renderRail(); renderOverlay();
+      }
+      refreshGenState(); renderFit();
+    };
+  });
+
+  q(".f-torque").onclick=async()=>{
+    const on=!torqueState[id];
+    try{
+      // Torque-on without a goal makes a servo snap to whatever its last goal
+      // was. Write present position first, so "on" means "hold still".
+      if(on){
+        const t=await readServo(id);
+        if(t && t.online && t.pos>=0){ await moveServo(id,t.pos); goalTick[id]=t.pos; }
+      }
+      await setTorque(id,on); setTorqueState(id,on);
+      log(`#${id} torque ${on?"on":"off"}`);
+    }catch(e){ log("! torque: "+e.message); }
+  };
+  q(".f-here").onclick=async()=>{
+    try{
+      const t=await readServo(id);
+      if(t && t.online && t.pos>=0){ await moveServo(id,t.pos); goalTick[id]=t.pos; paintDrive(id); log(`#${id} holding ${t.pos}`); }
+    }catch(e){ log("! hold: "+e.message); }
+  };
+  q(".f-minus").onclick=()=>jog(id,-1);
+  q(".f-plus").onclick =()=>jog(id,+1);
+  q(".f-step").onchange=(e)=>{
+    jogStep=parseInt(e.target.value,10)||5;
+    try{ localStorage.setItem(JOG_KEY,String(jogStep)); }catch(err){}
+    // One step for the whole bench: the other cards say so too.
+    document.querySelectorAll("#servoList .f-step").forEach(sel=>{ sel.value=String(jogStep); });
+  };
+  q(".f-apply").onclick=async()=>{
+    const sp=Math.max(1,parseInt(q(".f-speed").value||"0",10)), ac=Math.max(1,parseInt(q(".f-accel").value||"0",10));
+    try{ await setServoCfg(id,sp,ac); s.speed=sp; s.accel=ac; log(`#${id}: speed ${sp} accel ${ac}`); }
+    catch(e){ log("! profile: "+e.message); }
+  };
+
+  paintDrive(id);
+}
+
+function renderServos(){
+  const host=$("servoList");
+  pollIds=[];
   if(!wiz.cfg || !wiz.cfg.servos?.length){
-    body.innerHTML=`<tr><td colspan="7" class="note">Connect, or tick Demo mode.</td></tr>`;
+    host.innerHTML=`<p class="note" style="margin:0">Connect, or tick Demo mode.</p>`;
     $("setupCount").textContent="no bus"; $("setupCount").className="chip mute";
     refreshGenState(); return;
   }
   $("setupCount").textContent=`${wiz.cfg.servos.length} servos`;
   $("setupCount").className="chip ok";
-  body.innerHTML="";
-  wiz.cfg.servos.forEach(s=>{
-    const m=mapFor(s.id);
-    const tr=document.createElement("tr");
-    tr.innerHTML=
-      `<td class="num">${s.id}</td>`+
-      `<td><input type="number" data-f="mirror" min="0" max="253" value="${m.mirror||0}" style="width:4rem"></td>`+
-      `<td><select data-f="model">${SERVO_MODELS.map(k=>`<option${k===m.model?" selected":""}>${k}</option>`).join("")}</select></td>`+
-      `<td><input type="text" data-f="ros" value="${m.ros}"></td>`+
-      `<td><input type="text" data-f="lerobot" value="${m.lerobot}"></td>`+
-      `<td><select data-f="sign"><option value="1"${m.sign>0?" selected":""}>+1</option><option value="-1"${m.sign<0?" selected":""}>-1</option></select></td>`+
-      `<td class="num" data-pos="${s.id}">—</td>`;
-    tr.querySelectorAll("[data-f]").forEach(el=>{
-      el.onchange=()=>{
-        const f=el.dataset.f;
-        m[f] = (f==="sign"||f==="mirror") ? Number(el.value) : el.value.trim();
-        saveMap(); refreshGenState();
-        if(f==="mirror") log("mirror changed — press Rebuild joints to apply");
-      };
-    });
-    body.appendChild(tr);
-  });
+  host.innerHTML = wiz.cfg.servos.map(servoCardHTML).join("");
+  wiz.cfg.servos.forEach(s=>{ pollIds.push(s.id); wireServoCard(cardFor(s.id), s); });
+  if(ctlId!=null) selectServo(ctlId);
+  markActive();
   refreshGenState();
 }
 
+function selectServo(id){
+  ctlId=id;
+  document.querySelectorAll("#servoList .servo").forEach(c=>c.classList.toggle("sel", +c.dataset.sid===id));
+  focusJoint(id);
+}
+// The joint the model tab's wizard is on, marked here too — the two tabs are one
+// session and it should be obvious which servo the wizard has hold of.
+function markActive(){
+  const cur=wiz.joints[wiz.cur]?.id;
+  document.querySelectorAll("#servoList .servo").forEach(c=>c.classList.toggle("active", +c.dataset.sid===cur));
+}
+
 // ======================================================================
-// Rendering
+// MODEL TAB — the per-joint wizard
 // ======================================================================
 function renderRail(){
   const rail=$("rail"); rail.innerHTML="";
   wiz.joints.forEach((j,i)=>{
     const r=jointResult(j);
     const cls = i===wiz.cur?"active": r? (r.verdict==="clean"?"clean":"bad") : "";
-    const pip=document.createElement("div"); pip.className="pip "+cls;
-    pip.innerHTML=`<span class="dot"></span>${j.name}${j.mirror?` <small>(${j.primary}+${j.mirror})</small>`:""}`;
+    const pip=document.createElement("div"); pip.className="pip "+cls; pip.dataset.sid=j.id;
+    pip.innerHTML=`<span class="dot"></span>${esc(j.name)} <small>#${j.id}</small>`;
     pip.onclick=()=>{ if(wiz.state!=="sweeping"){ wiz.cur=i; enterJoint(); } };
+    pip.onmouseenter=()=>{ if(wiz.state!=="sweeping") focusJoint(j.id); };
     rail.appendChild(pip);
   });
-  markSidebarActive();
+  markActive();
 }
 function stageCard(inner){ $("stage").innerHTML=`<div class="panel">${inner}</div>`; }
 
@@ -707,23 +1240,23 @@ function stageCard(inner){ $("stage").innerHTML=`<div class="panel">${inner}</di
 function enterJoint(){
   wiz.sweep=null;                                 // poller keeps running (sidebar stays live)
   const j=wiz.joints[wiz.cur]; if(!j){ renderGlobalDone(); return; }
-  wiz.state="idle"; renderRail();
+  wiz.state="idle"; renderRail(); focusJoint(j.id);
   const r=jointResult(j);
-  const pair=!!j.mirror;
+  const u=urdfByName.get(j.name);
   stageCard(`
-    <div class="panel-head"><h2>${j.name}</h2>
-      <span class="chip">${pair?`pair #${j.primary} + #${j.mirror}`:`servo #${j.primary}`}</span>
+    <div class="panel-head"><h2>${esc(j.name)}</h2>
+      <span class="chip">servo #${j.id}</span>
       <span class="spacer"></span><span class="note" style="margin:0">joint ${wiz.cur+1} / ${wiz.joints.length}</span></div>
-    ${pair?`
-      <p class="prompt">Calibrate <b>${j.name}</b> with one slow hand sweep.</p>
-      <p class="note">Pressing start drops torque so you can move it freely. Move it gently stop to stop and
-        back; the wizard reads the travel limits, the mirror offset K and the health verdict from the motion.</p>`:`
-      <p class="prompt"><b>${j.name}</b> is a single servo — no pairing, just its travel limits and home.</p>
-      <p class="note">Sweep it by hand to capture min/max, or enter the numbers directly. Either way you can
-        set the home position manually — that becomes 0 rad in ROS and mid-scale in LeRobot.</p>`}
+    <p class="prompt">Sweep <b>${esc(j.name)}</b> by hand, stop to stop.</p>
+    <p class="note">Pressing start drops torque so the joint moves freely. The model follows the servo while
+      you sweep and re-centres as the travel grows, so you can see the arm's real range land on top of the
+      URDF's declared one.</p>
+    ${u? `<p class="note">URDF declares <b>${degs(u.lower)} … ${degs(u.upper)}</b> for this joint.</p>`
+       : `<div class="verdict fault"><b>Not in the URDF.</b> No joint called <code>${esc(j.name)}</code> is
+           declared — rename it on the hardware tab, or this joint can be calibrated but never checked.</div>`}
     ${r?`<div class="verdict ${r.verdict}"><b>Previous result:</b> ${verdictLine(j,r)}</div>`:""}
     <div class="bar" style="margin-top:12px">
-      <button id="goSweep">Free joint &amp; ${pair?"start sweep":"sweep travel"}</button>
+      <button id="goSweep">Free joint &amp; sweep travel</button>
       <button id="goManual" class="ghost">Enter limits manually</button>
       ${wiz.cur>0?`<button id="prevJoint" class="ghost">&larr; previous</button>`:""}
       ${allClean()?`<button id="toSave">All clean &rarr; finish</button>`:""}
@@ -732,32 +1265,30 @@ function enterJoint(){
   $("goManual").onclick=()=>renderManual(j);
   if($("prevJoint")) $("prevJoint").onclick=()=>{ wiz.cur--; enterJoint(); };
   if($("toSave")) $("toSave").onclick=renderGlobalDone;
+  renderOverlay();
 }
 
 async function startSweep(){
   const j=wiz.joints[wiz.cur];
   wiz.state="torque_off";
   try{ await torqueJoint(j,false); }catch(e){ log("! torque-off failed: "+e.message); return; }
-  if(demoMode) demoStartSweep(j);
+  setTorqueState(j.id,false);
+  if(demoMode) demoStartSweep();
   wiz.state="sweeping";
   wiz.sweep={samples:[], minP:Infinity, maxP:-Infinity, stall:0, lastSpread:0, hot:false,
-             uwP:makeUnwrap(), uwM:makeUnwrap()};   // unwrap the wrapping raw streams
+             uwP:makeUnwrap()};                   // unwrap the wrapping raw stream
+  focusJoint(j.id);
   renderSweep();
   sweepLoop(j);                                   // async, runs until Finish
 }
 function renderSweep(){
   const j=wiz.joints[wiz.cur];
   stageCard(`
-    <div class="panel-head"><h2>${j.name}</h2><span class="chip warn">torque OFF — move by hand</span>
+    <div class="panel-head"><h2>${esc(j.name)}</h2><span class="chip warn">torque OFF — move by hand</span>
       <span class="spacer"></span><span class="note" style="margin:0" id="sCount">0 samples</span></div>
-    <p class="prompt">Move <b>${j.name}</b> slowly through its full travel, stop to stop, then back.</p>
+    <p class="prompt">Move <b>${esc(j.name)}</b> slowly through its full travel, stop to stop, then back.</p>
     <p class="note">Range covered</p>
     <div class="track"><div class="fill" id="cov"></div></div>
-    ${j.mirror?`
-      <p class="note" style="margin-top:12px">Mirror sum — snaps teal when the pair agrees on a constant K</p>
-      <div class="gauge" id="gauge"><div class="band" id="gBand"></div><div class="ktick" id="gK"></div><div class="live" id="gLive"></div></div>
-      <div class="kv"><div>K (offset)<b id="gKv">—</b></div><div>live sum<b id="gSum">—</b></div><div>delta<b id="gDelta">—</b></div><div>spread<b id="gSpread">—</b></div></div>
-    `:""}
     <div class="telem" id="sTelem"></div>
     <div class="bar" style="margin-top:12px">
       <button id="finishSweep">Finish sweep &amp; compute</button>
@@ -771,20 +1302,16 @@ async function sweepLoop(j){
   const sw=wiz.sweep;
   while(wiz.state==="sweeping" && !sw.cancel){
     try{
-      const tp=await readServo(j.primary);
-      let tm=null; if(j.mirror) tm=await readServo(j.mirror);
-      updateSidebarTelemetry(tp); if(tm) updateSidebarTelemetry(tm);   // keep the sidebar live mid-sweep
-      if(tp&&tp.online&&tp.pos>=0 && (!j.mirror || (tm&&tm.online&&tm.pos>=0))){
-        // p/m are UNWRAPPED (continuous) for the math; rp/rm keep the raw ticks.
-        const s={p:sw.uwP(tp.pos), m: tm?sw.uwM(tm.pos):undefined,
-                 rp:tp.pos, rm: tm?tm.pos:undefined,
-                 loadP:tp.load_dpct/10, loadM: tm?tm.load_dpct/10:null,
-                 curP:tp.current_ma, curM: tm?tm.current_ma:null,
-                 tempP:tp.temp_c, tempM: tm?tm.temp_c:null};
+      const tp=await readServo(j.id);
+      updateTelemetry(tp);                        // keeps the cards and the model live mid-sweep
+      if(tp&&tp.online&&tp.pos>=0){
+        // p is UNWRAPPED (continuous) for the math; rp keeps the raw tick.
+        const s={p:sw.uwP(tp.pos), rp:tp.pos,
+                 load:tp.load_dpct/10, cur:tp.current_ma, temp:tp.temp_c};
         sw.samples.push(s); onSweepSample(j,s);
         // Reject bus-garbage temps (>95C) and require sustained heat before
         // aborting, so a single bad read can't kill the sweep.
-        let maxT=Math.max(tp.temp_c, tm?tm.temp_c:0); if(maxT>95) maxT=0;
+        let maxT=tp.temp_c; if(maxT>95) maxT=0;
         if(maxT>=TEMP_TRIP){ if((sw.hotN=(sw.hotN||0)+1)>=3){ sw.hot=true; log(`! ${j.name}: ${maxT}C — aborting sweep`); finishSweep(); return; } } else sw.hotN=0;
       }
     }catch(e){ /* transient read miss; keep going */ }
@@ -794,26 +1321,17 @@ async function sweepLoop(j){
 function onSweepSample(j,s){
   const sw=wiz.sweep;
   sw.minP=Math.min(sw.minP,s.p); sw.maxP=Math.max(sw.maxP,s.p);
+  // Re-anchor the model on the midpoint of the travel seen so far: the model
+  // self-centres as the sweep grows and is already right when it's accepted.
+  if(sw.maxP>sw.minP) anchors[j.id]=modTick((sw.minP+sw.maxP)/2);
   const spread=sw.maxP-sw.minP;
   if(spread<=sw.lastSpread+2) sw.stall++; else sw.stall=0; sw.lastSpread=spread;
+  renderOverlay();
   if(!$("cov")) return;
   $("cov").style.width=Math.min(100,(spread/3500)*100)+"%";
   $("sCount").textContent=`${sw.samples.length} samples`;
-  const hotP=s.tempP>=TEMP_WARN, hotM=s.tempM!=null&&s.tempM>=TEMP_WARN;
-  $("sTelem").innerHTML =
-    `<span class="tcell ${hotP?"hot":""}">#${j.primary} pos <b>${s.rp}</b> · load <b>${s.loadP.toFixed(0)}%</b> · <b>${s.tempP}C</b></span>`+
-    (j.mirror?`<span class="tcell ${hotM?"hot":""}">#${j.mirror} pos <b>${s.rm}</b> · load <b>${s.loadM.toFixed(0)}%</b> · <b>${s.tempM}C</b></span>`:"");
-  if(j.mirror && $("gauge")){
-    const sums=sw.samples.filter(x=>x.m!=null).map(x=>x.p+x.m);
-    const K=Math.round(median(sums)), sum=s.p+s.m, delta=sum-K, gspread=Math.max(...sums)-Math.min(...sums);
-    const lo=K-200, span=400;                      // gauge window +/-200 around K
-    const pct=(v)=>Math.max(0,Math.min(100,((v-lo)/span)*100));
-    $("gK").style.left="50%";
-    $("gBand").style.left=pct(K-SPREAD_THRESH)+"%"; $("gBand").style.width=(pct(K+SPREAD_THRESH)-pct(K-SPREAD_THRESH))+"%";
-    $("gLive").style.left=pct(sum)+"%";
-    $("gauge").classList.toggle("balanced",Math.abs(delta)<=SPREAD_THRESH);
-    $("gKv").textContent=K; $("gSum").textContent=sum; $("gDelta").textContent=(delta>0?"+":"")+delta; $("gSpread").textContent=gspread;
-  }
+  const hot=s.temp>=TEMP_WARN;
+  $("sTelem").innerHTML=`<span class="tcell ${hot?"hot":""}">#${j.id} pos <b>${s.rp}</b> · load <b>${s.load.toFixed(0)}%</b> · <b>${s.temp}C</b></span>`;
   const enough = spread>600 && sw.stall>25 && sw.samples.length>40;
   if($("sHint")) $("sHint").textContent = enough? "looks complete — finish when ready" : "keep sweeping…";
 }
@@ -821,25 +1339,19 @@ function finishSweep(){
   const j=wiz.joints[wiz.cur]; if(wiz.state!=="sweeping") return;
   if(demoMode) demoSweep.active=false;          // let demoRead follow drive goals next
   wiz.state="computing";
-  const sw=wiz.sweep; const samples = j.mirror? sw.samples.filter(s=>s.m!=null) : sw.samples;
-  if(samples.length<10){ log("! too few samples; sweep again"); enterJoint(); return; }
-  const res = j.mirror? computePairCalibration(samples) : computeSingleCalibration(samples);
+  const sw=wiz.sweep;
+  if(sw.samples.length<10){ log("! too few samples; sweep again"); enterJoint(); return; }
+  const res = computeCalibration(sw.samples);
   res.sweepHot = sw.hot;
   // The math ran in unwrapped space; store limits/centre back as raw ticks
   // (0..4095). The centre stays a valid raw tick inside the arc, so the arc is
   // recoverable as signed offsets from it even when it crosses the seam.
   res.min_p=modTick(res.min_p); res.max_p=modTick(res.max_p); res.center_p=modTick(res.center_p);
-  if(res.kind==="pair" && res.center_m!=null) res.center_m=modTick(res.center_m);
-  wiz.results[j.primary]=res;
+  wiz.results[j.id]=res;
   wiz.state="verdict"; renderVerdict(j,res);
 }
 
 function verdictLine(j,r){
-  if(r.kind==="pair"){
-    if(r.verdict==="clean") return `clean — K=${r.K}, travel [${r.min_p}..${r.max_p}], homes ${r.center_p}/${r.center_m}`;
-    if(r.verdict==="binding") return `binding — sum spread ${r.spread} ticks, diverges around pos ${r.divergeAngle}`;
-    return `fault — mirror reverses around pos ${r.divergeAngle} (encoder/slip)`;
-  }
   return r.verdict==="clean"? `clean — travel [${r.min_p}..${r.max_p}], home ${r.center_p}`
                             : `fault — position jump near ${r.faultAt}`;
 }
@@ -851,28 +1363,36 @@ function limitsEditorHTML(v){
       <span class="unit">min <input type="number" class="eMin" min="0" max="4095" value="${v.min}" style="width:5rem"></span>
       <span class="unit">max <input type="number" class="eMax" min="0" max="4095" value="${v.max}" style="width:5rem"></span>
       <span class="unit">home <input type="number" class="eCenter" min="0" max="4095" value="${v.center}" style="width:5rem"></span>
-      <span class="unit" data-deg></span>
     </div>
     <div class="row" style="margin-bottom:6px">
       <span class="note" style="margin:0">Set from the current hand-held position:</span>
       <button class="ghost sm capMin">min</button><button class="ghost sm capMax">max</button><button class="ghost sm capCenter">home</button>
-    </div>`;
+    </div>
+    <div data-fit></div>`;
 }
 function wireLimitsEditor(host,j){
-  const cap=async(sel)=>{ try{ const t=await readServo(j.primary); if(t&&t.online&&t.pos>=0){ host.querySelector(sel).value=t.pos; log(`captured ${t.pos}`); showDeg(host,j);} }catch(e){} };
+  const cap=async(sel)=>{ try{ const t=await readServo(j.id); if(t&&t.online&&t.pos>=0){ host.querySelector(sel).value=t.pos; log(`captured ${t.pos}`); showFit(host,j);} }catch(e){} };
   host.querySelector(".capMin").onclick=()=>cap(".eMin");
   host.querySelector(".capMax").onclick=()=>cap(".eMax");
   host.querySelector(".capCenter").onclick=()=>cap(".eCenter");
-  host.querySelectorAll("input").forEach(el=>el.oninput=()=>showDeg(host,j));
-  showDeg(host,j);
+  host.querySelectorAll("input").forEach(el=>el.oninput=()=>showFit(host,j));
+  showFit(host,j);
 }
-// Live echo of what the current tick numbers mean in ROS terms.
-function showDeg(host,j){
-  const ed=readLimitsEditor(host), m=mapFor(j.primary);
+// Live echo of what the current tick numbers mean in ROS terms — and, when the
+// joint exists in the URDF, whether they match what it declares.
+function showFit(host,j){
+  const ed=readLimitsEditor(host), m=mapFor(j.id);
   const L=rosLimits({min_p:ed.min,max_p:ed.max,center_p:ed.center}, m.sign);
-  const d=(x)=>(x*180/Math.PI).toFixed(1);
-  const el=host.querySelector("[data-deg]");
-  if(el) el.textContent=`-> ${m.ros} [${d(L.lower)}deg, ${d(L.upper)}deg]`;
+  const u=urdfByName.get(m.ros);
+  const el=host.querySelector("[data-fit]"); if(!el) return;
+  if(!u){ el.innerHTML=`<p class="note" style="margin:0">→ ${esc(m.ros)} [${degs(L.lower)}, ${degs(L.upper)}] · not declared in the URDF</p>`; return; }
+  const f=fitVerdict(L,{lower:u.lower,upper:u.upper});
+  const cls=f.status==="1:1"?"ok":f.ok?"warn":"bad";
+  el.innerHTML=`<p class="note" style="margin:0">→ ${esc(m.ros)} [${degs(L.lower)}, ${degs(L.upper)}] ·
+    urdf [${degs(u.lower)}, ${degs(u.upper)}] · <span class="${cls}">${f.status}</span>
+    (Δ ${degs(f.dLower)} / ${degs(f.dUpper)})</p>`;
+  // Preview the edited range on the model's bars as it's typed.
+  updateLimbar($("ovBars"), {lower:u.lower,upper:u.upper}, L, liveRad[j.id] ?? null);
 }
 function readLimitsEditor(host){
   const cl=v=>Math.max(0,Math.min(4095,v|0));
@@ -884,24 +1404,13 @@ function renderVerdict(j,r){
   const ok=r.verdict==="clean";
   const v={min:r.min_p,max:r.max_p,center:r.center_p};
   stageCard(`
-    <div class="panel-head"><h2>${j.name}</h2>
-      <span class="chip ${ok?"ok":"bad"}">${j.mirror?r.verdict:(ok?"travel ok":"fault")}</span><span class="spacer"></span></div>
-    ${j.mirror?`
-      <div class="kv">
-        <div>K (mounting offset)<b>${r.K}</b></div>
-        <div>sum spread<b>${r.spread}</b></div>
-        <div>travel<b>${r.min_p} … ${r.max_p}</b></div>
-        <div>home P / M<b>${r.center_p} / ${r.center_m}</b></div>
-      </div>`:`
-      <div class="kv"><div>travel<b>${r.min_p} … ${r.max_p}</b></div><div>samples<b>${r.n}</b></div></div>`}
-    <div class="verdict ${ok?"clean":r.verdict}">${
-      ok? (j.mirror? `<b>Clean.</b> A pure mounting offset of K=${r.K} — accepted and kept, not forced to 4096.`
-                   : `<b>Travel captured.</b> Single servo — just confirm the limits and home below.`)
-        : r.verdict==="binding"? `<b>Binding.</b> The mirror sum drifts by ${r.spread} ticks (worst around pos ${r.divergeAngle}) — the pair isn't coaxial or something binds. Not safe to arm. Re-seat and re-sweep.`
-        : (j.mirror? `<b>Fault.</b> The mirror reverses around pos ${r.divergeAngle} — likely an encoder slip or damaged servo.`
-                   : `<b>Fault.</b> Position jumped near ${r.faultAt} — possible encoder slip. Check, then re-sweep or enter manually.`)
+    <div class="panel-head"><h2>${esc(j.name)}</h2>
+      <span class="chip ${ok?"ok":"bad"}">${ok?"travel ok":"fault"}</span><span class="spacer"></span></div>
+    <div class="kv"><div>travel<b>${r.min_p} … ${r.max_p}</b></div><div>home<b>${r.center_p}</b></div><div>samples<b>${r.n}</b></div></div>
+    <div class="verdict ${ok?"clean":"fault"}">${
+      ok? `<b>Travel captured.</b> Confirm the limits and home below — home becomes 0 rad in ROS and mid-scale in LeRobot.`
+        : `<b>Fault.</b> Position jumped near ${r.faultAt} — possible encoder slip. Check, then re-sweep or enter manually.`
     }${r.sweepHot?` <br>Temperature hit the trip during the sweep.`:""}</div>
-    <p class="note">Adjust the limits if needed and set the <b>home</b> — type a value or hand-position the joint and capture it.</p>
     <div id="limEd"></div>
     <div class="bar" style="margin-top:8px">
       <button id="bake" ${ok?"":"disabled"}>Accept</button>
@@ -909,22 +1418,20 @@ function renderVerdict(j,r){
       <span class="spacer"></span>
     </div>`);
   $("limEd").innerHTML=limitsEditorHTML(v); wireLimitsEditor($("limEd"),j);
-  $("resweep").onclick=()=>{ delete wiz.results[j.primary]; enterJoint(); };
+  $("resweep").onclick=()=>{ delete wiz.results[j.id]; enterJoint(); };
   $("bake").onclick=()=>bakeJoint(j,r,readLimitsEditor($("limEd")));
 }
 
-// Manual path: skip the sweep, just type / capture min, max, home. For a single
-// servo this is the whole job; for a pair it keeps the existing K (no new sweep).
+// Manual path: skip the sweep, just type / capture min, max, home.
 async function renderManual(j){
-  wiz.state="torque_off"; try{ await torqueJoint(j,false); }catch(e){}
+  wiz.state="torque_off"; try{ await torqueJoint(j,false); setTorqueState(j.id,false); }catch(e){}
   wiz.state="verdict";
-  const cur=wiz.cfg.servos.find(s=>s.id===j.primary)||{};
+  const cur=wiz.cfg.servos.find(s=>s.id===j.id)||{};
   const v={ min: cur.min??0, max: cur.max??4095, center: cur.center??2048 };
-  const K = j.mirror ? (cur.k || jointResult(j)?.K || 4096) : null;
-  renderRail();
+  renderRail(); focusJoint(j.id);
   stageCard(`
-    <div class="panel-head"><h2>${j.name}</h2><span class="chip">manual limits</span><span class="spacer"></span></div>
-    <p class="prompt">Set min, max and home for <b>${j.name}</b>${j.mirror?` <span class="note">(pair keeps K=${K})</span>`:""}.</p>
+    <div class="panel-head"><h2>${esc(j.name)}</h2><span class="chip">manual limits</span><span class="spacer"></span></div>
+    <p class="prompt">Set min, max and home for <b>${esc(j.name)}</b>.</p>
     <p class="note">Torque is OFF — hand-position the joint and capture, or type values directly.</p>
     <div id="limEd"></div>
     <div class="bar" style="margin-top:8px"><button id="manBake">Accept</button><button class="ghost" id="manBack">&larr; back</button></div>`);
@@ -932,10 +1439,8 @@ async function renderManual(j){
   $("manBack").onclick=enterJoint;
   $("manBake").onclick=()=>{
     const ed=readLimitsEditor($("limEd"));
-    const r={ kind:j.mirror?"pair":"single", verdict:"clean", n:0,
-              min_p:ed.min, max_p:ed.max, center_p:ed.center,
-              K: K, center_m: K!=null? K-ed.center : undefined };
-    wiz.results[j.primary]=r; bakeJoint(j,r,ed);
+    const r={ verdict:"clean", n:0, min_p:ed.min, max_p:ed.max, center_p:ed.center };
+    wiz.results[j.id]=r; bakeJoint(j,r,ed);
   };
 }
 
@@ -946,24 +1451,29 @@ async function bakeJoint(j,r,ed){
   if(!wiz.cfg) return;
   ed=ed||{min:r.min_p,max:r.max_p,center:r.center_p};
   r.min_p=ed.min; r.max_p=ed.max; r.center_p=ed.center;
-  if(j.mirror && r.K!=null) r.center_m = r.K - ed.center;
-  const prim=wiz.cfg.servos.find(s=>s.id===j.primary);
-  if(prim){ prim.min=ed.min; prim.max=ed.max; prim.center=ed.center; if(j.mirror) prim.k=r.K; }
-  if(j.mirror){ const mir=wiz.cfg.servos.find(s=>s.id===j.mirror); if(mir){ mir.center=r.center_m; } }
-  r.baked=true; log(`accepted ${j.name}: min=${ed.min} max=${ed.max} home=${ed.center}${j.mirror?` (K=${r.K})`:""}`);
-  refreshGenState();
+  const s=wiz.cfg.servos.find(x=>x.id===j.id);
+  if(s){ s.min=ed.min; s.max=ed.max; s.center=ed.center; }
+  r.baked=true;
+  anchors[j.id]=ed.center;                        // the model's zero is now the real home
+  log(`accepted ${j.name}: min=${ed.min} max=${ed.max} home=${ed.center}`);
+  const u=urdfByName.get(j.name);
+  if(u){
+    const f=fitVerdict(rosLimits(r,mapFor(j.id).sign),{lower:u.lower,upper:u.upper});
+    log(`  urdf fit: ${f.status} (Δ lower ${degs(f.dLower)}, Δ upper ${degs(f.dUpper)})`);
+  }
+  refreshGenState(); renderFit(); renderOverlay();
   renderArmCheck(j,r);
 }
 
-// ----- arm-check: gentle re-arm, currents must read low + matched -----
+// ----- arm-check: gentle re-arm, current must read low -----
 function renderArmCheck(j,r){
   wiz.state="arm_check"; renderRail();
   stageCard(`
-    <div class="panel-head"><h2>${j.name}</h2><span class="chip">arm check</span><span class="spacer"></span></div>
-    <p class="prompt">Gently re-arm and confirm ${j.mirror?"the pair isn't fighting itself":"it holds at low current"}.</p>
-    <p class="note">Writes goal = present position, enables torque at a low/slow profile, then reads current
-      per servo. Both must be <b>low</b>${j.mirror?` and <b>matched</b>`:""} before we trust it. Soft check —
-      nothing here can cap current in hardware, so we disarm immediately if it's high.</p>
+    <div class="panel-head"><h2>${esc(j.name)}</h2><span class="chip">arm check</span><span class="spacer"></span></div>
+    <p class="prompt">Gently re-arm and confirm it holds at low current.</p>
+    <p class="note">Writes goal = present position, enables torque at a low/slow profile, then reads current.
+      It must be <b>low</b> before we trust it. Soft check — nothing here can cap current in hardware, so we
+      disarm immediately if it's high.</p>
     <div id="armBars"></div>
     <div class="bar" style="margin-top:12px">
       <button id="runArm">Re-arm &amp; check</button>
@@ -971,68 +1481,56 @@ function renderArmCheck(j,r){
       <span class="spacer"></span><span class="note" style="margin:0" id="armVerdict"></span>
     </div>`);
   $("runArm").onclick=()=>runArmCheck(j);
-  $("skipArm").onclick=async()=>{ await torqueJoint(j,false); nextJoint(); };
+  $("skipArm").onclick=async()=>{ await torqueJoint(j,false); setTorqueState(j.id,false); nextJoint(); };
 }
 async function runArmCheck(j){
   log(`arm-check ${j.name}…`);
-  const present={};
-  for(const id of j.ids){ const t=await readServo(id); present[id]=t.pos; }
-  for(const id of j.ids){ await setServoCfg(id,ARM_SPEED,ARM_ACCEL); }
-  for(const id of j.ids){ await moveServo(id,present[id]); }   // holds present pos (arms)
-  for(const id of j.ids){ await setTorque(id,true); }
+  const t0=await readServo(j.id);
+  await setServoCfg(j.id,ARM_SPEED,ARM_ACCEL);
+  await moveServo(j.id,t0.pos);                   // holds present pos (arms)
+  await setTorque(j.id,true); setTorqueState(j.id,true);
   await sleep(350);
-  const cur={};
-  for(const id of j.ids){ const t=await readServo(id); cur[id]=Math.abs(t.current_ma); }
-  const vals=j.ids.map(id=>cur[id]);
-  const low = vals.every(v=>v<ARM_LOW_MA);
-  const matched = j.mirror? Math.abs(cur[j.primary]-cur[j.mirror])<ARM_MATCH_MA : true;
-  const ok = low && matched;
-  $("armBars").innerHTML = j.ids.map(id=>{
-    const v=cur[id], pct=Math.min(100,(v/ (ARM_LOW_MA*2))*100), high=v>=ARM_LOW_MA;
-    return `<div class="row" style="margin:6px 0"><span class="unit" style="min-width:4rem">#${id}</span>
-      <div class="curbar ${high?"high":""}"><div class="f" style="width:${pct}%"></div></div>
+  const t1=await readServo(j.id);
+  const v=Math.abs(t1.current_ma);
+  const ok = v<ARM_LOW_MA;
+  const pct=Math.min(100,(v/(ARM_LOW_MA*2))*100);
+  $("armBars").innerHTML=`<div class="row" style="margin:6px 0"><span class="unit" style="min-width:4rem">#${j.id}</span>
+      <div class="curbar ${ok?"":"high"}"><div class="f" style="width:${pct}%"></div></div>
       <span class="unit"><b>${v.toFixed(0)}</b> mA</span></div>`;
-  }).join("") + (j.mirror?`<div class="note">match delta ${Math.abs(cur[j.primary]-cur[j.mirror]).toFixed(0)} mA (limit ${ARM_MATCH_MA})</div>`:"");
   if(!ok){
-    for(const id of j.ids) await setTorque(id,false);
-    $("armVerdict").innerHTML=`<span class="bad">${low?"mismatched":"current too high"} — disarmed</span>`;
-    log(`! arm-check ${j.name} FAILED (${vals.map(v=>v.toFixed(0)).join("/")} mA) — disarmed`);
+    await setTorque(j.id,false); setTorqueState(j.id,false);
+    $("armVerdict").innerHTML=`<span class="bad">current too high — disarmed</span>`;
+    log(`! arm-check ${j.name} FAILED (${v.toFixed(0)} mA) — disarmed`);
     return;
   }
-  $("armVerdict").innerHTML=`<span class="ok">low + matched — drive-test below</span>`;
-  log(`arm-check ${j.name} OK (${vals.map(v=>v.toFixed(0)).join("/")} mA)`);
+  $("armVerdict").innerHTML=`<span class="ok">holding low — drive-test below</span>`;
+  log(`arm-check ${j.name} OK (${v.toFixed(0)} mA)`);
   // Torque STAYS ON for the drive-test; its own Confirm/Disarm leaves it safe.
   attachMotionTest(j);
 }
 
-// Electrical sweep test: drive a freshly-calibrated joint across its range under
-// power and show the live delta — for a pair, the mirror-sum error (p+m - K),
-// which should stay near 0 if K is right; for a single, the tracking error.
+// Drive the freshly-calibrated joint across its range under power. The 3D model
+// is anchored on the accepted home by now, so this is also the moment the model
+// and the arm should agree pose for pose — watch them together.
 async function attachMotionTest(j){
   const r=jointResult(j); if(!r) { nextJoint(); return; }
-  const K = j.mirror ? (r.K ?? 4096) : null;
   // Work in UNWRAPPED space around the home so a travel arc that crosses the
   // 0/4095 seam is a normal contiguous slider; command via modTick (raw).
   const center=r.center_p, min=r.min_p, max=r.max_p;
-  const clampU=(v)=>Math.max(loU,Math.min(hiU,v));
   let loU, hiU;
   if(min<=max){ loU=min; hiU=max; }
   else { loU=center+wrapSigned(min-center); hiU=center+wrapSigned(max-center); }
+  const clampU=(v)=>Math.max(loU,Math.min(hiU,v));
   let startPos=clampU(center);
-  try{ const t=await readServo(j.primary); if(t&&t.online&&t.pos>=0) startPos=clampU(center+wrapSigned(t.pos-center)); }catch(e){}
-  const pcfg=wiz.cfg?.servos.find(s=>s.id===j.primary)||{};
+  try{ const t=await readServo(j.id); if(t&&t.online&&t.pos>=0) startPos=clampU(center+wrapSigned(t.pos-center)); }catch(e){}
+  const pcfg=wiz.cfg?.servos.find(s=>s.id===j.id)||{};
   const spd0=pcfg.speed||800, acc0=pcfg.accel||20;
   const wrap=document.createElement("div"); wrap.style.marginTop="14px";
   wrap.innerHTML =
-    `<div class="panel-head"><h2>Test motion</h2><span class="chip">electrical sweep</span></div>`+
-    `<p class="note" style="margin-top:0">Drive ${j.name} across its range under power and watch it hold.`+
-      (j.mirror? ` <b>Delta</b> is the live mirror-sum error (#${j.primary}+#${j.mirror} - K) — should stay near 0.`
-               : ` <b>Delta</b> is the tracking error (target - actual).`)+`</p>`+
-    (j.mirror? `<div class="gauge" id="tGauge"><div class="band" id="tBand"></div><div class="ktick" style="left:50%"></div><div class="live" id="tLive"></div></div>`:"")+
-    `<div class="kv">`+
-      (j.mirror? `<div>K<b>${K}</b></div><div>#${j.primary} pos<b id="tPos">—</b></div><div>live sum<b id="tSum">—</b></div>`
-               : `<div>target<b id="tTgt">${startPos}</b></div><div>actual<b id="tAct">—</b></div>`)+
-      `<div>delta<b id="tDelta">—</b></div></div>`+
+    `<div class="panel-head"><h2>Test motion</h2><span class="chip">under power</span></div>`+
+    `<p class="note" style="margin-top:0">Drive ${esc(j.name)} across the range you just accepted and watch the
+      model track it. <b>Delta</b> is the tracking error (target − actual).</p>`+
+    `<div class="kv"><div>target<b id="tTgt">${startPos}</b></div><div>actual<b id="tAct">—</b></div><div>delta<b id="tDelta">—</b></div></div>`+
     `<div class="row" style="margin-bottom:8px">`+
       `<span class="unit">speed <input type="number" id="tSpeed" min="1" max="3400" value="${spd0}" style="width:5.5rem"></span>`+
       `<span class="unit">accel <input type="number" id="tAccel" min="1" max="254" value="${acc0}" style="width:5rem"></span>`+
@@ -1049,29 +1547,18 @@ async function attachMotionTest(j){
   let active=true, auto=false, lastDrive=0, hotN=0;
 
   const drive=async(v)=>{ const raw=modTick(clampU(Math.round(v)));
-    if(!j.mirror) q("#tTgt").textContent=raw;
-    await moveServo(j.primary,raw); if(j.mirror) await moveServo(j.mirror, modTick(K - raw)); };
+    q("#tTgt").textContent=raw; await moveServo(j.id,raw); };
   slider.oninput=()=>{ const now=performance.now(); if(now-lastDrive>60){ lastDrive=now; drive(+slider.value); } };
   slider.onchange=()=>drive(+slider.value);
 
-  // live loop: reads the ACTUAL positions (active joint; sidebar poller skips it)
+  // live loop: reads the ACTUAL position (active joint; sidebar poller skips it)
   (async()=>{ while(active){
     try{
-      const tp=await readServo(j.primary); updateSidebarTelemetry(tp);
-      let tm=null; if(j.mirror){ tm=await readServo(j.mirror); updateSidebarTelemetry(tm); }
-      if(j.mirror){
-        // delta = mirror-sum error, wrapped so a seam crossing doesn't spike it
-        const delta=wrapSigned((tp.pos+tm.pos)-K), liveSum=K+delta;
-        q("#tPos").textContent=tp.pos; q("#tSum").textContent=liveSum; q("#tDelta").textContent=(delta>0?"+":"")+delta;
-        const lo=K-200, span=400, pct=v=>Math.max(0,Math.min(100,((v-lo)/span)*100));
-        q("#tBand").style.left=pct(K-SPREAD_THRESH)+"%"; q("#tBand").style.width=(pct(K+SPREAD_THRESH)-pct(K-SPREAD_THRESH))+"%";
-        q("#tLive").style.left=pct(liveSum)+"%"; q("#tGauge").classList.toggle("balanced",Math.abs(delta)<=TEST_DELTA_OK);
-      } else {
-        const delta=wrapSigned(modTick(+slider.value)-tp.pos);
-        q("#tAct").textContent=tp.pos; q("#tDelta").textContent=(delta>0?"+":"")+delta;
-      }
-      let maxT=Math.max(tp.temp_c, tm?tm.temp_c:0); if(maxT>95) maxT=0;   // reject bus garbage
-      if(maxT>=TEMP_TRIP){ if((hotN=(hotN||0)+1)>=3){ log(`! ${j.name} drive-test abort: ${maxT}C`); active=false; auto=false; await torqueJoint(j,false); } } else hotN=0;
+      const tp=await readServo(j.id); updateTelemetry(tp);
+      const delta=wrapSigned(modTick(+slider.value)-tp.pos);
+      q("#tAct").textContent=tp.pos; q("#tDelta").textContent=(delta>0?"+":"")+delta;
+      let maxT=tp.temp_c; if(maxT>95) maxT=0;   // reject bus garbage
+      if(maxT>=TEMP_TRIP){ if((hotN=(hotN||0)+1)>=3){ log(`! ${j.name} drive-test abort: ${maxT}C`); active=false; auto=false; await torqueJoint(j,false); setTorqueState(j.id,false); } } else hotN=0;
     }catch(e){}
     await sleep(90);
   }})();
@@ -1090,11 +1577,11 @@ async function attachMotionTest(j){
     }
     auto=false; q("#tAuto").textContent="Auto-sweep";
   };
-  // Speed / accel: applied live to the servos and stored in the working config.
+  // Speed / accel: applied live to the servo and stored in the working config.
   const applySpeedAccel=async()=>{
     const sp=Math.max(1,parseInt(q("#tSpeed").value||"0",10)), ac=Math.max(1,parseInt(q("#tAccel").value||"0",10));
-    for(const id of j.ids) await setServoCfg(id,sp,ac);
-    for(const id of j.ids){ const s=wiz.cfg?.servos.find(x=>x.id===id); if(s){ s.speed=sp; s.accel=ac; } }
+    await setServoCfg(j.id,sp,ac);
+    const s=wiz.cfg?.servos.find(x=>x.id===j.id); if(s){ s.speed=sp; s.accel=ac; }
     q("#tApplied").textContent=`speed ${sp} / accel ${ac}`; log(`${j.name}: speed ${sp} accel ${ac}`);
   };
   q("#tApply").onclick=applySpeedAccel;
@@ -1102,7 +1589,7 @@ async function attachMotionTest(j){
 
   q("#tStart").onclick=()=>{ slider.value=center; drive(center); };   // jog to the defined home
   q("#tHold").onclick=()=>{ auto=false; };
-  const finish=async(advance)=>{ active=false; auto=false; await torqueJoint(j,false); if(advance) nextJoint(); };
+  const finish=async(advance)=>{ active=false; auto=false; await torqueJoint(j,false); setTorqueState(j.id,false); if(advance) nextJoint(); };
   q("#tNext").onclick=()=>finish(true);
   q("#tStop").onclick=()=>finish(false);
 }
@@ -1117,12 +1604,18 @@ function nextJoint(){
 function renderGlobalDone(){
   wiz.state="global"; renderRail();
   const clean=allClean();
+  const rows=fitRows().filter(r=>r.fit);
+  const bad=rows.filter(r=>!r.fit.ok);
   const done=Object.values(wiz.results).filter(r=>r&&r.verdict==="clean").length;
   stageCard(`
     <div class="panel-head"><h2>All joints</h2><span class="chip ${clean?"ok":"warn"}">${clean?"all clean":`${done} of ${wiz.joints.length} clean`}</span></div>
     <p class="prompt">${clean
       ? "Every joint calibrated clean. Generate the ROS + LeRobot configs below."
       : "Some joints aren't accepted yet — finish them, or generate configs for the ones that are."}</p>
+    ${bad.length? `<div class="verdict fault"><b>${bad.length} joint${bad.length===1?"":"s"} the URDF over-travels:</b>
+      ${bad.map(r=>esc(r.name)).join(", ")}. The model allows motion the arm doesn't have — tighten the
+      <code>&lt;limit&gt;</code> before planning against it.</div>` : rows.length? `<div class="verdict clean">
+      <b>URDF fits the hardware</b> on all ${rows.length} measured joint${rows.length===1?"":"s"}.</div>`:""}
     <div class="bar">
       <button id="jumpGen" ${done?"":"disabled"}>Generate configs &rarr;</button>
       <button class="ghost" id="backFirst">&larr; back to first joint</button>
@@ -1134,13 +1627,11 @@ function renderGlobalDone(){
 // ======================================================================
 // Config generation — ROS calibration YAML + LeRobot calibration JSON
 // ======================================================================
-// Only joints that calibrated clean are emitted. For a mirrored pair the
-// primary carries the joint; the mirror is a follower and gets no ROS joint.
 function calibratedJoints(){
   return wiz.joints
     .map(j=>({ j, r:jointResult(j) }))
     .filter(x=>x.r && x.r.verdict==="clean")
-    .map(x=>({ joint:x.j, res:x.r, map:mapFor(x.j.primary) }));
+    .map(x=>({ joint:x.j, res:x.r, map:mapFor(x.j.id) }));
 }
 function buildArtifacts(){
   const rows=calibratedJoints();
@@ -1148,15 +1639,13 @@ function buildArtifacts(){
   for(const {joint,res,map} of rows){
     const L=rosLimits(res, map.sign);
     ros[map.ros]={
-      servo_id: joint.primary,
-      mirror_id: joint.mirror ?? null,
+      servo_id: joint.id,
       model: map.model,
       sign: map.sign,
-      ticks: { min: res.min_p, max: res.max_p, home: res.center_p,
-               ...(joint.mirror? { k: res.K, home_mirror: res.center_m } : {}) },
+      ticks: { min: res.min_p, max: res.max_p, home: res.center_p },
       limit: { lower: +L.lower.toFixed(6), upper: +L.upper.toFixed(6) },
     };
-    lerobot[map.lerobot]=lerobotEntry(joint.primary, res, map);
+    lerobot[map.lerobot]=lerobotEntry(joint.id, res, map);
   }
   return { ros, lerobot, count:rows.length };
 }
@@ -1173,14 +1662,11 @@ function yamlDump(ros){
   for(const [name,v] of Object.entries(ros)){
     s+=`    ${name}:\n`;
     s+=`      servo_id: ${v.servo_id}\n`;
-    if(v.mirror_id!=null) s+=`      mirror_id: ${v.mirror_id}\n`;
     s+=`      model: "${v.model}"\n`;
     s+=`      sign: ${v.sign}\n`;
     s+=`      ticks_min: ${v.ticks.min}\n`;
     s+=`      ticks_max: ${v.ticks.max}\n`;
     s+=`      ticks_home: ${v.ticks.home}\n`;
-    if(v.ticks.k!=null) s+=`      ticks_k: ${v.ticks.k}\n`;
-    if(v.ticks.home_mirror!=null) s+=`      ticks_home_mirror: ${v.ticks.home_mirror}\n`;
     s+=`      limit_lower: ${f(v.limit.lower)}\n`;
     s+=`      limit_upper: ${f(v.limit.upper)}\n`;
   }
@@ -1201,9 +1687,9 @@ function renderGenerated(){
   const json=JSON.stringify(a.lerobot,null,2);
   $("genOut").innerHTML=
     `<div class="row" style="margin-top:10px"><span class="chip mute">src/mod101_control/config/calibration.yaml</span></div>`+
-    `<pre style="${PRE_STYLE}margin:6px 0 12px">${yaml.replace(/</g,"&lt;")}</pre>`+
+    `<pre style="${PRE_STYLE}margin:6px 0 12px">${esc(yaml)}</pre>`+
     `<div class="row"><span class="chip mute">LeRobot calibration JSON</span></div>`+
-    `<pre style="${PRE_STYLE}margin:6px 0 0">${json}</pre>`+
+    `<pre style="${PRE_STYLE}margin:6px 0 0">${esc(json)}</pre>`+
     `<p class="note">Drop the JSON at
       <code>~/.cache/huggingface/lerobot/calibration/robots/&lt;robot_type&gt;/&lt;id&gt;.json</code>.
       <b>Verify the field names against your installed LeRobot</b> — the schema has moved between releases.</p>`;
@@ -1229,96 +1715,85 @@ function doExport(){
     ros:a.ros, lerobot:a.lerobot, ts:new Date().toISOString()},null,2)],{type:"application/json"});
   const dl=document.createElement("a"); dl.href=URL.createObjectURL(blob);
   dl.download="mod101-calibration.json"; dl.click(); URL.revokeObjectURL(dl.href);
+  log("exported calibration JSON");
 }
 function doImport(file){
-  const fr=new FileReader();
-  fr.onload=()=>{ try{ const d=JSON.parse(fr.result);
-    if(d.map){ jointMap=Object.assign({}, DEFAULT_MAP, d.map); saveMap(); }
+  const rd=new FileReader();
+  rd.onload=()=>{ try{
+    const d=JSON.parse(rd.result);
+    if(d.map){ for(const v of Object.values(d.map)) delete v.mirror; jointMap=Object.assign({}, DEFAULT_MAP, d.map); saveMap(); }
     if(d.config){ wiz.cfg=d.config; wiz.joints=buildJoints(d.config.servos.map(s=>s.id)); }
-    if(d.results) wiz.results=d.results;
-    wiz.cur=0; renderSidebar(); renderSetup(); renderRail(); enterJoint(); log("imported calibration JSON");
+    if(d.results){ wiz.results=d.results; for(const [id,r] of Object.entries(d.results)) if(r&&r.center_p!=null) anchors[id]=r.center_p; }
+    wiz.cur=0; renderServos(); renderRail(); renderFit(); enterJoint(); log("imported calibration JSON");
   }catch(e){ log("! import failed: "+e.message); } };
-  fr.readAsText(file);
+  rd.readAsText(file);
 }
 
 // ======================================================================
-// Telemetry poller (idle, when not sweeping) — keeps rail/sidebar fresh
+// Telemetry poller (idle, when not sweeping) — keeps the servo cards, the rail
+// and the 3D model fresh
 // ======================================================================
-let pollRun=false, sidebarIds=[], pollIdx=0;
+let pollRun=false, pollIds=[], pollIdx=0;
 function startPoller(){
   if(pollRun) return; pollRun=true;
   // Continuous loop (not a fixed interval): read servos back-to-back as fast as
-  // the bus allows so the sidebar is genuinely live. Each read awaits its reply,
+  // the bus allows so the cards are genuinely live. Each read awaits its reply,
   // so at most one is in flight here at a time.
   (async()=>{
     while(pollRun){
-      if((!demoMode && !busConnected) || !sidebarIds.length){ await sleep(150); continue; }
+      if((!demoMode && !busConnected) || !pollIds.length){ await sleep(150); continue; }
       // While a joint is swept or drive-tested its own loop reads it; the poller
       // covers all the OTHERS (no double-read of the active joint, and no
       // competing for the single-threaded server).
-      let ids=sidebarIds;
+      let ids=pollIds;
       if(wiz.state==="sweeping" || wiz.state==="arm_check"){
-        const aj=wiz.joints[wiz.cur], act=new Set(aj?aj.ids:[]);
-        ids=sidebarIds.filter(id=>!act.has(id));
+        const aj=wiz.joints[wiz.cur];
+        if(aj) ids=pollIds.filter(id=>id!==aj.id);
       }
       if(!ids.length){ await sleep(120); continue; }
       const id=ids[pollIdx++ % ids.length];
-      try{ updateSidebarTelemetry(await readServo(id)); }catch(e){}
+      try{ updateTelemetry(await readServo(id)); }catch(e){}
       await sleep(demoMode?40:20);
     }
   })();
 }
 function stopPoller(){ pollRun=false; }
 
-// ----- joint status sidebar: every joint, both motors of a pair -----
-function renderSidebar(){
-  const host=$("jointStatus"); if(!host) return;
-  sidebarIds=[];
-  if(!wiz.joints.length){ host.innerHTML=`<p class="note" style="margin:0">No joints — connect, or enable demo.</p>`; $("jsHint").textContent=""; return; }
-  host.innerHTML="";
-  wiz.joints.forEach((j,i)=>{
-    const isPair=!!j.mirror;
-    const motors=isPair?[[j.primary,"primary"],[j.mirror,"mirror"]]:[[j.primary,"servo"]];
-    motors.forEach(([id])=>sidebarIds.push(id));
-    const div=document.createElement("div"); div.className="jstat"+(i===wiz.cur?" active":""); div.dataset.j=i;
-    div.innerHTML=
-      `<div class="jstat-name">${(j.name||("#"+j.primary)).replace(/</g,"&lt;")}`+
-      (isPair?` <span class="chip">pair</span><small>#${j.primary}+#${j.mirror}</small>`:` <small>#${j.primary}</small>`)+`</div>`+
-      `<div class="jmotors">`+motors.map(([id,role])=>sidebarMotor(id,role)).join("")+`</div>`;
-    host.appendChild(div);
-  });
-  $("jsHint").textContent=`${wiz.joints.length} joints`;
-}
-function sidebarMotor(id,role){
-  return `<div class="jmotor" data-sid="${id}">`+
-    `<div class="jmh"><span class="jdot"></span>#${id} <small style="color:var(--text-quaternary)">${role}</small></div>`+
-    `<div class="jmf"><span>pos</span><b class="f-pos">—</b></div>`+
-    `<div class="jmf"><span>vel</span><b class="f-vel">—</b></div>`+
-    `<div class="jmf"><span>cur</span><span><b class="f-cur">—</b> mA</span></div>`+
-    `<div class="jmf"><span>volt</span><span><b class="f-volt">—</b> V</span></div>`+
-    `<div class="jmf"><span>load</span><span><b class="f-load">—</b> %</span></div>`+
-    `<div class="jmf f-trow"><span>temp</span><span><b class="f-temp">—</b> C</span></div>`+
-    `</div>`;
-}
-function updateSidebarTelemetry(t){
+// The one funnel every telemetry read passes through — the poller, a sweep and
+// the drive-test all land here — so the servo cards and the 3D model can never
+// go stale independently of each other.
+function updateTelemetry(t){
   if(!t) return;
-  const cell=document.querySelector(`#setupBody [data-pos="${t.id}"]`);
-  if(cell) cell.textContent = t.online && t.pos>=0 ? t.pos : "—";
-  document.querySelectorAll(`#jointStatus .jmotor[data-sid="${t.id}"]`).forEach(el=>{
-    const dot=el.querySelector(".jdot"); const set=(c,v)=>{const e=el.querySelector(c); if(e) e.textContent=v;};
-    if(!t.online){ dot.classList.remove("on"); ["f-pos","f-vel","f-cur","f-volt","f-load","f-temp"].forEach(c=>set("."+c,"—")); return; }
-    dot.classList.add("on");
-    set(".f-pos", t.pos>=0?t.pos:"—");
-    set(".f-vel", t.speed);
-    set(".f-cur", t.current_ma);
-    set(".f-volt", (t.voltage_mv/1000).toFixed(2));
-    set(".f-load", (t.load_dpct/10).toFixed(1));
-    const temp = (t.temp_c>=0 && t.temp_c<=95) ? t.temp_c : null;   // reject bus garbage
-    if(temp!=null) set(".f-temp", temp);
-    const tr=el.querySelector(".f-trow"); if(tr) tr.classList.toggle("hot", temp!=null && temp>=TEMP_WARN);
-  });
+  driveModel(t);
+  if(t.id===(focusedId ?? wiz.joints[wiz.cur]?.id)) renderOverlay();
+  const card=cardFor(t.id); if(!card) return;
+  const dot=card.querySelector(".jdot"); const set=(c,v)=>{const e=card.querySelector(c); if(e) e.textContent=v;};
+  if(!t.online){ dot.classList.remove("on"); ["f-pos","f-rad","f-vel","f-cur","f-volt","f-load","f-temp"].forEach(c=>set("."+c,"\u2014")); return; }
+  dot.classList.add("on");
+  set(".f-pos", t.pos>=0?t.pos:"\u2014");
+  set(".f-rad", liveRad[t.id]!=null? degs(liveRad[t.id]) : "\u2014");
+  set(".f-vel", t.speed);
+  set(".f-cur", t.current_ma);
+  set(".f-volt", (t.voltage_mv/1000).toFixed(2));
+  set(".f-load", (t.load_dpct/10).toFixed(1));
+  const temp = (t.temp_c>=0 && t.temp_c<=95) ? t.temp_c : null;   // reject bus garbage
+  if(temp!=null) set(".f-temp", temp);
+  const tr=card.querySelector(".f-trow"); if(tr) tr.classList.toggle("hot", temp!=null && temp>=TEMP_WARN);
 }
-function markSidebarActive(){ document.querySelectorAll("#jointStatus .jstat").forEach(el=>el.classList.toggle("active", +el.dataset.j===wiz.cur)); }
+
+// ======================================================================
+// Tabs
+// ======================================================================
+function showTab(name){
+  for(const b of $("tabs").querySelectorAll("button")) b.classList.toggle("active", b.dataset.tab===name);
+  $("pane-hw").hidden    = name!=="hw";
+  $("pane-model").hidden = name!=="model";
+  // The viewer's container is 0×0 while its tab is hidden; the ResizeObserver in
+  // viewer.js catches the reveal, but nudge it so the first frame back is sized.
+  if(name==="model"){ viewer.resize(); renderOverlay(); }
+  try{ localStorage.setItem("mod101.calibration.tab", name); }catch(e){}
+}
+$("tabs").onclick=(e)=>{ const b=e.target.closest("button"); if(b) showTab(b.dataset.tab); };
 
 // ======================================================================
 // Wiring
@@ -1334,14 +1809,24 @@ async function refreshPorts(){
           // between readers. Flag it before it's picked.
           const busy = p.busy && p.busy.length
             ? `  [IN USE by pid ${p.busy.map(b=>b.pid).join(", ")}]` : "";
-          return `<option value="${p.device}">${p.device}${p.description?" — "+p.description:""}${busy}</option>`;
+          return `<option value="${esc(p.device)}">${esc(p.device)}${p.description?" — "+esc(p.description):""}${busy}</option>`;
         }).join("")
       : `<option value="">no serial devices found</option>`;
     for(const p of d.ports){
       if(p.busy && p.busy.length)
         log(`! ${p.device} is open by ${p.busy.map(b=>`pid ${b.pid}`).join(", ")} — close it or replies will be corrupt`);
     }
-  }catch(e){ sel.innerHTML=`<option value="">server unreachable</option>`; log("! port list failed: "+e.message); }
+  }catch(e){
+    // fetch() itself throwing (TypeError) means server.py never answered — not
+    // started, wrong port, or the page was opened from disk instead of being
+    // served. Anything else is the server telling us why it can't enumerate,
+    // and that message is worth more than "unreachable".
+    const why = (e instanceof TypeError)
+      ? "server unreachable — run: python3 configurator/server.py"
+      : e.message;
+    sel.innerHTML=`<option value="">${esc(why)}</option>`;
+    log("! port list failed: "+why);
+  }
 }
 
 $("refreshPorts").onclick=refreshPorts;
@@ -1360,7 +1845,7 @@ $("connect").onclick=async()=>{
     adoptServos(d.servos);
   }catch(e){ log("! connect failed: "+e.message); setConnected(false); }
 };
-$("estop").onclick=async()=>{ await failSafeDisarm(); log("E-STOP: all servos disarmed"); };
+$("estop").onclick=async()=>{ await failSafeDisarm(); for(const k in torqueState) torqueState[k]=false; paintAllDrive(); log("E-STOP: all servos disarmed"); };
 $("selftest").onclick=()=>runCalibrationTests();
 $("rescan").onclick=async()=>{
   try{ const d=await api("/bus/scan",{}); log(`scan: [${d.servos.join(", ")}]`); adoptServos(d.servos); }
@@ -1377,6 +1862,10 @@ $("genWrite").onclick=()=>writeArtifacts();
 $("exportBtn").onclick=doExport;
 $("importBtn").onclick=()=>$("importFile").click();
 $("importFile").onchange=(e)=>{ if(e.target.files[0]) doImport(e.target.files[0]); };
+$("fitSnippet").onclick=renderFitSnippet;
+$("reframe").onclick=()=>viewer.fit();
+$("reloadUrdf").onclick=loadModel;
+$("follow").onchange=()=>{ if(!$("follow").checked) focusJoint(wiz.joints[wiz.cur]?.id ?? null); };
 $("demo").onchange=(e)=>{
   demoMode=e.target.checked;
   $("fwBanner").style.display = demoMode? "none":"";
@@ -1395,9 +1884,17 @@ window.addEventListener("beforeunload",()=>{
   try{ navigator.sendBeacon("/bus/disarm"); }catch(e){}
 });
 
-renderSidebar();   // empty-state until a bus connects
-renderSetup();
+renderServos();    // empty-state until a bus connects
 refreshPorts();
+loadModel();
+
+// ?tab=model and ?demo=1 make the page reachable in one shot — handy for a
+// screenshot or a headless check, where nothing is around to click.
+const qs=new URLSearchParams(location.search);
+let startTab="hw";
+try{ startTab=localStorage.getItem("mod101.calibration.tab") || "hw"; }catch(e){}
+showTab(qs.get("tab")==="model"? "model" : startTab);
+if(qs.has("demo")){ $("demo").checked=true; $("demo").dispatchEvent(new Event("change")); }
 log("ready — pick a serial port and Connect, or tick Demo mode to explore.");
 </script>
 </body>

@@ -52,3 +52,4 @@ dist/
 # tree clean and `git grep` free of the exports' CAD auto-joint names.
 /reference/*
 !/reference/README.md
+.bench/

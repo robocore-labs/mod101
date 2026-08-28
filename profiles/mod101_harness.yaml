@@ -1,0 +1,161 @@
+# mod101 on the camera-tower harness — the BENCH robot.
+#
+# WHAT THIS IS. The mod101 arm bolted to a 2020-extrusion harness with a
+# camera tower, a 2-axis pan/tilt head and a RealSense D435 on the head.
+# No wheels, no lidar, no SLAM. It exists so arm work can be debugged
+# without a mobile base underneath it, because the two fail differently:
+# arm problems are geometric and repeatable, navigation problems are
+# environmental and statistical (state-of-play.md §6).
+#
+# Two groups, which is what makes this profile worth having beyond the
+# hardware: base101 has exactly one group and that group is an arm, so
+# `kind: pointing` and `kin.point_at` have never been exercised against a
+# real robot. This one has a head.
+#
+# Sources, all read from the package rather than assumed:
+#   robots/mod101/src/mod101_harness/urdf/mod101_harness_arm.xacro
+#   robots/mod101/src/mod101_harness/config/pan_tilt_controllers.yaml
+#   robots/mod101/src/mod101_harness/config/gz_bridge.yaml
+#   robots/mod101/src/mod101_harness/launch/sim.launch.py
+#   robots/mod101/src/mod101_control/config/controllers.sim.yaml
+#   robots/mod101/src/mod101_tool_jaws/config/controllers.yaml
+#
+# Launch:  ros2 launch mod101_harness sim.launch.py
+
+name: mod101-harness
+model: mod101 arm on the camera-tower harness (pan/tilt + D435)
+version: "0.1"
+protocol: 1
+
+frames:
+  # THIS ROBOT DOES NOT MOVE. The harness is bolted down, so `world` — the
+  # URDF root, fixed to hn_base_link by `harness_world_joint` — is both the
+  # map and the odom frame. That is not a placeholder: for a fixed-base
+  # robot the map frame IS the world frame, and there is no odometry to
+  # drift from it. `robot.pose` will therefore always read the same value,
+  # which is correct and slightly disconcerting.
+  map: world
+  odom: world
+  base: hn_base_link
+
+# No `mobility:` — no wheels, no cmd_vel. `robot.has("mobility")` is False
+# and teleop/navigate_to raise CapabilityNotSupported, which is the honest
+# answer rather than a stub that silently does nothing.
+#
+# No `lidar:`, no `slam:`, no `exploration:` for the same reason.
+
+groups:
+  # ---------------------------------------------------------------- arm --
+  arm:
+    kind: arm
+    # UNPREFIXED. The harness overlay instantiates `mod101_arm` with
+    # prefix="" so mod101_control's and mod101_moveit_config's configs
+    # apply byte-identically — which means the joints are `joint_base`
+    # etc, NOT base101's `arm_joint_base`. A profile copied from
+    # base101_arm.yaml without fixing this fails at startup with "not a
+    # link", which is the failure you want.
+    tip: wrist_flange
+    # INHERITED FROM base101, NOT RE-MEASURED HERE. It is the same
+    # `mod101_arm` macro, so the kinematic chain — one yaw joint, three
+    # pitch joints, one roll joint — is identical and the deficiency is
+    # the same: the arm commands position, roll and pitch freely and
+    # cannot choose yaw. The mount differs, but dof_mask describes the
+    # chain, not where it is bolted.
+    #
+    # Re-verify anyway on first run (engine/docs/dof-and-masks.md §7 has
+    # the recipe): it is six perturbations and it is how the base101 mask
+    # was found to be inverted.
+    dof_mask: [1, 1, 1, 1, 1, 0]
+    controllers:
+      # Declared in controllers.sim.yaml but NOT spawned by
+      # sim.launch.py — the agent loads it on TRAJECTORY session entry and
+      # unloads it on exit. Validation accepts declared-or-loaded.
+      trajectory: /arm_trajectory_controller
+      # Spawned at boot. Claims the same five joints as the trajectory
+      # twin, so only one of the pair is ever active.
+      stream: /arm_controller
+      # Disjoint from the arm pair (claims joint 6 alone), so it stays
+      # active during an arm session and tool.close() needs no switch.
+      tool: /gripper_controller
+    # No `joints:` — derived from whichever of the above is loaded, via
+    # its claimed interfaces. That is where ros2_control's own truth
+    # lives.
+    tool:
+      type: jaws
+      # QUOTED ON PURPOSE. The jaws tool names its joint `6`, and
+      # unquoted YAML parses that as the integer 6, which then fails to
+      # match any joint name in the description. base101 never hit this
+      # because its prefix made the name `arm_6`.
+      joint: "6"
+      # From mod101_tool_jaws/config/controllers.yaml, which states the
+      # range directly: "0 rad (closed) to 2.14 rad (open)". This agrees
+      # with the geometry measured on base101 on 2026-08-26 — jaw gap
+      # 0.0338 m at 0.0 rising monotonically to 0.0783 m at 2.14 — and
+      # therefore with the correction that base101's profile needed.
+      # The tool package was right all along.
+      open: 2.14
+      closed: 0.0
+
+  # --------------------------------------------------------------- head --
+  head:
+    # A pointing group, not an arm: it aims something rather than reaching
+    # somewhere. `robot.arms` excludes it; `robot.groups["head"]` finds it.
+    kind: pointing
+    # What `kin.point_at(group, target)` aims. The OPTICAL frame, not the
+    # body frame `hn_realsense_1` — the harness stamps camera messages
+    # with the optical frame (REP-103, +Z out of the lens), so aiming the
+    # body frame would aim an axis 90 degrees off what the images use.
+    pointing_frame: hn_realsense_optical_frame
+    controllers:
+      # Declared but not spawned, exactly like the arm's twin. This
+      # controller DID NOT EXIST until writing this profile: the harness
+      # package shipped only the position controller, and robocore
+      # refuses a group with no trajectory role because that is the role
+      # every timed motion resolves to. Added to
+      # mod101_harness/config/pan_tilt_controllers.yaml on 2026-08-26 —
+      # a real gap the porting exercise found, not a workaround.
+      trajectory: /pan_tilt_trajectory_controller
+      # Spawned at boot. Claims the same two joints, so only one of the
+      # pair is active at a time.
+      stream: /pan_tilt_controller
+    # No `tip:`. A pointing group has nothing to reach with, and a tip is
+    # what enables IK — leaving it out is the gate, not an omission.
+
+cameras:
+  head:
+    # RGBD on the pan/tilt head. The gz sensor publishes under
+    # `harness/depth_camera`; image streams are bridged by ros_gz_image's
+    # image_bridge and the rest by parameter_bridge (gz_bridge.yaml).
+    rgb: /harness/depth_camera/image
+    depth: /harness/depth_camera/depth_image
+    info: /harness/depth_camera/camera_info
+    cloud: /harness/depth_camera/points
+    # The frame the sensor stamps its messages with (gz_frame_id in
+    # harness.gazebo.xacro). deproject() resolves through TF from here, so
+    # this must be the optical frame or every 3D point is rotated.
+    frame: hn_realsense_optical_frame
+    optical: true
+  wrist:
+    # RGB only — the mod101 wrist camera has no depth sensor, so
+    # deproject() and get_cloud() are unavailable on this handle by
+    # design rather than by failure.
+    rgb: /wrist_camera/image_raw
+    info: /wrist_camera/camera_info
+    frame: wrist_camera_optical_frame
+    optical: true
+
+# No `teleop:` either. Teleop drives cmd_vel, and there is no cmd_vel on
+# this robot — declaring the capability would advertise a verb that
+# cannot work. `robot.teleop()` raises CapabilityNotSupported, which is
+# the right answer.
+
+audit:
+  retention_mb: 200
+
+watches: {}
+places: {}
+status: {}
+
+safety:
+  stop_on_disconnect: true
+  confirm_required: []

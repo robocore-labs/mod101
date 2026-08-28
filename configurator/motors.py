@@ -162,8 +162,12 @@ class MotorBus:
         """
         try:
             from serial.tools import list_ports
-        except Exception:
-            return []
+        except Exception as e:
+            # Returning [] here renders as "no serial devices found", which
+            # sends you hunting for a cable when the real problem is a missing
+            # dependency. Say which one it is.
+            raise BusError(
+                f'pyserial is not importable ({e}) — pip install st3215') from e
         every = []
         for p in list_ports.comports():
             # Surface who else has it open, so a port that would silently
@@ -240,7 +244,7 @@ class MotorBus:
              accel: int | None = None) -> bool:
         """Position goal. When speed/accel are omitted this is a single bus
         write — st3215's MoveTo() re-sends mode+accel+speed every call, which
-        is three extra round trips per jog-slider tick."""
+        is three extra round trips per jog press."""
         st = self._require()
         pos = max(0, min(TICKS - 1, int(pos)))
         with self._lock:

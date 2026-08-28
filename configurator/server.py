@@ -423,12 +423,19 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(HERE), **kwargs)
 
+    def end_headers(self):
+        # Every response, including the static ones. SimpleHTTPRequestHandler
+        # sends Last-Modified but no Cache-Control, and Chrome then heuristically
+        # caches the page and viewer.js — so an edit to either lands in the repo
+        # and not in the browser, which reads as "my change did nothing".
+        self.send_header('Cache-Control', 'no-store')
+        super().end_headers()
+
     def _json(self, status: int, payload: dict) -> None:
         body = json.dumps(payload).encode()
         self.send_response(status)
         self.send_header('Content-Type', 'application/json')
         self.send_header('Content-Length', str(len(body)))
-        self.send_header('Cache-Control', 'no-store')
         self.end_headers()
         self.wfile.write(body)
 
@@ -437,7 +444,6 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.send_response(status)
         self.send_header('Content-Type', ctype)
         self.send_header('Content-Length', str(len(b)))
-        self.send_header('Cache-Control', 'no-store')
         self.end_headers()
         self.wfile.write(b)
 
@@ -446,7 +452,6 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.send_response(200)
         self.send_header('Content-Type', ctype)
         self.send_header('Content-Length', str(len(data)))
-        self.send_header('Cache-Control', 'no-store')
         self.end_headers()
         self.wfile.write(data)
 
@@ -477,7 +482,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self._json(200, BUS.status())
 
         if path.rstrip('/') == '/bus/ports':
-            return self._json(200, {'ports': BUS.list_ports()})
+            try:    return self._json(200, {'ports': BUS.list_ports()})
+            except BusError as e:   return self._json(409, {'error': str(e)})
+            except Exception as e:  return self._json(500, {'error': str(e)})
 
         if path.startswith('/servo/'):
             parts = path[len('/servo/'):].strip('/').split('/')

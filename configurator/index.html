@@ -988,89 +988,39 @@ $('tool-select').addEventListener('change', async () => {
 </script>
 
 <script type="module">
-import * as THREE from 'three';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import URDFLoader from 'urdf-loader';
+// The scene itself lives in viewer.js, shared with calibrate.html — this page
+// only owns the slider UI that poses it.
+import { createViewer } from './viewer.js';
 
 const container = document.getElementById('viewer');
-const status    = document.getElementById('viewer-status');
+const statusEl  = document.getElementById('viewer-status');
 
-const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setPixelRatio(window.devicePixelRatio);
-renderer.setSize(container.clientWidth, container.clientHeight);
-renderer.shadowMap.enabled = true;
-container.appendChild(renderer.domElement);
-
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x0a0d12);
-
-const camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.01, 20);
-camera.position.set(0.6, 0.5, 0.6);
-
-const controls = new OrbitControls(camera, renderer.domElement);
-controls.target.set(0, 0.25, 0);
-controls.update();
-
-scene.add(new THREE.AmbientLight(0xffffff, 0.4));
-const sun = new THREE.DirectionalLight(0xffffff, 0.9);
-sun.position.set(2, 4, 2);
-sun.castShadow = true;
-scene.add(sun);
-
-const grid = new THREE.GridHelper(2, 20, 0x444444, 0x222222);
-scene.add(grid);
-
-// URDF convention is Z-up. Rotate the whole robot for three.js's Y-up camera.
-const robotRoot = new THREE.Group();
-robotRoot.rotation.x = -Math.PI / 2;
-scene.add(robotRoot);
-
-let currentRobot = null;
-const loader = new URDFLoader();
+const viewer = createViewer(container, {
+  onStatus: (text, kind) => { statusEl.textContent = text; statusEl.className = 'note ' + kind; },
+});
 
 // Home pose = 0.0 on every joint (the zero configuration). Any joint not listed
 // resolves to 0 via `HOME_POSE[name] ?? 0`, so an empty table means all-zeros.
 const HOME_POSE = {};
 
-// Display order for the arm's canonical joints; tool joints sort after.
-const ARM_ORDER = ['joint_base', 'joint_shoulder', 'joint_elbow',
-                   'joint_wrist_tilt', 'joint_wrist_roll'];
-
 function buildJointSliders() {
-  const container = document.getElementById('joint-sliders');
-  container.innerHTML = '';
-  if (!currentRobot) return;
+  const host = document.getElementById('joint-sliders');
+  host.innerHTML = '';
+  const joints = viewer.actuatedJoints();
 
-  const entries = Object.entries(currentRobot.joints)
-    .filter(([_, j]) => j.jointType !== 'fixed' && !j.mimicJoint);
-
-  entries.sort(([a], [b]) => {
-    const ia = ARM_ORDER.indexOf(a), ib = ARM_ORDER.indexOf(b);
-    if (ia !== -1 && ib !== -1) return ia - ib;
-    if (ia !== -1) return -1;
-    if (ib !== -1) return 1;
-    return a.localeCompare(b);
-  });
-
-  if (entries.length === 0) {
+  if (joints.length === 0) {
     const p = document.createElement('p');
     p.className = 'note';
     p.textContent = 'No actuated joints (the `none` tool has nothing to pose).';
-    container.appendChild(p);
+    host.appendChild(p);
     return;
   }
 
-  for (const [name, joint] of entries) {
-    let lower = joint.limit ? Number(joint.limit.lower) : -Math.PI;
-    let upper = joint.limit ? Number(joint.limit.upper) : Math.PI;
-    if (joint.jointType === 'continuous' || lower === upper) {
-      lower = -Math.PI; upper = Math.PI;
-    }
-    const isLinear = joint.jointType === 'prismatic';
-    const step     = (upper - lower) / 400;
-    const home     = HOME_POSE[name] ?? 0;
-    const initial  = Math.max(lower, Math.min(upper, home));
-    currentRobot.setJointValue(name, initial);
+  for (const { name, lower, upper, isLinear } of joints) {
+    const step    = (upper - lower) / 400;
+    const home    = HOME_POSE[name] ?? 0;
+    const initial = Math.max(lower, Math.min(upper, home));
+    viewer.setJoint(name, initial);
 
     const row = document.createElement('div');
     row.className = 'input-row';
@@ -1087,98 +1037,32 @@ function buildJointSliders() {
     const render  = v => readout.textContent = isLinear ? (v * 1000).toFixed(1) : v.toFixed(2);
     slider.addEventListener('input', () => {
       const v = Number(slider.value);
-      currentRobot.setJointValue(name, v);
+      viewer.setJoint(name, v);
       render(v);
     });
     render(initial);
-    container.appendChild(row);
+    host.appendChild(row);
   }
 }
 
 document.getElementById('home').addEventListener('click', () => {
-  if (!currentRobot) return;
   for (const slider of document.querySelectorAll('#joint-sliders input[type=range]')) {
     const row  = slider.closest('.input-row');
-    const name = row.dataset.joint;
-    const v    = HOME_POSE[name] ?? 0;
+    const v    = HOME_POSE[row.dataset.joint] ?? 0;
     slider.value = v;
     slider.dispatchEvent(new Event('input'));
   }
 });
 
-// Frame the camera tightly on the loaded arm. Meshes load asynchronously, so the
-// bounding box can be empty for a few frames — retry until it's real, then fit.
-let framed = false;
-function fitCameraToRobot(attempt = 0) {
-  if (!currentRobot) return;
-  robotRoot.updateMatrixWorld(true);
-  const box = new THREE.Box3().setFromObject(currentRobot);
-  if (box.isEmpty() || !isFinite(box.min.x)) {
-    if (attempt < 40) requestAnimationFrame(() => fitCameraToRobot(attempt + 1));
-    return;
-  }
-  const size   = box.getSize(new THREE.Vector3());
-  const center = box.getCenter(new THREE.Vector3());
-  const maxDim = Math.max(size.x, size.y, size.z) || 0.5;
-  const fov    = camera.fov * Math.PI / 180;
-  const dist   = (maxDim / 2) / Math.tan(fov / 2) * 1.55;   // 1.55 = a little padding
-  const dir    = new THREE.Vector3(0.85, 0.5, 1).normalize();
-  camera.position.copy(center).add(dir.multiplyScalar(dist));
-  camera.near = Math.max(dist / 200, 0.001);
-  camera.far  = dist * 200;
-  camera.updateProjectionMatrix();
-  controls.target.copy(center);
-  controls.minDistance = dist * 0.25;
-  controls.maxDistance = dist * 6;
-  controls.update();
-}
-
 async function loadUrdf() {
-  status.textContent = 'Loading URDF…';
-  status.className = 'note';
+  // Render the current UI state (lengths + mounts) live, without writing the
+  // file. The viewer reports load failures through onStatus.
   try {
-    // Render the current UI state (lengths + mounts) live, without writing the
-    // file.
-    const cfg = window.previewConfig || {};
-    const qs = new URLSearchParams(cfg).toString();
-    const resp = await fetch('/urdf' + (qs ? '?' + qs : ''), { cache: 'no-store' });
-    if (!resp.ok) {
-      const detail = await resp.json().catch(() => ({}));
-      throw new Error(detail.error || resp.statusText);
-    }
-    const text = await resp.text();
-    if (currentRobot) {
-      robotRoot.remove(currentRobot);
-      currentRobot.traverse(o => {
-        if (o.geometry) o.geometry.dispose();
-        if (o.material) o.material.dispose();
-      });
-    }
-    currentRobot = loader.parse(text);
-    robotRoot.add(currentRobot);
+    await viewer.load(window.previewConfig || {});
     buildJointSliders();
-    if (!framed) { framed = true; fitCameraToRobot(); }   // frame the arm on first load
-    status.textContent = 'URDF loaded.';
-    status.className = 'note ok';
-  } catch (e) {
-    status.textContent = `URDF load failed: ${e.message || e}. Source ROS before starting server.py.`;
-    status.className = 'note bad';
-  }
+  } catch (e) { /* status already shown */ }
 }
 
-function animate() {
-  requestAnimationFrame(animate);
-  controls.update();
-  renderer.render(scene, camera);
-}
-animate();
-
-window.addEventListener('resize', () => {
-  const w = container.clientWidth, h = container.clientHeight;
-  camera.aspect = w / h;
-  camera.updateProjectionMatrix();
-  renderer.setSize(w, h);
-});
 window.addEventListener('xacro-saved', loadUrdf);
 loadUrdf();
 </script>

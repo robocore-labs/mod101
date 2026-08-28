@@ -6,8 +6,32 @@
 # the (unprefixed) arm. Nothing here is redeclared.
 controller_manager:
   ros__parameters:
+    # Spawned at boot by sim.launch.py. Float64MultiArray on
+    # /pan_tilt_controller/commands.
     pan_tilt_controller:
       type: position_controllers/JointGroupPositionController
+
+    # DECLARED, NOT SPAWNED — the same arrangement as the arm's
+    # arm_controller / arm_trajectory_controller pair. Both claim
+    # hn_pan_joint and hn_tilt_joint, and controller_manager allows one
+    # active claim per joint, so only one of the two may be active.
+    #
+    # Added 2026-08-26 while writing engine/profiles/mod101_harness.yaml.
+    # Without it the head has no trajectory role, and a trajectory role is
+    # what every timed motion resolves to: robocore refuses a group that
+    # declares none, and MoveIt drives a pan/tilt over
+    # FollowJointTrajectory rather than Float64MultiArray. The head could
+    # be commanded to a position but never over a controlled duration.
+    pan_tilt_trajectory_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+
+pan_tilt_trajectory_controller:
+  ros__parameters:
+    joints: [hn_pan_joint, hn_tilt_joint]
+    command_interfaces: [position]
+    state_interfaces: [position, velocity]
+    allow_partial_joints_goal: false
+    allow_integration_in_goal_trajectories: true
 
 pan_tilt_controller:
   ros__parameters:

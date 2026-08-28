@@ -3,8 +3,20 @@
 The configurator's **Calibrate** tab (`configurator/calibrate.html`) is the
 bring-up path for a physical arm: it sweeps each joint by hand, derives its
 travel limits and home position from the motion, verifies the joint is
-mechanically healthy, and then emits the two config files that ROS and LeRobot
-each need.
+mechanically healthy, checks that travel against the URDF the arm will actually
+be driven by, and then emits the two config files that ROS and LeRobot each need.
+
+The page has two tabs, over one shared bus connection:
+
+- **Hardware** — the serial chain and nothing else. Pick a port, scan the bus,
+  see every servo that answers, name it (ROS joint, LeRobot motor, sign, model),
+  reassign an ID, and jog any servo directly with live telemetry.
+- **Model check** — the same three.js scene as the build page, loaded from
+  `configurator/viewer.js`, driven by live servo telemetry. Each joint is swept
+  here, the model follows the arm as you move it, and the measured travel is put
+  side by side with the joint's URDF `<limit>`.
+
+**Every joint is one servo.** There is no mirrored-pair path.
 
 The wizard flow is ported from the Axon calibration tool in
 `link101/link-base101/web/calibrate.html`, but the transport is not: this talks
@@ -61,6 +73,7 @@ bool, and `ChangeId` returns `None` on *success*.
 | `POST /servo/<id>/move` | `{pos, speed?, accel?}` |
 | `POST /servo/<id>/profile` | `{speed, accel}` |
 | `POST /servo/<id>/id` | `{to}` — reassign servo ID (writes EEPROM) |
+| `GET /urdf` | the expanded URDF, for the model tab's scene |
 
 Bus scanning is bounded to IDs 1..20 on purpose. `st3215`'s own `ListServos()`
 pings 0..253, which is seconds of dead time on a real bus.
@@ -77,19 +90,16 @@ Per joint, in order:
    stream in unwrapped (the 0/4095 seam is stitched out) and the wizard reads
    travel limits from the extremes, pulling `MARGIN` = 30 ticks in from each
    hard stop.
-2. **Verdict** — `clean`, `binding`, or `fault`. A single servo fails only on a
-   position discontinuity (`JUMP_THRESH` = 400 ticks ⇒ encoder slip). A pair
-   additionally has to hold a constant mirror sum `K`; drift means the pair
-   isn't coaxial, reversal means a slipped encoder.
+2. **Verdict** — `clean` or `fault`. A joint fails on a position discontinuity
+   (`JUMP_THRESH` = 400 ticks ⇒ encoder slip).
 3. **Accept** — adjust min/max/home, or capture each from the current
    hand-held position. The page shows live what those ticks mean in radians for
-   the mapped ROS joint.
+   the mapped ROS joint, and how that compares to the joint's URDF `<limit>`.
 4. **Arm-check** — re-arms at a slow profile holding present position, then
-   reads current. Must be low (< 250 mA), and matched within 100 mA for a pair,
-   or it disarms immediately. This is a *soft* check: nothing in this path can
-   cap current in hardware.
+   reads current. Must be low (< 250 mA) or it disarms immediately. This is a
+   *soft* check: nothing in this path can cap current in hardware.
 5. **Drive test** — jog the joint across its calibrated range under power and
-   watch the tracking (or mirror-sum) error.
+   watch the tracking error, with the model tracking it pose for pose.
 
 **Nothing is written to the servos.** Calibration lives in the generated repo
 files, not in servo EEPROM — no wear, and nothing lost when a servo is swapped.
@@ -113,16 +123,56 @@ only source of truth for which servo is which joint. Defaults follow
 
 **Sign** reconciles the servo's counting direction with the URDF joint axis.
 `joint_wrist_tilt` has axis `0 -1 0`, hence −1 by default. The tool joint is
-literally named `6` per [tool-convention.md](tool-convention.md). **Mirror**
-pairs a second servo onto the same joint (0 = single); mod101 is six single
-servos, so the pair path stays dormant — it's kept because the same wizard
-serves arms that do have coupled pitch joints. Press **Rebuild joints** after
-changing a mirror.
+literally named `6` per [tool-convention.md](tool-convention.md).
+
+**ROS joint** is a picker over the joints the loaded URDF actually declares,
+not free text — a typo there is a joint that silently never matches the model,
+which is exactly what the model tab exists to catch. Press **Rebuild joints**
+after renaming.
 
 Edits persist in `localStorage` and travel with the exported JSON.
 
 Getting a sign wrong is the classic failure: sim and hardware move opposite
 ways on that one joint. Check each against the URDF before trusting a policy.
+
+## Model check — does the URDF fit the arm?
+
+The model tab answers one question: for every joint, does the URDF's declared
+travel match what the hardware actually has?
+
+The scene is the build page's, imported from `configurator/viewer.js` so there is
+one renderer, one URDF fetch and one Z-up correction rather than two that drift.
+On top of that the calibration page adds:
+
+- **Live pose from the bus.** Every telemetry read is converted to an angle and
+  pushed at the model, so the arm and the model move together. A servo tick only
+  becomes an angle once you know which tick is the joint's zero — before a joint
+  is calibrated the anchor is wherever the arm was when first seen, during a
+  sweep it tracks the midpoint of the travel seen so far (the model re-centres
+  as the sweep grows), and on **Accept** it becomes the real home.
+- **Limits deliberately not enforced.** `setIgnoreLimits(true)` — a joint driven
+  past what the URDF declares has to be visible, because that mismatch is the
+  thing being looked for.
+- **Highlight.** The link a joint drives directly lights up. With *follow motion*
+  ticked, whichever joint is actually turning takes the highlight, so nudging a
+  joint by hand tells you which one the map thinks it is.
+- **Travel bars.** Two bands on one scale — what the URDF declares, and what was
+  measured — with a live needle. Where the URDF reaches past the measured travel,
+  the band goes red.
+
+The **URDF ↔ hardware fit** table scores each joint, within a 2° tolerance:
+
+| verdict | meaning |
+|---|---|
+| `1:1` | measured travel matches the `<limit>` both ends |
+| `conservative` | the arm has more travel than the URDF allows — safe, just unused |
+| `over-travel` | **the URDF allows more than the arm has** — a planner will command into a hard stop |
+| `not in urdf` | a servo mapped to a joint the URDF doesn't declare |
+| `no servo mapped` | a URDF joint with no servo behind it |
+
+`over-travel` is the failure; the other direction only wastes reach. **URDF limit
+block** prints the measured ranges as paste-ready `<limit>` lines. Nothing on
+this page writes the URDF — the build page owns that file.
 
 ## Output
 
@@ -151,8 +201,8 @@ LeRobot:  homing_offset = 2047 − home
 
 `wrapSigned` keeps an arc that crosses the 0/4095 seam contiguous instead of
 spiking. All of this is covered by the page's **Self-test** button, which runs
-10 assertions over synthetic sweeps — including the seam case and both signs —
-with no hardware attached.
+11 assertions over synthetic sweeps — including the seam case, both signs and
+the URDF fit verdicts — with no hardware attached.
 
 > **Verify the LeRobot schema against your installed version.** The calibration
 > file's field names have moved between LeRobot releases. The shape written
@@ -188,5 +238,8 @@ Still open, and not solved by this page:
 
 Ticking **Demo mode** synthesizes a six-servo arm so the whole flow — sweep,
 gauges, verdict, arm-check, drive test, config generation — can be walked
-without hardware, and without touching a serial port. Useful for UI work and
-for seeing what the exports look like.
+without hardware, and without touching a serial port. The 3D model animates from
+the synthetic telemetry too, so the model tab is fully explorable dry.
+
+`?demo=1` and `?tab=model` do the same from the URL, which is how the page gets
+driven headless for a screenshot or a check.
