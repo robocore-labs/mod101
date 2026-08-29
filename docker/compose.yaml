@@ -1,25 +1,110 @@
-# mod101 bench — arm on harness, camera tower, no mobile base.
-# Single service: builds workspace then runs simulation (offscreen/Gazebo headless).
-#   docker compose up --build   # builds + runs sim
+# The mod101 bench stack: the arm on its camera-tower harness, in Gazebo,
+# with the robocore agent in front of it.
 #
+#   docker compose up --build      # build the sim image and run both
+#   docker compose down
+#
+# TWO CONTAINERS, and that is the whole design. The simulation is one image
+# with the workspace built in (docker/Dockerfile). The agent is not built
+# here at all — it is pulled, which is what keeps this repo buildable without
+# a checkout of the monorepo the agent lives in. Override the tag to try a
+# local build of it:
+#
+#   ROBOCORE_AGENT_IMAGE=robocore-agent:latest docker compose up
+#
+# The previous version had a `workspace` service that colcon-built into a
+# bind mount and touched /ws/BUILD.DONE, which `simulation` waited on. It
+# could never finish: `simulation` declared no volumes, so it watched a file
+# in its own empty /ws forever.
+
+x-ros: &ros
+  # HOST NETWORKING + IPC. Plain localhost DDS discovery, no bridge network
+  # and no container DNS, and the agent's port 10101 is reachable from this
+  # machine with no port mapping. ipc:host because robocore's payload
+  # transport is /dev/shm-backed.
+  network_mode: host
+  ipc: host
+  # BOTH SERVICES RUN AS THE SAME UID, and it has to be that way. With
+  # ipc:host these containers share the host's /dev/shm, which is also what
+  # FastDDS uses for its own transport between them. Mixed UIDs there means
+  # participants discover each other but exchange no data — a uid-1000 agent
+  # gets nothing from a root Gazebo, which reads as "the sim is broken"
+  # rather than as a permissions problem. They must agree with EACH OTHER;
+  # the value matters less, and 1000 is the ROS images' `ubuntu` user, whose
+  # home is writable for Gazebo's Fuel cache.
+  user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+  environment: &ros-env
+    # ISOLATE THE BENCH FROM THE LAN. Domain 1 + host networking + default
+    # FastDDS multicast put this stack on the same ROS graph as every other
+    # domain-1 node on the network, including any real robot. That goes both
+    # ways: their /robot_description reaches this controller_manager, and
+    # this stack's controllers are visible to them.
+    ROS_DOMAIN_ID: "1"
+    ROS_AUTOMATIC_DISCOVERY_RANGE: LOCALHOST
+    RMW_IMPLEMENTATION: rmw_fastrtps_cpp
+    RCUTILS_COLORIZED_OUTPUT: "1"
+    HOME: /home/ubuntu
 
 services:
+
+  # The robot: Gazebo, the description, ros2_control and the bridges.
+  #
+  # sim.launch.py opens a Gazebo window — this stack has no headless mode, so
+  # it needs a display. If the window refuses to open with an X authority
+  # error, `xhost +local:` once on the host is the usual fix.
   simulation:
+    <<: *ros
     image: mod101-bench:jazzy
-    container_name: simulation-1
-    # Host networking for real-time performance
-    network_mode: host
-    ipc: host
-    working_dir: /ws
-    # Offscreen Gazebo mode — no X11 needed
+    build:
+      context: ..                 # the repo root: the image needs src/
+      dockerfile: docker/Dockerfile
     environment:
-      GZ_SIM_RENDERING_ENGINE: "offscreen"
-      GZ_SIM_HEADLESS: "1"
-      ROS_DOMAIN_ID: "1"
-      RMW_IMPLEMENTATION: rmw_fastrtps_cpp
-    # Mount source so edits don't need rebuilds
+      <<: *ros-env
+      DISPLAY: ${DISPLAY:-:0}
+      QT_X11_NO_MITSHM: "1"
+      # The Gazebo half of the isolation above, and just as necessary.
+      # ROS_DOMAIN_ID does nothing for Gazebo Transport, which runs its own
+      # discovery on localhost multicast — so a second `gz sim` on this
+      # machine advertises the same /world/<name>/... topics as the first,
+      # and the two stacks' ros_gz bridges start reading each other's
+      # world. A partition name keeps them apart.
+      GZ_PARTITION: ${GZ_PARTITION:-mod101-bench}
+      NVIDIA_DRIVER_CAPABILITIES: all
+    # THE GPU IS NOT OPTIONAL. Without it Gazebo's ogre2 cannot make a GL
+    # surface — "glx: failed to create dri3 screen", "failed to create
+    # drawable" — and the server never starts stepping. The symptom is not
+    # a missing window: /clock goes silent, controller_manager logs "No
+    # clock received" forever, and every topic still lists as if the stack
+    # were healthy.
+    deploy:
+      resources:
+        reservations:
+          devices: [{driver: nvidia, count: all, capabilities: [gpu]}]
     volumes:
-      - ../src:/ws/src/mod101      # this robot only
-      - ./.bench:/ws                # colcon output persists
-    # Build colcon workspace then launch simulation
-    command: bash -lc 'colcon build --symlink-install && touch /ws/BUILD.DONE && ros2 launch mod101_harness sim.launch.py'
+      - /tmp/.X11-unix:/tmp/.X11-unix:ro
+      - ${XAUTHORITY:-${HOME}/.Xauthority}:/home/ubuntu/.Xauthority:ro
+    command: ros2 launch mod101_harness sim.launch.py
+
+  # The robocore agent: the JSON-RPC/WebSocket API in front of the robot,
+  # on ws://localhost:10101. Robot specifics reach it only through the
+  # profile below, so this service is the same for every robot.
+  agent:
+    <<: *ros
+    image: ${ROBOCORE_AGENT_IMAGE:-ghcr.io/cristidragomir97/robocore-agent:latest}
+    volumes:
+      - ../profiles/mod101_harness.yaml:/etc/robocore/profile.yaml:ro
+      - agent-state:/var/lib/robocore
+    # use_sim_time: Gazebo publishes /clock and the agent's stamps have to
+    # agree with the rest of the graph.
+    command:
+      - agent
+      - --profile
+      - /etc/robocore/profile.yaml
+      - --ros-args
+      - -p
+      - use_sim_time:=true
+
+volumes:
+  # The agent's audit log, saved maps and places. A named volume, so a
+  # `docker compose down` is not amnesia.
+  agent-state:

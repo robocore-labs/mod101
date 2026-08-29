@@ -1,49 +1,66 @@
-# One image for the mod101 bench: simulation, ros2_control, and this repo's
-# packages. Nothing else.
+# One image for the mod101 bench simulation: ROS 2, Gazebo, ros2_control and
+# this repo's packages, workspace built in.
 #
-# Deliberately dumb: it contains dependencies and nothing else. No workspace is
-# copied in — src/ is bind-mounted at runtime from the repo, so editing a launch
-# file or a Python module needs no rebuild, and `colcon build` writes back into
-# the repo's own docker/.bench/ directory.
+# Build from the REPO ROOT (compose does this for you):
+#   docker build -f docker/Dockerfile -t mod101-bench:jazzy .
+#
+# It used to ship dependencies only and bind-mount src/ from the host, with a
+# second `workspace` service that ran colcon and a BUILD.DONE sentinel the
+# simulation service waited on. That handshake could not work — the simulation
+# service had no volumes at all, so it waited on a file in its own empty /ws
+# forever — and it bought edit-without-rebuild at the price of a stack nobody
+# could start. One image, one service. `docker compose up --build` after a
+# source change; every package here is install-only, so that is seconds.
 #
 # NOT IN HERE, AND ON PURPOSE:
-#   - the agent and the robocore SDK. They ship as `robocore-agent:latest`,
-#     built by their own repo; compose.yaml runs that image alongside this one.
-#     They used to be bind-mounted and built here, which made this repo's build
-#     depend on two repos it does not own.
-#   - nav2 (nine packages), slam_toolbox, laser_filters, twist_mux,
-#     robot_localization, diff_drive_controller. This robot is bolted to a
-#     bench: it cannot drive, has no lidar and has nothing to localise against.
-#     An unused Nav2 in the image is an invitation to wire it up by accident.
-#   - MoveIt, pick_ik and the pincopen tool driver. The two packages that need
-#     them (mod101_moveit_config, mod101_tool_pincopen) are skipped by the
-#     workspace build — see compose.yaml.
-#
-# Rebuild this image only when a package.xml gains a new dependency.
-FROM ros:jazzy-ros-base
+#   - the agent and the robocore SDK. They ship as their own image, which
+#     compose.yaml pulls and runs alongside this one. Bind-mounting and
+#     building them here made this repo's build depend on a repo it does not
+#     own.
+#   - MoveIt and pick_ik. mod101_moveit_config BUILDS without them (it is an
+#     install-only package, like every package in this workspace) and only
+#     needs them to run, which the bench stack never does.
+#   - the pincopen tool driver, for the same reason.
+#   - nav2, slam_toolbox, laser_filters, twist_mux, robot_localization,
+#     diff_drive_controller. This robot is bolted to a bench: it cannot drive,
+#     has no lidar and has nothing to localise against. An unused Nav2 in the
+#     image is an invitation to wire it up by accident.
 
-SHELL ["/bin/bash", "-lc"]
+ARG ROS_DISTRO=jazzy
+
+
+# ------------------------------------------------------------------ base --
+# Everything the stack needs to RUN. Both stages below start here, so the
+# dependency list is written once.
+FROM ros:${ROS_DISTRO}-ros-base AS base
+ARG ROS_DISTRO
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Collected from the package.xml of every package this stack actually builds:
-# mod101_description, mod101_control, mod101_gazebo, mod101_harness and the
-# jaws/parallel/none tools.
+# Collected from the package.xml of every package in src/.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      python3-colcon-common-extensions python3-yaml \
-      ros-jazzy-xacro ros-jazzy-robot-state-publisher ros-jazzy-rviz2 \
-      ros-jazzy-ros2-control ros-jazzy-ros2-controllers \
-      ros-jazzy-controller-manager ros-jazzy-hardware-interface \
-      ros-jazzy-joint-state-broadcaster \
-      ros-jazzy-joint-trajectory-controller ros-jazzy-position-controllers \
-      ros-jazzy-joint-state-publisher ros-jazzy-joint-state-publisher-gui \
-      ros-jazzy-pluginlib \
-      ros-jazzy-ros-gz-sim ros-jazzy-ros-gz-bridge ros-jazzy-ros-gz-image \
-      ros-jazzy-gz-ros2-control \
+      python3-yaml \
+      ros-${ROS_DISTRO}-xacro \
+      ros-${ROS_DISTRO}-robot-state-publisher \
+      ros-${ROS_DISTRO}-rviz2 \
+      ros-${ROS_DISTRO}-ros2-control \
+      ros-${ROS_DISTRO}-ros2-controllers \
+      ros-${ROS_DISTRO}-controller-manager \
+      ros-${ROS_DISTRO}-hardware-interface \
+      ros-${ROS_DISTRO}-joint-state-broadcaster \
+      ros-${ROS_DISTRO}-joint-trajectory-controller \
+      ros-${ROS_DISTRO}-position-controllers \
+      ros-${ROS_DISTRO}-joint-state-publisher \
+      ros-${ROS_DISTRO}-joint-state-publisher-gui \
+      ros-${ROS_DISTRO}-pluginlib \
+      ros-${ROS_DISTRO}-ros-gz-sim \
+      ros-${ROS_DISTRO}-ros-gz-bridge \
+      ros-${ROS_DISTRO}-ros-gz-image \
+      ros-${ROS_DISTRO}-gz-ros2-control \
     && rm -rf /var/lib/apt/lists/*
 
-# GUI runtime for the Gazebo client and RViz. ros:jazzy-ros-base is headless, so
-# Qt6's xcb platform plugin has nothing to load against and gz sim dies with
-# "no Qt platform plugin could be initialized" — libxcb-cursor0 in particular is
+# GUI runtime for the Gazebo client and RViz. ros-base is headless, so Qt6's
+# xcb platform plugin has nothing to load against and gz sim dies with "no Qt
+# platform plugin could be initialized" — libxcb-cursor0 in particular is
 # required by Qt6 and ships in no ROS image.
 RUN apt-get update && apt-get install -y --no-install-recommends \
       libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 \
@@ -52,12 +69,36 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       libxkbcommon0 x11-utils \
     && rm -rf /var/lib/apt/lists/*
 
-# One colcon workspace, /ws, mounted from docker/.bench. Everything the stack
-# runs is relative to it, which is why the compose commands need no paths.
-WORKDIR /ws
 
-# Sources ROS (and the workspace overlay, once it has been built) so every
-# service command is the bare `ros2 ...` / `colcon ...` line it should be.
-COPY entrypoint.sh /entrypoint.sh
+# --------------------------------------------------------------- builder --
+# The toolchain, which nothing needs at runtime, so it stays in this stage.
+FROM base AS builder
+ARG ROS_DISTRO
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      build-essential cmake python3-colcon-common-extensions \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+COPY src ./src
+RUN source "/opt/ros/${ROS_DISTRO}/setup.bash" \
+    && colcon build --merge-install --install-base /opt/mod101 \
+         --cmake-args -DCMAKE_BUILD_TYPE=Release
+
+
+# --------------------------------------------------------------- runtime --
+FROM base AS runtime
+ARG ROS_DISTRO
+
+LABEL org.opencontainers.image.title="mod101-bench" \
+      org.opencontainers.image.description="mod101 arm on the camera-tower harness: Gazebo bench simulation" \
+      org.opencontainers.image.source="https://github.com/robocore-labs/mod101"
+
+COPY --from=builder /opt/mod101 /opt/mod101
+
+# Sources ROS and the workspace overlay, so every compose `command:` is the
+# bare `ros2 ...` line it should be rather than a bash -lc folded scalar.
+COPY --chmod=0755 docker/entrypoint.sh /entrypoint.sh
 ENTRYPOINT ["/entrypoint.sh"]
-CMD ["bash"]
+CMD ["ros2", "launch", "mod101_harness", "sim.launch.py"]

@@ -145,6 +145,19 @@ source install/setup.bash
 ros2 launch mod101_gazebo gazebo.launch.py tool:=parallel
 ```
 
+### Or in containers
+
+Two containers, no ROS install needed: the simulation (this repo, built into
+one image) and the robocore agent (pulled, not built here).
+
+```bash
+docker compose -f docker/compose.yaml up --build
+```
+
+That gives you the bench in Gazebo plus the robocore API on
+`ws://localhost:10101`. The agent needs no configuration beyond
+`profiles/mod101_harness.yaml`, which compose mounts for you.
+
 Want motion planning? `sudo apt install ros-jazzy-moveit ros-jazzy-pick-ik`, then:
 
 ```bash

@@ -1,0 +1,10 @@
+# docker/Dockerfile builds from the repo root, because the image needs src/.
+# Nothing else in the tree belongs in an image, and host colcon artifacts in
+# particular are actively harmful: build/ and install/ hold absolute paths
+# and CMake caches from a different filesystem.
+*
+!src
+!docker/entrypoint.sh
+
+**/__pycache__
+**/*.pyc
