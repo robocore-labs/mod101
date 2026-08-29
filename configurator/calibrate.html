@@ -217,7 +217,11 @@
     border: 1px solid var(--amber-500); background: rgba(245,158,11,.08);
     color: var(--amber-500); border-radius: var(--radius-sm);
     padding: 9px 13px; font-size: 11.5px; margin-bottom: 12px;
+    display: flex; align-items: center; gap: 9px; flex-wrap: wrap;
   }
+  .banner .info { border-color: var(--amber-500); color: var(--amber-500); }
+  .banner .info-body { flex-basis: 100%; margin: 0; }
+  .banner .info-body .note { margin: 0; color: var(--amber-500); opacity: .85; }
 
   #log {
     white-space: pre-wrap; background: var(--bg-surface);
@@ -265,14 +269,16 @@
   .fit tr.bad-row td { color: var(--red-500); }
 
   /* ---- the servo card ------------------------------------------------
-     One card per servo on the bus. The servo is the component: its identity,
-     what joint it is mapped to, what it is doing right now, and how to move
-     it are one object, because on the bench they are one question. */
-  .servos { display: grid; grid-template-columns: repeat(auto-fill, minmax(400px, 1fr)); gap: 10px; }
+     One card per row. The servo is the component, and the card splits the way
+     the work does: everything you SET on the left, everything the servo TELLS
+     you on the right. */
+  .servos { display: flex; flex-direction: column; gap: 9px; }
   .servo {
     border: 1px solid var(--border-subtle); border-radius: var(--radius-sm);
-    background: var(--bg-surface); padding: 9px 11px 10px;
+    background: var(--bg-surface); padding: 9px 13px 11px;
     cursor: pointer; position: relative;
+    display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+    column-gap: 22px; align-items: start;
   }
   .servo.sel { border-color: var(--accent); }
   .servo input, .servo select, .servo summary { cursor: auto; }
@@ -281,7 +287,7 @@
     content: ""; position: absolute; left: -1px; top: 9px; bottom: 9px; width: 2px;
     border-radius: 2px; background: var(--accent);
   }
-  .svh { display: flex; align-items: center; gap: 7px; margin-bottom: 8px; }
+  .svh { grid-column: 1 / -1; display: flex; align-items: center; gap: 7px; margin-bottom: 9px; }
   .svh .spacer { flex: 1; }
   .svid { font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary); }
   .svname {
@@ -292,25 +298,16 @@
   .jdot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-quaternary); flex: none; }
   .jdot.on { background: var(--accent); box-shadow: 0 0 0 2px var(--teal-tint-20); }
 
-  .svmap { display: grid; grid-template-columns: 1fr 1fr; gap: 5px 8px; margin-bottom: 8px; }
+  .svset { min-width: 0; }
+  .svmap { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 6px 16px; }
   .svmap label {
-    display: grid; grid-template-columns: 3.6rem 1fr; gap: 6px; align-items: center;
+    display: grid; grid-template-columns: 3.5rem minmax(0,1fr); gap: 6px; align-items: center;
     font-family: var(--font-label); font-size: 9px; text-transform: uppercase;
     letter-spacing: 1px; color: var(--text-tertiary); font-weight: 700;
   }
   .svmap select, .svmap input { width: 100%; min-width: 0; }
 
-  .svtel {
-    display: grid; grid-template-columns: repeat(auto-fit, minmax(92px,1fr)); gap: 2px 10px;
-    border-top: 1px solid var(--border-faint); border-bottom: 1px solid var(--border-faint);
-    padding: 6px 0; margin-bottom: 8px;
-  }
-  .jmf { display: flex; justify-content: space-between; gap: 6px; font-family: var(--font-mono); font-size: 10.5px; color: var(--text-quaternary); line-height: 1.7; }
-  .jmf b { color: var(--text-secondary); font-variant-numeric: tabular-nums; font-weight: 500; }
-  .jmf.hot b { color: var(--red-500); }
-
-  .svdrive { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
-  .svdrive .spacer { flex: 1; }
+  .svdrive { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
   /* Jog is a pair of buttons, not a slider: one press is one small step, so
      there is no gesture here that can run a joint into its hard stop. */
   .jog {
@@ -319,7 +316,39 @@
   }
   .jog:disabled { opacity: .35; }
   .svstep { font-family: var(--font-mono); font-size: 11px; }
-  .svprof { margin-top: 8px; }
+  .svprof { margin-left: auto; }
+
+  .svtel {
+    min-width: 0; display: grid; grid-template-columns: repeat(4, minmax(0,1fr));
+    gap: 3px 16px; border-left: 1px solid var(--border-subtle); padding-left: 20px;
+  }
+  .jmf {
+    display: grid; grid-template-columns: 2.6rem auto; gap: 8px; align-items: baseline;
+    font-family: var(--font-mono); font-size: 10.5px; color: var(--text-quaternary); line-height: 1.85;
+  }
+  .jmf b { color: var(--text-secondary); font-variant-numeric: tabular-nums; font-weight: 500; }
+  .jmf.hot b { color: var(--red-500); }
+
+  /* Too narrow for two columns: stack them, and the rule that separated them
+     becomes the rule between them. */
+  @media (max-width: 1080px) {
+    .servo { grid-template-columns: minmax(0,1fr); }
+    .svtel { grid-template-columns: repeat(auto-fit, minmax(104px,1fr)); }
+    .svtel { border-left: 0; border-top: 1px solid var(--border-faint); padding-left: 0; padding-top: 8px; margin-top: 10px; }
+  }
+
+  /* ---- (i) — the prose, on request only ------------------------------
+     This page has a lot to explain and none of it is needed twice. Every
+     panel's explanation folds behind the (i) in its header. */
+  .info {
+    width: 21px; height: 21px; padding: 0; flex: none;
+    border-radius: 50%; font-family: var(--font-display);
+    font-style: italic; font-weight: 700; font-size: 12px; line-height: 1;
+    text-transform: none;
+  }
+  .info.on { border-color: var(--accent); color: var(--accent); }
+  .info-body { margin-bottom: 10px; }
+  .info-body .note:first-child { margin-top: 0; }
 
   details.fold > summary {
     cursor: pointer; list-style: none;
@@ -356,9 +385,15 @@
     <button id="estop" class="danger" disabled>■ Disarm all</button>
   </header>
 
+  <!-- Trimmed to the claim itself. The reasoning behind it is real but it is
+       the same three sentences on every load, so it sits behind the (i). -->
   <div class="banner" id="fwBanner">
-    Soft-safety only — nothing here can cap servo current in hardware. The arm-check watches current and
-    disarms on its own, but that is a reaction, not a limit. Bench-test before trusting this on a loaded arm.
+    <span>Soft-safety only — nothing here can cap servo current in hardware.</span>
+    <button class="ghost sm info" data-info="infoSafety" title="why">i</button>
+    <div class="info-body" id="infoSafety" hidden>
+      <p class="note">The arm-check watches current and disarms on its own, but that is a reaction, not a
+      limit. Bench-test before trusting this on a loaded arm.</p>
+    </div>
   </div>
 
   <!-- ================================================================
@@ -378,8 +413,6 @@
           <button id="selftest" class="ghost sm">Self-test</button>
         </div>
         <div class="bar" style="margin-top:10px">
-          <span class="note" style="margin:0">Servos are driven straight over the serial chain by
-            <code>configurator/motors.py</code> — no intermediate firmware, any browser.</span>
           <span class="spacer"></span>
           <button id="exportBtn" class="ghost sm">Export JSON</button>
           <button id="importBtn" class="ghost sm">Import JSON</button>
@@ -398,24 +431,27 @@
           <h2>Servos</h2>
           <span class="chip mute" id="setupCount">no bus</span>
           <span class="spacer"></span>
+          <button class="ghost sm info" data-info="infoServos" title="what this is">i</button>
           <button class="ghost sm" id="rebuild">Rebuild joints</button>
         </div>
-        <p class="note" style="margin-top:0">
-          One card per servo found on the bus, and one joint per servo. The mapping is this page's own — there
-          is no config stored on the arm — and the defaults follow
-          <code>mod101_description/urdf/mod101_macro.xacro</code>. <b>ROS joint</b> is picked from the joints
-          the loaded URDF actually declares, which is what the model tab checks against.
-          <b>Sign</b> flips a joint whose servo counts opposite to its URDF axis;
-          <code>joint_wrist_tilt</code> is <code>0 -1 0</code>, hence −1 by default. Edits persist locally and
-          travel with the exported JSON.
-        </p>
-        <p class="note">
-          Jogging is raw bus control, independent of any calibration: <b>−</b> and <b>+</b> command one step
-          from where the servo is, over the full 0…4095 encoder range and <b>not</b> a calibrated travel
-          limit. One press is one step and nothing repeats while held, because on an assembled arm the way
-          into a hard stop is a control that keeps going — but the steps do add up, so watch the joint and
-          keep the disarm button in reach.
-        </p>
+        <div class="info-body" id="infoServos" hidden>
+          <p class="note">
+            One card per servo found on the bus, and one joint per servo. The mapping is this page's own — there
+            is no config stored on the arm — and the defaults follow
+            <code>mod101_description/urdf/mod101_macro.xacro</code>. <b>ROS joint</b> is picked from the joints
+            the loaded URDF actually declares, which is what the model tab checks against.
+            <b>Sign</b> flips a joint whose servo counts opposite to its URDF axis;
+            <code>joint_wrist_tilt</code> is <code>0 -1 0</code>, hence −1 by default. Edits persist locally and
+            travel with the exported JSON.
+          </p>
+          <p class="note">
+            Jogging is raw bus control, independent of any calibration: <b>−</b> and <b>+</b> command one step
+            from where the servo is, over the full 0…4095 encoder range and <b>not</b> a calibrated travel
+            limit. One press is one step and nothing repeats while held, because on an assembled arm the way
+            into a hard stop is a control that keeps going — but the steps do add up, so watch the joint and
+            keep the disarm button in reach.
+          </p>
+        </div>
         <div id="servoList" class="servos"><p class="note" style="margin:0">Connect, or tick Demo mode.</p></div>
         <details class="fold" style="margin-top:12px">
           <summary>Reassign a servo ID</summary>
@@ -460,13 +496,16 @@
             <h2>URDF ↔ hardware fit</h2>
             <span class="chip mute" id="fitState">nothing measured</span>
             <span class="spacer"></span>
+            <button class="ghost sm info" data-info="infoFit" title="what this is">i</button>
             <button class="ghost sm" id="fitSnippet">URDF limit block</button>
           </div>
-          <p class="note" style="margin-top:0">
-            Every actuated joint the URDF declares, against the travel actually measured on the arm. A joint
-            where the URDF allows <b>more</b> travel than the hardware has is the dangerous direction — a
-            planner will happily command into a hard stop.
-          </p>
+          <div class="info-body" id="infoFit" hidden>
+            <p class="note">
+              Every actuated joint the URDF declares, against the travel actually measured on the arm. A joint
+              where the URDF allows <b>more</b> travel than the hardware has is the dangerous direction — a
+              planner will happily command into a hard stop.
+            </p>
+          </div>
           <div style="overflow-x:auto">
             <table class="fit" id="fitTable">
               <thead><tr><th>URDF joint</th><th>servo</th><th>URDF range</th><th>measured</th><th>Δ lower</th><th>Δ upper</th><th>fit</th></tr></thead>
@@ -489,14 +528,17 @@
             <h2>Generate configs</h2>
             <span class="chip mute" id="genState">nothing calibrated</span>
             <span class="spacer"></span>
+            <button class="ghost sm info" data-info="infoGen" title="what this is">i</button>
             <button class="ghost sm" id="genPreview">Preview</button>
             <button id="genWrite" disabled>Write to repo</button>
           </div>
-          <p class="note" style="margin-top:0">
-            Turns the calibrated tick ranges into <code>src/mod101_control/config/calibration.yaml</code> (ROS,
-            radians relative to each joint's home) and a LeRobot calibration JSON. STS3215 encoders are 4096
-            ticks/rev and direct-drive, so ticks convert straight to radians — the same counts serve both stacks.
-          </p>
+          <div class="info-body" id="infoGen" hidden>
+            <p class="note">
+              Turns the calibrated tick ranges into <code>src/mod101_control/config/calibration.yaml</code> (ROS,
+              radians relative to each joint's home) and a LeRobot calibration JSON. STS3215 encoders are 4096
+              ticks/rev and direct-drive, so ticks convert straight to radians — the same counts serve both stacks.
+            </p>
+          </div>
           <div id="genOut"></div>
         </div>
       </aside>
@@ -1048,11 +1090,27 @@ function servoCardHTML(s){
       <span class="spacer"></span>
       <span class="chip mute f-tq">idle</span>
     </div>
-    <div class="svmap">
-      <label>joint <select data-f="ros">${rosJointOptions(m.ros)}</select></label>
-      <label>lerobot <input type="text" data-f="lerobot" value="${esc(m.lerobot)}"></label>
-      <label>model <select data-f="model">${SERVO_MODELS.map(k=>`<option${k===m.model?" selected":""}>${k}</option>`).join("")}</select></label>
-      <label>sign <select data-f="sign"><option value="1"${m.sign>0?" selected":""}>+1</option><option value="-1"${m.sign<0?" selected":""}>-1</option></select></label>
+    <div class="svset">
+      <div class="svmap">
+        <label>joint <select data-f="ros">${rosJointOptions(m.ros)}</select></label>
+        <label>lerobot <input type="text" data-f="lerobot" value="${esc(m.lerobot)}"></label>
+        <label>model <select data-f="model">${SERVO_MODELS.map(k=>`<option${k===m.model?" selected":""}>${k}</option>`).join("")}</select></label>
+        <label>sign <select data-f="sign"><option value="1"${m.sign>0?" selected":""}>+1</option><option value="-1"${m.sign<0?" selected":""}>-1</option></select></label>
+      </div>
+      <div class="svdrive">
+        <button class="ghost sm f-torque">Torque on</button>
+        <button class="ghost sm f-here">Hold here</button>
+        <button class="ghost jog f-minus" title="one step down" disabled>−</button>
+        <select class="svstep f-step">${stepOptions()}</select>
+        <button class="ghost jog f-plus" title="one step up" disabled>+</button>
+        <details class="fold svprof"><summary>speed / accel</summary>
+          <div class="row" style="margin-top:7px">
+            <span class="unit">speed <input type="number" class="f-speed" min="1" max="3400" value="${s.speed||800}" style="width:5.5rem"></span>
+            <span class="unit">accel <input type="number" class="f-accel" min="1" max="254" value="${s.accel||20}" style="width:5rem"></span>
+            <button class="ghost sm f-apply">Apply</button>
+          </div>
+        </details>
+      </div>
     </div>
     <div class="svtel">
       <div class="jmf"><span>pos</span><b class="f-pos">—</b></div>
@@ -1064,21 +1122,6 @@ function servoCardHTML(s){
       <div class="jmf"><span>load</span><span><b class="f-load">—</b> %</span></div>
       <div class="jmf f-trow"><span>temp</span><span><b class="f-temp">—</b> C</span></div>
     </div>
-    <div class="svdrive">
-      <button class="ghost sm f-torque">Torque on</button>
-      <button class="ghost sm f-here">Hold here</button>
-      <span class="spacer"></span>
-      <button class="ghost jog f-minus" title="one step down" disabled>−</button>
-      <select class="svstep f-step">${stepOptions()}</select>
-      <button class="ghost jog f-plus" title="one step up" disabled>+</button>
-    </div>
-    <details class="fold svprof"><summary>speed / accel</summary>
-      <div class="row" style="margin-top:7px">
-        <span class="unit">speed <input type="number" class="f-speed" min="1" max="3400" value="${s.speed||800}" style="width:5.5rem"></span>
-        <span class="unit">accel <input type="number" class="f-accel" min="1" max="254" value="${s.accel||20}" style="width:5rem"></span>
-        <button class="ghost sm f-apply">Apply</button>
-      </div>
-    </details>
   </article>`;
 }
 
@@ -1794,6 +1837,15 @@ function showTab(name){
   try{ localStorage.setItem("mod101.calibration.tab", name); }catch(e){}
 }
 $("tabs").onclick=(e)=>{ const b=e.target.closest("button"); if(b) showTab(b.dataset.tab); };
+
+// (i) — every panel's prose is hidden until asked for. One delegated handler, so
+// a new panel only needs the button and a matching .info-body.
+document.addEventListener("click",(e)=>{
+  const b=e.target.closest(".info"); if(!b) return;
+  const body=$(b.dataset.info); if(!body) return;
+  body.hidden=!body.hidden;
+  b.classList.toggle("on", !body.hidden);
+});
 
 // ======================================================================
 // Wiring

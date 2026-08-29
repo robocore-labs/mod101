@@ -10,17 +10,27 @@
 
 <xacro:macro name="harness_gazebo" params="prefix:=''">
 
-  <xacro:property name="silver_color" value="Gazebo/Silver"/>
+  <!-- The same three-way split the arm uses (mod101_description/urdf/
+       materials.xacro), not a second palette: extrusion is `silver`, every
+       bracket / adapter / camera body is dark grey, servo housings are black.
+       These Gazebo names have to track the URDF <material> on the same link —
+       the URDF colour is what RViz and the configurator's 3D preview draw, this
+       one is what Gazebo draws, and a mismatch means the robot looks like two
+       different robots depending on which window you are in. -->
+  <xacro:property name="silver_color"   value="Gazebo/Silver"/>
+  <xacro:property name="darkgrey_color" value="Gazebo/DarkGrey"/>
+  <xacro:property name="black_color"    value="Gazebo/Black"/>
 
-  <xacro:macro name="hz_link" params="name">
+  <xacro:macro name="hz_link" params="name color">
     <gazebo reference="${prefix}${name}">
-      <material>${silver_color}</material>
+      <material>${color}</material>
       <mu1>0.2</mu1>
       <mu2>0.2</mu2>
       <self_collide>true</self_collide>
     </gazebo>
   </xacro:macro>
 
+  <!-- 2020 extrusion: the base rail. -->
   <gazebo reference="${prefix}base_link">
     <material>${silver_color}</material>
     <mu1>0.2</mu1>
@@ -29,14 +39,17 @@
     <gravity>true</gravity>
   </gazebo>
 
-  <xacro:hz_link name="yaw_bracket_1"/>
-  <xacro:hz_link name="yaw_servo_1"/>
-  <xacro:hz_link name="yaw_mount_1"/>
-  <xacro:hz_link name="pitch_servo_1"/>
-  <xacro:hz_link name="pitch_link__1"/>
-  <xacro:hz_link name="mod_101_adapter_1"/>
-  <xacro:hz_link name="tower_1"/>
-  <xacro:hz_link name="back_1"/>
+  <!-- extrusion -->
+  <xacro:hz_link name="tower_1"            color="${silver_color}"/>
+  <xacro:hz_link name="back_1"             color="${silver_color}"/>
+  <!-- brackets and adapters -->
+  <xacro:hz_link name="mod_101_adapter_1"  color="${darkgrey_color}"/>
+  <xacro:hz_link name="yaw_bracket_1"      color="${darkgrey_color}"/>
+  <xacro:hz_link name="yaw_mount_1"        color="${darkgrey_color}"/>
+  <xacro:hz_link name="pitch_link__1"      color="${darkgrey_color}"/>
+  <!-- servo housings -->
+  <xacro:hz_link name="yaw_servo_1"        color="${black_color}"/>
+  <xacro:hz_link name="pitch_servo_1"      color="${black_color}"/>
 
   <!-- Depth camera. rgbd_camera publishes color image, depth image, camera_info
        and a registered point cloud under <topic>. Stamp with the optical frame
@@ -44,7 +57,7 @@
        realsense_1 +X, which is where Gazebo aims it. If the viewer shows the
        lens pointing along another axis, add a <pose> rotation on the sensor. -->
   <gazebo reference="${prefix}realsense_1">
-    <material>${silver_color}</material>
+    <material>${darkgrey_color}</material>
     <mu1>0.2</mu1>
     <mu2>0.2</mu2>
     <self_collide>true</self_collide>

@@ -11,6 +11,10 @@ Build args (tool, shoulder_ext_length, elbow_ext_length, shoulder_mount,
 elbow_mount) default to whatever the configurator last saved; pass one to
 override it. spawn_controllers:=false leaves the controller_manager empty (for
 a MoveIt overlay that brings up its own).
+
+world:=<name|path> picks the world, defaulting to `table` - the harness on a
+bench with graspable objects laid out in front of the arm (worlds/table.sdf).
+world:=empty restores the bare ground plane.
 """
 
 import os
@@ -36,6 +40,31 @@ import xacro
 
 BUILD_ARGS = ('tool', 'shoulder_ext_length', 'elbow_ext_length',
               'shoulder_mount', 'elbow_mount')
+
+# The bench world is the default because that is what this robot IS - an arm
+# bolted to a harness on a table, with things on the table to pick up. `empty`
+# is still one argument away for anyone who wants the arm in a void.
+DEFAULT_WORLD = 'table'
+
+
+def _resolve_world(name, pkg_harness, pkg_gazebo):
+    """A path, or a bare name looked up in this package then mod101_gazebo."""
+    if os.path.isabs(name) or os.sep in name:
+        return name
+    stem = name[:-4] if name.endswith('.sdf') else name
+    for d in (os.path.join(pkg_harness, 'worlds'),
+              os.path.join(pkg_gazebo, 'worlds')):
+        cand = os.path.join(d, f'{stem}.sdf')
+        if os.path.exists(cand):
+            return cand
+    raise RuntimeError(
+        f'world "{name}" not found in {pkg_harness}/worlds or '
+        f'{pkg_gazebo}/worlds. Pass a full path, or one of: '
+        + ', '.join(sorted(
+            os.path.splitext(f)[0]
+            for d in (os.path.join(pkg_harness, 'worlds'),
+                      os.path.join(pkg_gazebo, 'worlds'))
+            if os.path.isdir(d) for f in os.listdir(d) if f.endswith('.sdf'))))
 
 
 def _configured_tool():
@@ -75,7 +104,8 @@ def _build(context):
     gz_resource_path = SetEnvironmentVariable(
         name='GZ_SIM_RESOURCE_PATH', value=os.pathsep.join(resource_dirs))
 
-    world_file    = os.path.join(pkg_gazebo, 'worlds', 'empty.sdf')
+    world_file    = _resolve_world(
+        LaunchConfiguration('world').perform(context), pkg_harness, pkg_gazebo)
     urdf_file     = os.path.join(pkg_harness, 'urdf', 'mod101_harness_arm.xacro')
     bridge_config = os.path.join(pkg_harness, 'config', 'gz_bridge.yaml')
 
@@ -187,6 +217,12 @@ def generate_launch_description():
         DeclareLaunchArgument('elbow_ext_length', default_value=''),
         DeclareLaunchArgument('shoulder_mount', default_value=''),
         DeclareLaunchArgument('elbow_mount', default_value=''),
+        DeclareLaunchArgument(
+            'world', default_value=DEFAULT_WORLD,
+            description='World name (looked up in mod101_harness/worlds then '
+                        'mod101_gazebo/worlds) or a full path to an .sdf. '
+                        '"table" is the bench with graspable objects; '
+                        '"empty" is a bare ground plane.'),
         DeclareLaunchArgument(
             'spawn_controllers', default_value='true',
             description='Spawn joint_state_broadcaster + arm_controller + '

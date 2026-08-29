@@ -1,0 +1,25 @@
+# mod101 bench — arm on harness, camera tower, no mobile base.
+# Single service: builds workspace then runs simulation (offscreen/Gazebo headless).
+#   docker compose up --build   # builds + runs sim
+#
+
+services:
+  simulation:
+    image: mod101-bench:jazzy
+    container_name: simulation-1
+    # Host networking for real-time performance
+    network_mode: host
+    ipc: host
+    working_dir: /ws
+    # Offscreen Gazebo mode — no X11 needed
+    environment:
+      GZ_SIM_RENDERING_ENGINE: "offscreen"
+      GZ_SIM_HEADLESS: "1"
+      ROS_DOMAIN_ID: "1"
+      RMW_IMPLEMENTATION: rmw_fastrtps_cpp
+    # Mount source so edits don't need rebuilds
+    volumes:
+      - ../src:/ws/src/mod101      # this robot only
+      - ./.bench:/ws                # colcon output persists
+    # Build colcon workspace then launch simulation
+    command: bash -lc 'colcon build --symlink-install && touch /ws/BUILD.DONE && ros2 launch mod101_harness sim.launch.py'

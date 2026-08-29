@@ -8,9 +8,14 @@ be driven by, and then emits the two config files that ROS and LeRobot each need
 
 The page has two tabs, over one shared bus connection:
 
+Prose on the page itself is kept behind the **(i)** in each panel header — the
+explanations are worth having once and in the way every load after that.
+
 - **Hardware** — the serial chain and nothing else. Pick a port, scan the bus,
-  see every servo that answers, name it (ROS joint, LeRobot motor, sign, model),
-  reassign an ID, and jog any servo directly with live telemetry.
+  and get one card per servo that answers. The servo is the component and the
+  card is all of it: its ID, the joint it happens to be mapped to (ROS joint,
+  LeRobot motor, sign, model), its live telemetry, and the buttons that move it.
+  Reassigning an ID is the one bus-wide action, so it stays outside the cards.
 - **Model check** — the same three.js scene as the build page, loaded from
   `configurator/viewer.js`, driven by live servo telemetry. Each joint is swept
   here, the model follows the arm as you move it, and the measured travel is put
@@ -106,9 +111,51 @@ files, not in servo EEPROM — no wear, and nothing lost when a servo is swapped
 The only EEPROM write in the whole page is the explicit *Reassign a servo ID*
 action.
 
+## The servo card
+
+Everything true of one servo is on one card, because on the bench it is one
+question: *which motor is this, is it answering, what joint does the map think
+it is, and what happens when I move it?* That used to be a mapping table, a
+separate **Drive a servo** pane and a **Joint status** sidebar — three places to
+watch while turning one motor, and only one of the three said which joint the
+motor even was.
+
+The cards stack one per row, and each splits the way the work does: **everything
+you set on the left, everything the servo tells you on the right.** Left is the
+four mapping fields, the drive row and the speed/accel fold; right is eight live
+readings — position, angle, velocity, goal, current, voltage, load, temperature.
+A header spanning both carries the online dot, the ID, the mapped joint name and
+the torque state. Clicking a card selects it, which is also what the model tab
+highlights. Below 1080px the two halves stack instead.
+
+### Jogging
+
+**Torque on** arms the servo at its present position, so arming never makes it
+snap anywhere. Only then do **−** and **+** light up: an STS servo ignores a goal
+it isn't armed for, and buttons that look live while doing nothing are worse than
+buttons that are visibly off.
+
+Each press commands exactly one step — 1, 5, 10 or 25 ticks (0.1° to 2.2°),
+picked from the step selector, which is shared across every card. **Nothing
+repeats while a button is held**, and the next press waits for the current one to
+be acknowledged. This replaced a 0…4095 slider: the slider spanned the raw
+encoder range rather than any calibrated travel, so a single drag could take a
+joint into its hard stop. Steps still add up — watch the joint, and keep
+**Disarm all** in reach.
+
+Where the step counts from depends on whether the servo is holding. Armed, it is
+still chasing its last goal, so the step is added to that goal — counting from
+the present position would land inside the motion already in flight and every
+press would ask for less than a step. Unarmed, the joint can be moved by hand,
+which makes the tracked goal stale, so the step is added to a fresh reading.
+
+Goals are **clamped** at 0 and 4095 rather than wrapped. Those are the ends of
+the encoder, and a button that silently jumped a joint half a turn across the
+0/4095 seam would be the most dangerous control on the page.
+
 ## Joint mapping
 
-There's no configuration stored on the arm, so the **Servo setup** table is the
+There's no configuration stored on the arm, so the cards' mapping fields are the
 only source of truth for which servo is which joint. Defaults follow
 `mod101_description/urdf/mod101_macro.xacro`:
 

@@ -1,0 +1,393 @@
+<?xml version="1.0" ?>
+<!--
+  The bench: the mod101 harness standing at the back edge of a table, with
+  graspable objects laid out in front of the arm and inside the head camera's
+  cone.
+
+  WHY THE FLOOR IS AT z = -0.75, AND THE TABLE TOP AT z = -0.01.
+
+  mod101_harness_arm.xacro fixes the robot's `world` link to `hn_base_link`
+  with the base rail centred on z=0 — 2020 extrusion, so the rail's underside
+  is at z = -0.01. That joint is what makes `map`/`odom`/`world` one frame for
+  this fixed-base robot (profiles/mod101_harness.yaml), and lifting the robot
+  onto a table by spawning it at +0.75 would put the sim's world origin 0.75 m
+  below the robot's own `world` frame — TF, the profile and MoveIt would then
+  all disagree with Gazebo about where the floor is.
+
+  So the TABLE comes to the ROBOT: its top surface IS the z = -0.01 plane the
+  harness already rests on, the slab hangs below it, and the ground plane drops
+  to z = -0.75 (a normal 740 mm bench). Nothing in the robot description, the
+  spawn pose, MoveIt or the profile changes. "Move the robot" here means move
+  the table under it, which is what the y span below does: the harness
+  structure occupies y -0.19 … +0.01, and the table's back edge is y = 0.06,
+  i.e. 50 mm behind it. All 0.76 m of depth is in front of the arm.
+
+  NOTHING HERE IS PLACED BY EYE. Every object was checked against a 1.6 M-pose
+  FK sweep of the five arm joints AND against a 65x61 pan/tilt sweep of the
+  head camera's 60 deg x 47 deg frustum. The comment on each says how many of
+  those arm poses reach it with the tool pointing down. One head pose —
+  pan -1.5708, tilt 0.9774 — frames all seven at once, the worst of them
+  at 76% of the half-FOV.
+
+  Sizes are set by the gripper, not by taste: the SO-101 jaws span 78.3 mm open
+  and 33.8 mm closed, so 40-50 mm is the only band they can actually clamp.
+  Masses are 50-90 g because these are STS3215 hobby servos.
+-->
+<sdf version="1.8">
+  <world name="mod101_bench">
+
+    <physics name="1ms" type="ignored">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+    </physics>
+
+    <!-- bullet-featherstone supports URDF <mimic> constraints (dartsim does
+         not), and the jaws tool is built on one. Same engine as empty.sdf —
+         swapping it silently breaks the gripper. -->
+    <plugin filename="gz-sim-physics-system" name="gz::sim::systems::Physics">
+      <engine><filename>gz-physics-bullet-featherstone-plugin</filename></engine>
+    </plugin>
+    <plugin filename="gz-sim-user-commands-system" name="gz::sim::systems::UserCommands"/>
+    <plugin filename="gz-sim-scene-broadcaster-system" name="gz::sim::systems::SceneBroadcaster"/>
+    <!-- Required to actually drive camera/IMU/etc. sensors. -->
+    <plugin filename="gz-sim-sensors-system" name="gz::sim::systems::Sensors">
+      <render_engine>ogre2</render_engine>
+    </plugin>
+
+    <scene>
+      <ambient>0.55 0.55 0.58 1</ambient>
+      <background>0.28 0.32 0.38 1</background>
+      <shadows>true</shadows>
+    </scene>
+
+    <light type="directional" name="sun">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>0.85 0.85 0.82 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <attenuation><range>1000</range><constant>0.9</constant>
+                   <linear>0.01</linear><quadratic>0.001</quadratic></attenuation>
+      <direction>-0.4 0.35 -0.85</direction>
+    </light>
+
+    <!-- Fill from the work side. The depth camera does not care; the RGB
+         stream, and anything doing colour segmentation on it, does. -->
+    <light type="point" name="fill">
+      <pose>0.1 -0.55 0.85 0 0 0</pose>
+      <cast_shadows>false</cast_shadows>
+      <diffuse>0.35 0.35 0.38 1</diffuse>
+      <specular>0.05 0.05 0.05 1</specular>
+      <attenuation><range>6</range><constant>0.4</constant>
+                   <linear>0.2</linear><quadratic>0.05</quadratic></attenuation>
+    </light>
+
+    <!-- The room floor, 740 mm below the table top. -->
+    <model name="ground_plane">
+      <static>true</static>
+      <pose>0 0 -0.75 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><plane><normal>0 0 1</normal></plane></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><plane><normal>0 0 1</normal><size>60 60</size></plane></geometry>
+          <material><ambient>0.32 0.33 0.35 1</ambient>
+                    <diffuse>0.42 0.43 0.45 1</diffuse>
+                    <specular>0.05 0.05 0.05 1</specular></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ===================================================================
+         THE TABLE. 1.20 x 0.76 m, top face at z = -0.01 exactly. Do not
+         nudge that without moving every object below it — their z is measured
+         from this plane. Centre is (0.000, -0.320) so the back edge lands
+         just behind the harness.
+         =================================================================== -->
+    <model name="table">
+      <static>true</static>
+      <pose>0.000 -0.320 0 0 0 0</pose>
+      <link name="link">
+
+        <collision name="top_collision">
+          <pose>0 0 -0.0300 0 0 0</pose>
+          <geometry><box><size>1.20 0.76 0.04</size></box></geometry>
+          <surface>
+            <friction>
+              <ode><mu>0.9</mu><mu2>0.9</mu2></ode>
+              <bullet><friction>0.9</friction><friction2>0.9</friction2></bullet>
+            </friction>
+          </surface>
+        </collision>
+        <visual name="top_visual">
+          <pose>0 0 -0.0300 0 0 0</pose>
+          <geometry><box><size>1.20 0.76 0.04</size></box></geometry>
+          <material><ambient>0.29 0.24 0.19 1</ambient>
+                    <diffuse>0.52 0.40 0.28 1</diffuse>
+                    <specular>0.10 0.09 0.08 1</specular></material>
+        </visual>
+
+        <collision name="leg_fl_collision">
+          <pose>-0.510 -0.290 -0.4000 0 0 0</pose>
+          <geometry><box><size>0.06 0.06 0.700</size></box></geometry>
+        </collision>
+        <visual name="leg_fl_visual">
+          <pose>-0.510 -0.290 -0.4000 0 0 0</pose>
+          <geometry><box><size>0.06 0.06 0.700</size></box></geometry>
+          <material><ambient>0.13 0.14 0.15 1</ambient><diffuse>0.22 0.23 0.25 1</diffuse></material>
+        </visual>
+        <collision name="leg_fr_collision">
+          <pose>0.510 -0.290 -0.4000 0 0 0</pose>
+          <geometry><box><size>0.06 0.06 0.700</size></box></geometry>
+        </collision>
+        <visual name="leg_fr_visual">
+          <pose>0.510 -0.290 -0.4000 0 0 0</pose>
+          <geometry><box><size>0.06 0.06 0.700</size></box></geometry>
+          <material><ambient>0.13 0.14 0.15 1</ambient><diffuse>0.22 0.23 0.25 1</diffuse></material>
+        </visual>
+        <collision name="leg_bl_collision">
+          <pose>-0.510 0.290 -0.4000 0 0 0</pose>
+          <geometry><box><size>0.06 0.06 0.700</size></box></geometry>
+        </collision>
+        <visual name="leg_bl_visual">
+          <pose>-0.510 0.290 -0.4000 0 0 0</pose>
+          <geometry><box><size>0.06 0.06 0.700</size></box></geometry>
+          <material><ambient>0.13 0.14 0.15 1</ambient><diffuse>0.22 0.23 0.25 1</diffuse></material>
+        </visual>
+        <collision name="leg_br_collision">
+          <pose>0.510 0.290 -0.4000 0 0 0</pose>
+          <geometry><box><size>0.06 0.06 0.700</size></box></geometry>
+        </collision>
+        <visual name="leg_br_visual">
+          <pose>0.510 0.290 -0.4000 0 0 0</pose>
+          <geometry><box><size>0.06 0.06 0.700</size></box></geometry>
+          <material><ambient>0.13 0.14 0.15 1</ambient><diffuse>0.22 0.23 0.25 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ===================================================================
+         GRASPABLE OBJECTS. The count on each is how many sampled arm
+         configurations put the jaw centre within 35 mm of it with the tool
+         pointing down. Move one and that number is void — re-run the sweep in
+         docs/harness-world.md.
+         =================================================================== -->
+
+    <!-- 741 top-down grasps, 0.185 m from the arm base — the sweet spot -->
+    <model name="cube_red">
+      <pose>0.020 -0.300 0.0100 0 0 0</pose>
+      <link name="link">
+        <inertial><mass>0.05</mass>
+          <inertia><ixx>1.333e-05</ixx><iyy>1.333e-05</iyy><izz>1.333e-05</izz>
+                   <ixy>0</ixy><ixz>0</ixz><iyz>0</iyz></inertia></inertial>
+        <collision name="collision">
+          <geometry><box><size>0.04 0.04 0.04</size></box></geometry>
+          <surface>
+            <friction>
+              <ode><mu>1.1</mu><mu2>1.1</mu2></ode>
+              <bullet><friction>1.1</friction><friction2>1.1</friction2></bullet>
+            </friction>
+            <contact><ode><kp>1e6</kp><kd>100</kd></ode></contact>
+          </surface>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>0.04 0.04 0.04</size></box></geometry>
+          <material><ambient>0.28 0.06 0.05 1</ambient>
+                    <diffuse>0.80 0.16 0.14 1</diffuse>
+                    <specular>0.12 0.12 0.12 1</specular></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- 239 top-down grasps, 0.281 m -->
+    <model name="cube_green">
+      <pose>0.120 -0.345 0.0100 0 0 0</pose>
+      <link name="link">
+        <inertial><mass>0.05</mass>
+          <inertia><ixx>1.333e-05</ixx><iyy>1.333e-05</iyy><izz>1.333e-05</izz>
+                   <ixy>0</ixy><ixz>0</ixz><iyz>0</iyz></inertia></inertial>
+        <collision name="collision">
+          <geometry><box><size>0.04 0.04 0.04</size></box></geometry>
+          <surface>
+            <friction>
+              <ode><mu>1.1</mu><mu2>1.1</mu2></ode>
+              <bullet><friction>1.1</friction><friction2>1.1</friction2></bullet>
+            </friction>
+            <contact><ode><kp>1e6</kp><kd>100</kd></ode></contact>
+          </surface>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>0.04 0.04 0.04</size></box></geometry>
+          <material><ambient>0.07 0.23 0.10 1</ambient>
+                    <diffuse>0.20 0.65 0.28 1</diffuse>
+                    <specular>0.12 0.12 0.12 1</specular></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- 512 top-down grasps, 0.096 m — tucked in close to the base -->
+    <model name="cube_blue">
+      <pose>-0.060 -0.235 0.0125 0 0 0</pose>
+      <link name="link">
+        <inertial><mass>0.06</mass>
+          <inertia><ixx>2.025e-05</ixx><iyy>2.025e-05</iyy><izz>2.025e-05</izz>
+                   <ixy>0</ixy><ixz>0</ixz><iyz>0</iyz></inertia></inertial>
+        <collision name="collision">
+          <geometry><box><size>0.045 0.045 0.045</size></box></geometry>
+          <surface>
+            <friction>
+              <ode><mu>1.1</mu><mu2>1.1</mu2></ode>
+              <bullet><friction>1.1</friction><friction2>1.1</friction2></bullet>
+            </friction>
+            <contact><ode><kp>1e6</kp><kd>100</kd></ode></contact>
+          </surface>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>0.045 0.045 0.045</size></box></geometry>
+          <material><ambient>0.06 0.13 0.29 1</ambient>
+                    <diffuse>0.16 0.38 0.82 1</diffuse>
+                    <specular>0.12 0.12 0.12 1</specular></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- 253 top-down grasps, 0.282 m -->
+    <model name="cube_yellow">
+      <pose>0.190 -0.245 0.0100 0 0 0</pose>
+      <link name="link">
+        <inertial><mass>0.05</mass>
+          <inertia><ixx>1.333e-05</ixx><iyy>1.333e-05</iyy><izz>1.333e-05</izz>
+                   <ixy>0</ixy><ixz>0</ixz><iyz>0</iyz></inertia></inertial>
+        <collision name="collision">
+          <geometry><box><size>0.04 0.04 0.04</size></box></geometry>
+          <surface>
+            <friction>
+              <ode><mu>1.1</mu><mu2>1.1</mu2></ode>
+              <bullet><friction>1.1</friction><friction2>1.1</friction2></bullet>
+            </friction>
+            <contact><ode><kp>1e6</kp><kd>100</kd></ode></contact>
+          </surface>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>0.04 0.04 0.04</size></box></geometry>
+          <material><ambient>0.32 0.24 0.04 1</ambient>
+                    <diffuse>0.90 0.70 0.12 1</diffuse>
+                    <specular>0.12 0.12 0.12 1</specular></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- A can: 50 mm across the barrel, so the jaws close on it exactly as
+         they close on a cube — but it rolls the moment it is knocked over,
+         which is the point of having one. 171 top-down grasps, 0.305 m. -->
+    <model name="can">
+      <pose>0.050 -0.420 0.0350 0 0 0</pose>
+      <link name="link">
+        <inertial><mass>0.08</mass>
+          <inertia><ixx>6.650e-05</ixx><iyy>6.650e-05</iyy><izz>2.500e-05</izz>
+                   <ixy>0</ixy><ixz>0</ixz><iyz>0</iyz></inertia></inertial>
+        <collision name="collision">
+          <geometry><cylinder><radius>0.025</radius><length>0.09</length></cylinder></geometry>
+          <surface>
+            <friction>
+              <ode><mu>1.1</mu><mu2>1.1</mu2></ode>
+              <bullet><friction>1.1</friction><friction2>1.1</friction2></bullet>
+            </friction>
+            <contact><ode><kp>1e6</kp><kd>100</kd></ode></contact>
+          </surface>
+        </collision>
+        <visual name="visual">
+          <geometry><cylinder><radius>0.025</radius><length>0.09</length></cylinder></geometry>
+          <material><ambient>0.24 0.24 0.26 1</ambient>
+                    <diffuse>0.72 0.73 0.76 1</diffuse>
+                    <specular>0.35 0.35 0.37 1</specular></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- A tall block: its centre of mass is 50 mm up, so a grasp even slightly
+         off-centre topples it instead of lifting it — the cheapest way to tell
+         a real grasp from a lucky one. 104 top-down grasps at 0.382 m,
+         which is also the far end of comfortable reach. -->
+    <model name="block">
+      <pose>0.240 -0.360 0.0400 0 0 0</pose>
+      <link name="link">
+        <inertial><mass>0.09</mass>
+          <inertia><ixx>9.375e-05</ixx><iyy>9.375e-05</iyy><izz>3.750e-05</izz>
+                   <ixy>0</ixy><ixz>0</ixz><iyz>0</iyz></inertia></inertial>
+        <collision name="collision">
+          <geometry><box><size>0.05 0.05 0.1</size></box></geometry>
+          <surface>
+            <friction>
+              <ode><mu>1.1</mu><mu2>1.1</mu2></ode>
+              <bullet><friction>1.1</friction><friction2>1.1</friction2></bullet>
+            </friction>
+            <contact><ode><kp>1e6</kp><kd>100</kd></ode></contact>
+          </surface>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>0.05 0.05 0.1</size></box></geometry>
+          <material><ambient>0.30 0.17 0.32 1</ambient>
+                    <diffuse>0.62 0.34 0.68 1</diffuse>
+                    <specular>0.12 0.12 0.12 1</specular></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- The place target. Static, and its walls are only 20 mm so the jaws can
+         come straight down into it without fouling. 95 top-down poses
+         reach the middle of it, at 0.412 m. -->
+    <model name="drop_tray">
+      <static>true</static>
+      <pose>0.160 -0.480 -0.0100 0 0 0</pose>
+      <link name="link">
+        <collision name="floor_collision">
+          <pose>0 0 0.004 0 0 0</pose>
+          <geometry><box><size>0.172 0.172 0.008</size></box></geometry>
+        </collision>
+        <visual name="floor_visual">
+          <pose>0 0 0.004 0 0 0</pose>
+          <geometry><box><size>0.172 0.172 0.008</size></box></geometry>
+          <material><ambient>0.06 0.20 0.19 1</ambient><diffuse>0.10 0.50 0.46 1</diffuse></material>
+        </visual>
+        <collision name="wall_x_neg_collision">
+          <pose>-0.0830 0.0000 0.0140 0 0 0</pose>
+          <geometry><box><size>0.006 0.172 0.02</size></box></geometry>
+        </collision>
+        <visual name="wall_x_neg_visual">
+          <pose>-0.0830 0.0000 0.0140 0 0 0</pose>
+          <geometry><box><size>0.006 0.172 0.02</size></box></geometry>
+          <material><ambient>0.10 0.26 0.24 1</ambient><diffuse>0.08 0.62 0.56 1</diffuse></material>
+        </visual>
+        <collision name="wall_x_pos_collision">
+          <pose>0.0830 0.0000 0.0140 0 0 0</pose>
+          <geometry><box><size>0.006 0.172 0.02</size></box></geometry>
+        </collision>
+        <visual name="wall_x_pos_visual">
+          <pose>0.0830 0.0000 0.0140 0 0 0</pose>
+          <geometry><box><size>0.006 0.172 0.02</size></box></geometry>
+          <material><ambient>0.10 0.26 0.24 1</ambient><diffuse>0.08 0.62 0.56 1</diffuse></material>
+        </visual>
+        <collision name="wall_y_neg_collision">
+          <pose>0.0000 -0.0830 0.0140 0 0 0</pose>
+          <geometry><box><size>0.160 0.006 0.02</size></box></geometry>
+        </collision>
+        <visual name="wall_y_neg_visual">
+          <pose>0.0000 -0.0830 0.0140 0 0 0</pose>
+          <geometry><box><size>0.160 0.006 0.02</size></box></geometry>
+          <material><ambient>0.10 0.26 0.24 1</ambient><diffuse>0.08 0.62 0.56 1</diffuse></material>
+        </visual>
+        <collision name="wall_y_pos_collision">
+          <pose>0.0000 0.0830 0.0140 0 0 0</pose>
+          <geometry><box><size>0.160 0.006 0.02</size></box></geometry>
+        </collision>
+        <visual name="wall_y_pos_visual">
+          <pose>0.0000 0.0830 0.0140 0 0 0</pose>
+          <geometry><box><size>0.160 0.006 0.02</size></box></geometry>
+          <material><ambient>0.10 0.26 0.24 1</ambient><diffuse>0.08 0.62 0.56 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+  </world>
+</sdf>

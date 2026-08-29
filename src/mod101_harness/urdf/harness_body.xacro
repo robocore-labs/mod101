@@ -20,7 +20,13 @@
     - removed link `mod_101_base_1` and joint `Rigid 29` (the stand-in base)
     - removed the self-contained <xacro:include> of materials/gazebo/ros2control
     - `Revolute 18` -> `${prefix}pan_joint`, now `revolute` + limits
-    - `Revolute 20` -> `${prefix}tilt_joint`, now `revolute` + limits
+    - `Revolute 20` -> `${prefix}tilt_joint`, now `revolute` + limits, and its
+      AXIS CORRECTED from -X to +Y (see the joint for why)
+    - materials: the export painted every part `silver`. Now the harness reads
+      like the arm does, using the SAME palette (mod101_description/urdf/
+      materials.xacro) rather than a second one: `silver` for extrusion,
+      `body_darkgrey` for brackets/adapters/the camera body, `motor_black` for
+      servo housings.
     - added `${prefix}realsense_optical_frame` (REP-103 optical axes)
     - every link/joint name is `${prefix}`-scoped
 -->
@@ -60,7 +66,7 @@
     <geometry>
       <mesh filename="file://$(find mod101_harness)/meshes/yaw_bracket_1.stl" scale="0.001 0.001 0.001"/>
     </geometry>
-    <material name="silver"/>
+    <material name="body_darkgrey"/>
   </visual>
   <collision>
     <origin xyz="-1.116019 0.218172 -0.374755" rpy="0 0 0"/>
@@ -81,7 +87,7 @@
     <geometry>
       <mesh filename="file://$(find mod101_harness)/meshes/yaw_servo_1.stl" scale="0.001 0.001 0.001"/>
     </geometry>
-    <material name="silver"/>
+    <material name="motor_black"/>
   </visual>
   <collision>
     <origin xyz="-0.865117 0.179587 -0.289497" rpy="0 0 0"/>
@@ -102,7 +108,7 @@
     <geometry>
       <mesh filename="file://$(find mod101_harness)/meshes/yaw_mount_1.stl" scale="0.001 0.001 0.001"/>
     </geometry>
-    <material name="silver"/>
+    <material name="body_darkgrey"/>
   </visual>
   <collision>
     <origin xyz="-0.836117 0.189837 -0.292697" rpy="0 0 0"/>
@@ -123,7 +129,7 @@
     <geometry>
       <mesh filename="file://$(find mod101_harness)/meshes/pitch_servo_1.stl" scale="0.001 0.001 0.001"/>
     </geometry>
-    <material name="silver"/>
+    <material name="motor_black"/>
   </visual>
   <collision>
     <origin xyz="-0.819967 0.179587 -0.305947" rpy="0 0 0"/>
@@ -144,7 +150,7 @@
     <geometry>
       <mesh filename="file://$(find mod101_harness)/meshes/pitch_link__1.stl" scale="0.001 0.001 0.001"/>
     </geometry>
-    <material name="silver"/>
+    <material name="body_darkgrey"/>
   </visual>
   <collision>
     <origin xyz="-0.854017 0.189837 -0.334947" rpy="0 0 0"/>
@@ -165,7 +171,7 @@
     <geometry>
       <mesh filename="file://$(find mod101_harness)/meshes/realsense_1.stl" scale="0.001 0.001 0.001"/>
     </geometry>
-    <material name="silver"/>
+    <material name="body_darkgrey"/>
   </visual>
   <collision>
     <origin xyz="-0.858317 0.200337 -0.367343" rpy="0 0 0"/>
@@ -200,7 +206,7 @@
     <geometry>
       <mesh filename="file://$(find mod101_harness)/meshes/mod_101_adapter_1.stl" scale="0.001 0.001 0.001"/>
     </geometry>
-    <material name="silver"/>
+    <material name="body_darkgrey"/>
   </visual>
   <collision>
     <origin xyz="-0.320033 0.316579 0.090851" rpy="0 0 0"/>
@@ -281,12 +287,31 @@
   <child link="${prefix}pitch_servo_1"/>
 </joint>
 
-<!-- TILT (pitch). Was `continuous`; bounded like the pan joint. Axis -X. -->
+<!-- TILT (pitch). Was `continuous`; bounded like the pan joint.
+     AXIS CORRECTED, AND IT DISAGREES WITH THE CAD EXPORT. `Revolute 20` in
+     export/mod101_harness.raw.xacro has axis `-1 0 0`, which is the SAME
+     direction the camera looks: at pan=0 the RealSense boresight is +X, so a
+     rotation about X rolls the image and does not tilt it. Measured before the
+     change: sweeping pan over its full +-90 deg and tilt over its full +-80 deg,
+     the boresight pointed ABOVE THE HORIZON at every one of the 2929 sampled
+     pairs — the head could not be aimed at the table it is mounted over, or at
+     anything else below eye level.
+
+     A tilt axis has to be perpendicular to the boresight, so it is +Y. Positive
+     tilt now looks DOWN (rotating +X toward -Z), which is the aerospace pitch
+     sign and the one the pan/tilt group is commanded with.
+
+     THE CAD IS THE THING TO CHECK, NOT THIS LINE. Either the export's joint
+     axis is wrong or the RealSense body link is mounted a quarter turn off; the
+     mesh bounding boxes alone cannot tell which, because the pan servo and the
+     tilt servo have identical orientations in the export. If a re-export
+     changes this joint, re-run the boresight sweep in docs/harness-world.md
+     before trusting it. -->
 <joint name="${prefix}tilt_joint" type="revolute">
   <origin xyz="0.03405 -0.01025 0.029" rpy="0 0 0"/>
   <parent link="${prefix}pitch_servo_1"/>
   <child link="${prefix}pitch_link__1"/>
-  <axis xyz="-1.0 0.0 0.0"/>
+  <axis xyz="0.0 1.0 0.0"/>
   <limit lower="-1.396263" upper="1.396263" effort="5" velocity="3.0"/>
   <dynamics damping="0.05" friction="0.05"/>
 </joint>
