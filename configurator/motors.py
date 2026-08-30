@@ -11,7 +11,10 @@ inconsistent about return values and this is where that gets flattened:
   * `ReadSpeed`   returns a 3-tuple `(speed, comm, error)` while every other
                   `Read*` returns a scalar or None.
   * `StartServo`  returns `(comm, error)` while `StopServo` returns True/None.
-  * `ChangeId`    returns None on SUCCESS and an error string on failure.
+  * `ChangeId`    returns None on SUCCESS and an error string on failure —
+                  but "success" only means the bytes reached the UART, since
+                  its EPROM ops are all TxOnly. See change_id(), which pings
+                  the new ID to find out what actually happened.
   * `ReadVoltage` returns volts; `ReadLoad` returns a ±1023 duty cycle.
 
 Bus access is serialized under a lock. `socketserver.TCPServer` handles one
@@ -24,9 +27,15 @@ import fcntl
 import glob
 import os
 import threading
+import time
 
-DEFAULT_SCAN_HI = 20      # servo IDs above this aren't scanned (ListServos
+DEFAULT_SCAN_HI = 99      # servo IDs above this aren't scanned (ListServos
                           # pings 0..253, which takes seconds on a real bus)
+# EEPROM registers and the comm status code, from st3215/values.py. Mirrored
+# here rather than imported because st3215 is imported lazily, in connect().
+REG_ID = 5
+REG_LOCK = 55
+COMM_OK = 0
 TICKS = 4096
 LOAD_FULL_SCALE = 1023.0  # ReadLoad duty-cycle range
 
@@ -267,16 +276,82 @@ class MotorBus:
         return True
 
     def change_id(self, old: int, new: int) -> bool:
-        """ChangeId returns None on success, an error STRING on failure."""
+        """Reassign a servo's ID, with acknowledged writes and verification.
+
+        This deliberately does NOT call st3215's ChangeId, which cannot be made
+        reliable from the outside:
+
+          * all three of its EPROM ops are write1ByteTxOnly — bytes go out the
+            UART and no status packet is read back — so it returns None
+            ("success") even when the servo rejected the write or never saw it;
+          * it fires the ID write immediately after the unlock with no settle
+            time, so the EEPROM unlock can still be in flight when the ID write
+            arrives and gets rejected — which is the failure that actually
+            showed up on this bench;
+          * its closing LockEprom is addressed to `old`, which stops answering
+            the instant the ID byte lands, so every servo it "succeeded" on is
+            left with its EEPROM unlocked.
+
+        Here the unlock is acked and read back, the ID write gets settle time
+        and is proven by a ping at the new ID, and the re-lock goes to `new`.
+        """
         st = self._require()
-        if not (0 <= int(new) <= 253):
-            raise BusError('new id must be 0..253')
+        old, new = int(old), int(new)
+        # 0 is writable on this protocol but scan() starts at 1, so a servo set
+        # to 0 vanishes from the configurator; 254 is the broadcast address.
+        if not (1 <= new <= 253):
+            raise BusError('new id must be 1..253')
+        if old == new:
+            return True
+
         with self._lock:
-            err = st.ChangeId(int(old), int(new))
-        if err is not None:
-            raise BusError(str(err))
-        with self._lock:
-            self._seen = [new if i == old else i for i in self._seen]
+            # Two servos sharing an ID on a half-duplex bus both answer every
+            # packet: reads come back corrupted and neither can be addressed on
+            # its own to undo it. Only catches servos powered on RIGHT NOW —
+            # if IDs are set one servo at a time, uniqueness is on the operator.
+            if st.PingServo(new):
+                raise BusError(f'id {new} is already in use — move that servo first')
+            if not st.PingServo(old):
+                raise BusError(f'servo {old} is not responding')
+
+            # 1. Unlock the EEPROM, and insist on a status packet.
+            res, _ = st.write1ByteTxRx(old, REG_LOCK, 0)
+            if res != COMM_OK:
+                raise BusError(f'servo {old}: EEPROM unlock was not acknowledged')
+
+            # 2. Let the write commit, then PROVE it unlocked. Without this the
+            #    next write is a coin flip that reports success either way.
+            time.sleep(0.05)
+            lock, res, _ = st.read1ByteTxRx(old, REG_LOCK)
+            if res != COMM_OK:
+                raise BusError(f'servo {old}: could not read back the EEPROM lock')
+            if lock != 0:
+                raise BusError(
+                    f'servo {old}: EEPROM is still locked (reg {REG_LOCK} = {lock}) — '
+                    f'id not changed')
+
+            # 3. The ID write stays TxOnly on purpose: the servo adopts `new`
+            #    as this packet is processed, so which ID its status packet
+            #    would carry is ambiguous. The ping below is the real check.
+            st.write1ByteTxOnly(old, REG_ID, new)
+            time.sleep(0.05)
+
+            for _ in range(10):
+                if st.PingServo(new):
+                    break
+                time.sleep(0.05)
+            else:
+                raise BusError(
+                    f'servo {old}: no response at id {new} after the write — '
+                    f'id may be unchanged; rescan the bus')
+
+            # 4. Re-lock at the NEW id — the step the library gets wrong.
+            res, _ = st.write1ByteTxRx(new, REG_LOCK, 1)
+            if res != COMM_OK:
+                raise BusError(
+                    f'servo is now at id {new} but the EEPROM did not re-lock')
+
+            self._seen = sorted(set(self._seen) - {old} | {new})
         return True
 
     # ---- safety --------------------------------------------------------

@@ -90,7 +90,7 @@ services:
   # profile below, so this service is the same for every robot.
   agent:
     <<: *ros
-    image: ${ROBOCORE_AGENT_IMAGE:-ghcr.io/cristidragomir97/robocore-agent:latest}
+    image: robocore-agent:latest
     volumes:
       - ../profiles/mod101_harness.yaml:/etc/robocore/profile.yaml:ro
       - agent-state:/var/lib/robocore

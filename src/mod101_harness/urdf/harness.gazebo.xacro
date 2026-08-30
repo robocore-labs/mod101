@@ -53,9 +53,16 @@
 
   <!-- Depth camera. rgbd_camera publishes color image, depth image, camera_info
        and a registered point cloud under <topic>. Stamp with the optical frame
-       so ROS consumers see REP-103 axes; the sensor still looks along
-       realsense_1 +X, which is where Gazebo aims it. If the viewer shows the
-       lens pointing along another axis, add a <pose> rotation on the sensor. -->
+       so ROS consumers see REP-103 axes.
+
+       THE <pose> IS LOAD-BEARING. Gazebo aims a camera sensor along its own +X
+       (with +Z up), and the sensor inherits the link frame unless posed. The
+       RealSense lens looks along realsense_1 -Y, not +X (see the optical-frame
+       note in harness_body.xacro for the mesh measurements), so without this
+       -90 deg yaw the simulated camera renders a view 90 deg off the real one,
+       while TF still says it points at -Y. The yaw maps sensor +X -> link -Y
+       and leaves sensor +Z on link +Z, so the image is upright and agrees with
+       ${prefix}realsense_optical_frame. -->
   <gazebo reference="${prefix}realsense_1">
     <material>${darkgrey_color}</material>
     <mu1>0.2</mu1>
@@ -63,6 +70,7 @@
     <self_collide>true</self_collide>
 
     <sensor name="${prefix}depth_camera" type="rgbd_camera">
+      <pose>0 0 0 0 0 -1.570796</pose>
       <topic>harness/depth_camera</topic>
       <gz_frame_id>${prefix}realsense_optical_frame</gz_frame_id>
       <update_rate>30</update_rate>

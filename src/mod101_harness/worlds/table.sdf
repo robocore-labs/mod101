@@ -26,8 +26,15 @@
   FK sweep of the five arm joints AND against a 65x61 pan/tilt sweep of the
   head camera's 60 deg x 47 deg frustum. The comment on each says how many of
   those arm poses reach it with the tool pointing down. One head pose —
-  pan -1.5708, tilt 0.9774 — frames all seven at once, the worst of them
-  at 76% of the half-FOV.
+  pan -0.1800, tilt 0.9100 — frames all seven at once, the worst of them
+  at 68% of the half-FOV.
+
+  THAT PAIR WAS RECOMPUTED. It used to read pan -1.5708, tilt 0.9774, which
+  was swept against a head model whose tilt axis and camera boresight were
+  both wrong (see harness_body.xacro); under the corrected kinematics that
+  pose puts the worst object at 254% of the half-FOV, i.e. well outside the
+  frame. Object placements themselves are unchanged and still check out —
+  only the head pose that views them moved.
 
   Sizes are set by the gripper, not by taste: the SO-101 jaws span 78.3 mm open
   and 33.8 mm closed, so 40-50 mm is the only band they can actually clamp.

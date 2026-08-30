@@ -61,7 +61,11 @@ knowing:
 `motors.py` is also where `st3215`'s inconsistent return values get flattened —
 `ReadSpeed` hands back a `(speed, comm, error)` tuple while its siblings return
 a scalar or `None`, `StartServo` returns a tuple where `StopServo` returns a
-bool, and `ChangeId` returns `None` on *success*.
+bool, and `ChangeId` returns `None` on *success* — where "success" only means
+the bytes reached the UART, because its EPROM ops are all TxOnly. `change_id()`
+therefore pings the new ID to learn what actually happened, refuses an ID that
+is already answering, and re-locks the EEPROM (the library's own final
+`LockEprom` is addressed to the *old* ID, which has already stopped replying).
 
 ### HTTP surface
 
@@ -71,7 +75,7 @@ bool, and `ChangeId` returns `None` on *success*.
 | `GET /bus/ports` | candidate serial devices (USB only, unless there are none) |
 | `POST /bus/connect` | `{port}` — open and scan |
 | `POST /bus/disconnect` | disarm + close |
-| `POST /bus/scan` | re-ping IDs 1..20 |
+| `POST /bus/scan` | re-ping IDs 1..99 |
 | `POST /bus/disarm` | torque off everything |
 | `GET /servo/<id>` | telemetry: pos, speed, current, voltage, load, temp |
 | `POST /servo/<id>/torque` | `{on}` |
@@ -80,8 +84,9 @@ bool, and `ChangeId` returns `None` on *success*.
 | `POST /servo/<id>/id` | `{to}` — reassign servo ID (writes EEPROM) |
 | `GET /urdf` | the expanded URDF, for the model tab's scene |
 
-Bus scanning is bounded to IDs 1..20 on purpose. `st3215`'s own `ListServos()`
-pings 0..253, which is seconds of dead time on a real bus.
+Bus scanning is bounded to IDs 1..99 on purpose (`DEFAULT_SCAN_HI`). `st3215`'s
+own `ListServos()` pings 0..253, which is seconds of dead time on a real bus.
+ID 0 is never scanned, which is why `change_id()` will not assign it.
 
 The arm is left disarmed at every exit: on disconnect, on server shutdown
 (`atexit`), and on tab close (the page fires `/bus/disarm` through

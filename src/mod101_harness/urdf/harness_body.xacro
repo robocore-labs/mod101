@@ -20,14 +20,15 @@
     - removed link `mod_101_base_1` and joint `Rigid 29` (the stand-in base)
     - removed the self-contained <xacro:include> of materials/gazebo/ros2control
     - `Revolute 18` -> `${prefix}pan_joint`, now `revolute` + limits
-    - `Revolute 20` -> `${prefix}tilt_joint`, now `revolute` + limits, and its
-      AXIS CORRECTED from -X to +Y (see the joint for why)
+    - `Revolute 20` -> `${prefix}tilt_joint`, now `revolute` + limits; axis kept
+      on the export's X, sign flipped to +X so positive tilt looks down
     - materials: the export painted every part `silver`. Now the harness reads
       like the arm does, using the SAME palette (mod101_description/urdf/
       materials.xacro) rather than a second one: `silver` for extrusion,
       `body_darkgrey` for brackets/adapters/the camera body, `motor_black` for
       servo housings.
-    - added `${prefix}realsense_optical_frame` (REP-103 optical axes)
+    - added `${prefix}realsense_optical_frame` (REP-103 optical axes, +Z along
+      the -Y boresight)
     - every link/joint name is `${prefix}`-scoped
 -->
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
@@ -182,15 +183,24 @@
 </link>
 
 <!-- Optical frame for the depth camera: REP-103 (+Z out of the lens, +X right,
-     +Y down). `realsense_1` is the body frame the export uses; Gazebo aims the
-     sensor along its +X. ROS image/pointcloud consumers assume the optical
-     convention, so the sensor stamps messages with this frame (see
-     harness.gazebo.xacro gz_frame_id). Same rotation the mod101 wrist camera
-     uses (mod101_macro.xacro). Zero translation — lens offset within the body
-     link not measured; fix here if metric accuracy is needed. -->
+     +Y down). The lens looks along realsense_1 -Y. Evidence, from the meshes:
+     realsense_1 is 89.8 x 25.1 x 25.0 mm - a D435, whose 90 mm dimension is the
+     stereo baseline, and it lies along X, so X cannot be the viewing axis. And
+     1313 mm^2 of the camera's +Y face is flat and coplanar with 1593 mm^2 of
+     pitch_link__1's -Y face at Y=-200.34, with the whole bracket behind that
+     plane: +Y is the bolted mounting face, so the lens faces -Y.
+
+     This frame therefore maps optical +Z -> -Y (forward), +Y -> -Z (down),
+     +X -> -X (right, with the camera upright: nothing in the chain carries a
+     roll, so link +Z is up). It previously used the arm wrist camera's rotation
+     (rpy -pi/2 0 -pi/2), which aims +Z along +X - 90 deg off, which is what
+     made the head look like it pointed the wrong way.
+
+     Zero translation - lens offset within the body link not measured; fix here
+     if metric accuracy is needed. -->
 <link name="${prefix}realsense_optical_frame"/>
 <joint name="${prefix}realsense_optical_joint" type="fixed">
-  <origin xyz="0 0 0" rpy="-1.570796 0 -1.570796"/>
+  <origin xyz="0 0 0" rpy="-1.570796 0 3.141593"/>
   <parent link="${prefix}realsense_1"/>
   <child link="${prefix}realsense_optical_frame"/>
 </joint>
@@ -288,30 +298,31 @@
 </joint>
 
 <!-- TILT (pitch). Was `continuous`; bounded like the pan joint.
-     AXIS CORRECTED, AND IT DISAGREES WITH THE CAD EXPORT. `Revolute 20` in
-     export/mod101_harness.raw.xacro has axis `-1 0 0`, which is the SAME
-     direction the camera looks: at pan=0 the RealSense boresight is +X, so a
-     rotation about X rolls the image and does not tilt it. Measured before the
-     change: sweeping pan over its full +-90 deg and tilt over its full +-80 deg,
-     the boresight pointed ABOVE THE HORIZON at every one of the 2929 sampled
-     pairs — the head could not be aimed at the table it is mounted over, or at
-     anything else below eye level.
+     AXIS IS X, WHICH IS WHAT THE CAD EXPORT SAID. An earlier edit here changed
+     it to +Y on the premise that the RealSense boresight is +X. That premise is
+     wrong, and +Y is the one axis that breaks this joint completely: the true
+     boresight is -Y (see the sensor note on realsense_1), so rotating about +Y
+     spins the camera about its own optical axis. Tilt was pure image ROLL — the
+     head could not be aimed up or down at all, at any commanded value.
 
-     A tilt axis has to be perpendicular to the boresight, so it is +Y. Positive
-     tilt now looks DOWN (rotating +X toward -Z), which is the aerospace pitch
-     sign and the one the pan/tilt group is commanded with.
+     Measured from the meshes, which settle it without a re-export. Both servos
+     are the same 45.22 x 24.72 x 37.80 part (identical STLs, rotated 90 deg),
+     and each joint origin lands exactly on that servo's output face, centred on
+     the other two axes:
+       pan_joint  is 0.00 mm from yaw_servo_1   Z-max  -> shaft along Z
+       tilt_joint is 0.55 mm from pitch_servo_1 X-max  -> shaft along X
+     A shaft is normal to the face it emerges from, so the tilt axis is X. It is
+     also perpendicular to the -Y boresight, as a pan/tilt requires; +Y was not.
 
-     THE CAD IS THE THING TO CHECK, NOT THIS LINE. Either the export's joint
-     axis is wrong or the RealSense body link is mounted a quarter turn off; the
-     mesh bounding boxes alone cannot tell which, because the pan servo and the
-     tilt servo have identical orientations in the export. If a re-export
-     changes this joint, re-run the boresight sweep in docs/harness-world.md
-     before trusting it. -->
+     SIGN is ours, not the CAD's: the export says `-1 0 0`, which would make
+     positive tilt look UP. Positive = DOWN is kept here (aerospace pitch, and
+     what the pan_tilt group and profiles/mod101_harness.yaml are commanded
+     with), so the axis is +X. Only the sign differs from the export. -->
 <joint name="${prefix}tilt_joint" type="revolute">
   <origin xyz="0.03405 -0.01025 0.029" rpy="0 0 0"/>
   <parent link="${prefix}pitch_servo_1"/>
   <child link="${prefix}pitch_link__1"/>
-  <axis xyz="0.0 1.0 0.0"/>
+  <axis xyz="1.0 0.0 0.0"/>
   <limit lower="-1.396263" upper="1.396263" effort="5" velocity="3.0"/>
   <dynamics damping="0.05" friction="0.05"/>
 </joint>
