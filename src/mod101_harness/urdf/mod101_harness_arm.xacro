@@ -25,6 +25,17 @@
 
   <xacro:arg name="use_sim" default="true"/>
 
+  <!-- head:=false leaves the pan/tilt joints OUT of the hardware
+       <ros2_control> block. They stay in the model and in TF; they just stop
+       being claimed by ros2_control.
+
+       This is not cosmetic. The bridge's startup interlock is one flag over
+       every joint the plugin owns, so two head joints that never report a
+       position keep the ARM's commands unpublished too — a harness with no
+       head servos on the bus would come up looking healthy and refuse to move.
+       Ignored when use_sim is true: the simulator always has a head. -->
+  <xacro:arg name="head" default="true"/>
+
   <!-- tool + the four build args (shoulder_ext_length, elbow_ext_length,
        shoulder_mount, elbow_mount). -->
   <xacro:include filename="$(find mod101_description)/urdf/mod101_config.xacro"/>
@@ -100,28 +111,54 @@
   </xacro:if>
 
   <xacro:unless value="$(arg use_sim)">
-    <!-- Hardware. One placeholder system covering the arm (5) + the head (2).
-         TODO: replace mock_components/GenericSystem with the real servo-bus
-         plugin (mirrors mod101_control/urdf/mod101.hardware.xacro). The active
-         tool still emits its own <ros2_control> for joint `6`. -->
+    <!-- Hardware. One system covering the arm (5) + the head (2); the active
+         tool emits its own <ros2_control> for joint `6`.
+
+         The plugin is chosen by the document-global `hardware` arg declared in
+         mod101_description/urdf/mod101_macro.xacro:
+           hardware:=mock    (default) commands loop back as state
+           hardware:=bridge  ros2_control_bridge/TopicBridge, the real path
+
+         ARM AND HEAD ARE TWO GROUPS, NOT ONE. They are separate arrays on
+         separate topics because they are separate controllers with separate
+         rates and separate reasons to stop — and because the driver's
+         `command_indices` are per topic, so one array would tie the head's
+         layout to the arm's joint count. -->
     <ros2_control name="mod101_harness_hardware" type="system">
-      <hardware>
-        <plugin>mock_components/GenericSystem</plugin>
-      </hardware>
-      <xacro:macro name="hw_joint" params="name">
+      <xacro:if value="${'$(arg hardware)' == 'bridge'}">
+        <hardware>
+          <plugin>ros2_control_bridge/TopicBridge</plugin>
+          <param name="state_topic">/motor_manager/joint_states</param>
+          <param name="cmd_topic_prefix">/motor_manager</param>
+        </hardware>
+      </xacro:if>
+      <xacro:unless value="${'$(arg hardware)' == 'bridge'}">
+        <hardware>
+          <plugin>mock_components/GenericSystem</plugin>
+        </hardware>
+      </xacro:unless>
+
+      <!-- `group` is read by the bridge and ignored by mock_components, so one
+           block serves both. The names have to match the group blocks in
+           mod101_hw_bringup/config/servos.yaml, and the order of the joints
+           within a group IS the order of the values on that group's topic. -->
+      <xacro:macro name="hw_joint" params="name group">
         <joint name="${name}">
+          <param name="group">${group}</param>
           <command_interface name="position"/>
           <state_interface name="position"/>
           <state_interface name="velocity"/>
         </joint>
       </xacro:macro>
-      <xacro:hw_joint name="joint_base"/>
-      <xacro:hw_joint name="joint_shoulder"/>
-      <xacro:hw_joint name="joint_elbow"/>
-      <xacro:hw_joint name="joint_wrist_tilt"/>
-      <xacro:hw_joint name="joint_wrist_roll"/>
-      <xacro:hw_joint name="${hp}pan_joint"/>
-      <xacro:hw_joint name="${hp}tilt_joint"/>
+      <xacro:hw_joint name="joint_base"       group="arm"/>
+      <xacro:hw_joint name="joint_shoulder"   group="arm"/>
+      <xacro:hw_joint name="joint_elbow"      group="arm"/>
+      <xacro:hw_joint name="joint_wrist_tilt" group="arm"/>
+      <xacro:hw_joint name="joint_wrist_roll" group="arm"/>
+      <xacro:if value="$(arg head)">
+        <xacro:hw_joint name="${hp}pan_joint"   group="head"/>
+        <xacro:hw_joint name="${hp}tilt_joint"  group="head"/>
+      </xacro:if>
     </ros2_control>
   </xacro:unless>
 

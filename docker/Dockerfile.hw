@@ -1,0 +1,124 @@
+# One image for the mod101 bench ON REAL HARDWARE: ROS 2, ros2_control, the
+# two robocore drivers and this repo's packages, workspace built in.
+#
+# Build from the REPO ROOT (compose does this for you):
+#   docker build -f docker/Dockerfile.hw -t mod101-hw:jazzy .
+#
+# This is the sim image's twin (docker/Dockerfile), and the differences are all
+# the same difference: there is no simulator here.
+#
+# NOT IN HERE, AND ON PURPOSE:
+#   - Gazebo, gz_ros2_control, ros_gz_*. There is no simulator, and an unused
+#     GazeboSimSystem plugin in the image is an invitation to load it against a
+#     real arm.
+#   - the GPU stack and the Qt/X11 runtime. Nothing here opens a window, so the
+#     image needs no display and the compose file needs no device reservation.
+#   - joint_state_publisher_gui. It publishes joint STATES, not commands, so
+#     against a live robot it cannot move anything and it puts a second,
+#     fictional publisher on /joint_states for robot_state_publisher to
+#     interleave with the real encoders. It belongs with the sim, not here.
+#   - the agent and the robocore SDK. They ship as their own image, which
+#     hardware.compose.yaml pulls and runs alongside this one.
+#
+# ROSBOARD IS IN HERE, from the same `drivers` context as the two drivers. It is
+# the robocore fork, whose publish allowlist includes Float64MultiArray, so its
+# Joint sliders card publishes straight onto a controller's /commands topic.
+# That is the point of having it — and the reason the compose service carries a
+# warning rather than being started by default.
+#
+# THE DRIVER PACKAGES ARE CLONED DURING THE BUILD, by the same `vcs import`
+# line a host workspace uses (src/hardware/hardware.repos). So the image
+# contains whatever is on `main`, not whatever is checked out on the machine
+# doing the build — which is the point: a local edit that has not been pushed
+# does not silently become what the robot runs.
+#
+# The corollary is that the layer caches. Docker has no idea a remote branch
+# moved, so a rebuild after pushing a driver change reuses the old clone unless
+# the cache is busted:
+#
+#   docker compose -f docker/hardware.compose.yaml build \
+#       --build-arg DRIVERS_CACHEBUST=$(date +%s)
+#
+# or `--no-cache`, which also rebuilds everything else.
+
+ARG ROS_DISTRO=jazzy
+
+
+# ------------------------------------------------------------------ base --
+# Everything the stack needs to RUN. Both stages below start here, so the
+# dependency list is written once.
+FROM ros:${ROS_DISTRO}-ros-base AS base
+ARG ROS_DISTRO
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Collected from the package.xml of every package that ends up in the image.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      python3-yaml \
+      python3-pip \
+      python3-serial \
+      ros-${ROS_DISTRO}-xacro \
+      ros-${ROS_DISTRO}-robot-state-publisher \
+      ros-${ROS_DISTRO}-ros2-control \
+      ros-${ROS_DISTRO}-ros2-controllers \
+      ros-${ROS_DISTRO}-controller-manager \
+      ros-${ROS_DISTRO}-hardware-interface \
+      ros-${ROS_DISTRO}-joint-state-broadcaster \
+      ros-${ROS_DISTRO}-joint-trajectory-controller \
+      ros-${ROS_DISTRO}-position-controllers \
+      ros-${ROS_DISTRO}-pluginlib \
+      python3-pil \
+      python3-tornado \
+    && rm -rf /var/lib/apt/lists/*
+
+# st3215 is the FEETECH protocol library st3215_manager imports, and it is on
+# PyPI only — there is no ros-jazzy-st3215. --break-system-packages because
+# Ubuntu 24.04 marks the system interpreter externally-managed (PEP 668), and a
+# venv here would need every ROS python package re-exposed to it.
+RUN pip3 install --no-cache-dir --break-system-packages st3215
+
+
+# --------------------------------------------------------------- builder --
+# The toolchain, which nothing needs at runtime, so it stays in this stage.
+FROM base AS builder
+ARG ROS_DISTRO
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      build-essential cmake python3-colcon-common-extensions \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      git python3-vcstool \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+COPY src ./src
+
+# Change this to re-clone: see the note at the top about the cached layer.
+ARG DRIVERS_CACHEBUST=0
+RUN vcs import src/hardware < src/hardware/hardware.repos \
+ && for p in ros2_control_bridge ros2_feetech_manager rosboard; do \
+      test -f "src/hardware/$p/package.xml" \
+        || { echo "ERROR: $p did not import — check hardware.repos"; exit 1; }; \
+    done
+
+RUN source "/opt/ros/${ROS_DISTRO}/setup.bash" \
+    && colcon build --merge-install --install-base /opt/mod101 \
+         --cmake-args -DCMAKE_BUILD_TYPE=Release
+
+
+# --------------------------------------------------------------- runtime --
+FROM base AS runtime
+ARG ROS_DISTRO
+
+LABEL org.opencontainers.image.title="mod101-hw" \
+      org.opencontainers.image.description="mod101 arm on the camera-tower harness: real hardware" \
+      org.opencontainers.image.source="https://github.com/robocore-labs/mod101"
+
+COPY --from=builder /opt/mod101 /opt/mod101
+
+# Shared with the sim image: sources ROS and the workspace overlay, so every
+# compose `command:` is the bare `ros2 ...` line it should be.
+COPY --chmod=0755 docker/entrypoint.sh /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["ros2", "launch", "mod101_hw_bringup", "bringup.launch.py"]

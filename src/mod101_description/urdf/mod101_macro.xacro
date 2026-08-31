@@ -25,6 +25,21 @@
 -->
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
 
+<!-- WHICH HARDWARE PLUGIN THE ros2_control BLOCKS USE WHEN use_sim IS FALSE.
+       mock    mock_components/GenericSystem — commands loop straight back as
+               state. The default, so nothing that used to work changes.
+       bridge  ros2_control_bridge/TopicBridge — publishes commands as
+               Float64MultiArray for a motor driver and reads /joint_states
+               back. This is the real-hardware path (mod101_hw_bringup).
+     A document-global xacro ARG rather than a macro parameter on purpose: the
+     tool packages emit their own <ros2_control> blocks four includes down from
+     here, and threading a parameter through mod101_macro -> tool.urdf.xacro ->
+     tool.ros2control for every tool would put the same plumbing in four
+     packages. An arg is visible to all of them once declared here, and this
+     file is included by everything that instantiates the arm.
+     Ignored entirely when use_sim is true — Gazebo owns the hardware then. -->
+<xacro:arg name="hardware" default="mock"/>
+
 <xacro:include filename="$(find mod101_description)/urdf/mod101.ros2control"/>
 <xacro:include filename="$(find mod101_description)/urdf/mod101.gazebo"/>
 

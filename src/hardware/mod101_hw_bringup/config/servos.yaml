@@ -1,0 +1,128 @@
+# The mod101 harness's Feetech bus, as st3215_manager sees it.
+#
+# Eight STS3215 servos on ONE RS-485 chain: the five arm joints, the jaw, and
+# the two pan/tilt head joints. One bus, one node — st3215_manager opens a
+# single `port`, so a second chain means a second node with its own config and
+# a different `joint_states_topic`, not more groups in here.
+#
+# THREE GROUPS, MATCHING THE THREE <ros2_control> GROUPS IN THE URDF. The group
+# names, the joint names and the ORDER of the joints inside each group have to
+# agree with the `group` params in mod101_harness/urdf/mod101_harness_arm.xacro
+# and mod101_tool_jaws/urdf/tool.ros2control, because that order is the layout
+# of the Float64MultiArray the bridge publishes on each group's topic. Reorder
+# one side and the wrong servo moves.
+#
+# MOTOR IDs ARE AN ASSUMPTION UNTIL YOU CHECK THEM. 1-6 are the SO-101 factory
+# order (mod101_description/urdf/mod101_macro.xacro), and 7-8 for the head are
+# a convention this file is choosing. Scan the bus with the configurator
+# (`python3 configurator/server.py` -> Calibrate -> Hardware -> Rescan) and fix
+# them here if they differ; the IDs live in servo EEPROM, not in this file.
+#
+# CALIBRATION IS NOT IN THIS FILE. home_ticks / min_ticks / max_ticks are
+# injected at launch from mod101_control/config/calibration.yaml, which the
+# configurator writes. Overriding them here is possible but means the arm's
+# zero is defined in two places; see bringup.launch.py.
+servo_manager_node:
+  ros__parameters:
+    # A udev name, not /dev/ttyACMn. The Link101 exposes five CDC endpoints and
+    # their numbering moves whenever anything re-enumerates; /dev/link101-servo
+    # is always the Motor endpoint. Override with serial_port:=... for a bare
+    # USB adapter or a second bench.
+    port: "/dev/link101-servo"
+    baud: 1000000
+    ticks_per_rev: 4096
+
+    # 50 Hz of joint states for a 100 Hz controller_manager. Every sample is a
+    # blocking read per motor over one serial line, so this is bounded by the
+    # bus, not by choice: 8 motors x (position + speed) at 1 Mbaud is already
+    # most of the budget.
+    telemetry_rate: 50.0
+    joint_states_topic: "/motor_manager/joint_states"
+    total_joints: 8
+
+    brake_method: "torque_disable"
+    velocity_ramp_time: 0.1
+    brake_acceleration: 100
+
+    # Per-motor current/voltage/load/temperature on /motor_telemetry/<joint>/*.
+    # Off by default: it is another read per motor per cycle on the same bus.
+    motor_telemetry_enable: false
+    motor_telemetry_rate: 5.0
+
+    # Never true on an assembled arm. The test sequence drives each motor a
+    # little way with no knowledge of its travel limits.
+    test_on_startup: false
+
+    # Refuse to start unless all eight answer. The usual reason they do not is
+    # motor power: the logic side is fed from USB, so the port opens and the
+    # chain stays silent, which looks like a working driver with a dead robot.
+    require_motors: true
+
+    group_names: ["arm", "tool", "head"]
+
+    # ---------------------------------------------------------------- arm --
+    arm:
+      enable: true
+      mode: "position"
+      topic: "/motor_manager/arm_cmd"
+      motor_ids: [1, 2, 3, 4, 5]
+      joint_names: ["joint_base", "joint_shoulder", "joint_elbow",
+                    "joint_wrist_tilt", "joint_wrist_roll"]
+      # DIRECTION IS NOT COSMETIC. It reconciles the servo's counting direction
+      # with the URDF joint axis; get one wrong and that joint moves the right
+      # amount the wrong way, in sim-vs-hardware disagreement that nothing
+      # reports. These match the signs in the configurator's servo map — export
+      # the map and compare.
+      #
+      # joint_wrist_tilt's axis is `0 -1 0`, hence -1. joint_shoulder is -1 for
+      # a different reason: its axis is `0 1 0` and positive DOES lift the arm,
+      # but the servo counts the other way round on this build. Measured on the
+      # bench — with +1 the shoulder's ~199 deg of travel came out as
+      # -196 .. 0 deg against a URDF that declares 0 .. 180.
+      direction: [1, -1, 1, -1, 1]
+      command_indices: [0, 1, 2, 3, 4]
+      state_indices: [0, 1, 2, 3, 4]
+      # Halves the speed of every position command. The arm carries its own
+      # weight through the shoulder; full speed is for an unloaded bench.
+      speed_scale: 0.5
+      accel: [20, 20, 20, 15, 25]
+      unwrap_position: false
+      position_speed: 200
+      position_accel: 200
+
+    # --------------------------------------------------------------- tool --
+    tool:
+      enable: true
+      mode: "position"
+      topic: "/motor_manager/tool_cmd"
+      motor_ids: [6]
+      # Quoted. The jaws tool names its joint `6`, and unquoted YAML makes that
+      # the integer 6, which then matches no joint name anywhere.
+      joint_names: ["6"]
+      direction: [1]
+      command_indices: [0]
+      state_indices: [5]
+      speed_scale: 0.5
+      accel: [25]
+      unwrap_position: false
+      position_speed: 200
+      position_accel: 200
+
+    # --------------------------------------------------------------- head --
+    head:
+      enable: true
+      mode: "position"
+      topic: "/motor_manager/head_cmd"
+      motor_ids: [7, 8]
+      joint_names: ["hn_pan_joint", "hn_tilt_joint"]
+      direction: [1, 1]
+      command_indices: [0, 1]
+      state_indices: [6, 7]
+      # The head carries a camera and nothing else, so it can move faster than
+      # the arm — but it is also the thing you watch a scene through, and a
+      # fast pan is a motion-blurred frame.
+      speed_scale: 0.6
+      accel: [30, 30]
+      unwrap_position: false
+      position_speed: 300
+      position_accel: 200

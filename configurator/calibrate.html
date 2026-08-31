@@ -347,6 +347,22 @@
     text-transform: none;
   }
   .info.on { border-color: var(--accent); color: var(--accent); }
+  .bar button.rec { border-color: var(--accent); color: var(--accent); }
+  /* Destructive, but not a primary action — it only colours on hover, and it
+     disables itself when there is nothing to discard. */
+  .danger-ghost:not(:disabled):hover { border-color: var(--red-500); color: var(--red-500); }
+  .danger-ghost:disabled { opacity: .4; }
+
+  /* The five-step rail on the guided flow. */
+  .steps { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 10px; }
+  .step {
+    font-family: var(--font-label); font-size: 9px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 1px;
+    color: var(--text-quaternary); border: 1px solid var(--border-faint);
+    border-radius: var(--radius-pill); padding: 3px 9px;
+  }
+  .step.done { color: var(--accent); border-color: var(--accent); opacity: .7; }
+  .step.now  { color: #fff; background: var(--accent); border-color: var(--accent); }
   .info-body { margin-bottom: 10px; }
   .info-body .note:first-child { margin-top: 0; }
 
@@ -485,6 +501,9 @@
               <span class="note" id="viewer-status">Loading URDF…</span>
               <span class="spacer" style="flex:1"></span>
               <label class="note" style="cursor:pointer"><input type="checkbox" id="follow" checked style="margin-right:5px">follow motion</label>
+              <button class="ghost sm" id="rezero"
+                title="Model zero = the arm's pose right now. Calibrated joints use their measured home instead."
+                >Re-zero model</button>
               <button class="ghost sm" id="reframe">Reframe</button>
               <button class="ghost sm" id="reloadUrdf">Reload URDF</button>
             </div>
@@ -517,7 +536,15 @@
       </main>
 
       <aside>
-        <div id="rail" class="rail"></div>
+        <div class="panel tight">
+          <div class="panel-head" style="margin-bottom:8px">
+            <h2>Joints</h2>
+            <span class="chip mute" id="railState">nothing calibrated</span>
+            <span class="spacer"></span>
+            <button class="ghost sm danger-ghost" id="startOver">Start over</button>
+          </div>
+          <div id="rail" class="rail"></div>
+        </div>
 
         <!-- The single live wizard stage; re-rendered per state. -->
         <div id="stage"></div>
@@ -573,6 +600,9 @@ const ARM_SPEED = 200, ARM_ACCEL = 8;   // gentle re-arm profile
 const TICKS = 4096;
 const TICK_RAD = (2*Math.PI)/TICKS;     // STS3215: 4096 counts/rev, direct drive
 const LEROBOT_CENTER = 2047;            // LeRobot homes a joint to mid-scale
+// The hardware's mid-scale. One off from LEROBOT_CENTER on purpose: 2048 is
+// TICKS/2, 2047 is LeRobot's convention for the same idea. Not interchangeable.
+const SERVO_CENTER = TICKS/2;
 const FIT_TOL = 2*Math.PI/180;          // URDF vs measured: 2° counts as 1-to-1
 const MOTION_TICKS = 12;                // per-sample delta that reads as "moving"
 const MOTION_HOLD = 900;                // ms a joint stays flagged as moving
@@ -582,7 +612,20 @@ const MOTION_HOLD = 900;                // ms a joint stays flagged as moving
 // makeUnwrap turns a wrapping raw stream into a continuous one (for sweeps).
 const modTick=(v)=>((Math.round(v)%TICKS)+TICKS)%TICKS;
 const wrapSigned=(x)=>{ x=((x%TICKS)+TICKS)%TICKS; return x>TICKS/2? x-TICKS : x; };
-function makeUnwrap(){ let last=null, off=0; return (raw)=>{ if(last!=null){ const d=raw-last; if(d>TICKS/2) off-=TICKS; else if(d<-TICKS/2) off+=TICKS; } last=raw; return raw+off; }; }
+function makeUnwrap(){
+  let last=null, off=0;
+  const f=(raw)=>{ if(last!=null){ const d=raw-last; if(d>TICKS/2) off-=TICKS; else if(d<-TICKS/2) off+=TICKS; }
+                   last=raw; return raw+off; };
+  // Setting a servo's zero shifts every raw count by a constant. Re-framing the
+  // unwrapper by the same constant keeps the continuous stream continuous
+  // across the write, instead of scoring it as a jump of up to half a turn.
+  f.rebase=(delta)=>{ if(last==null) return; const nl=modTick(last+delta); off += (last+delta)-nl; last=nl; };
+  return f;
+}
+// The calibrated travel is the arc min -> max counting UP, so it contains the
+// 0/4095 seam exactly when it has to wrap to get there. Nothing on this page
+// minds; the files it writes do — see seamBanner().
+const seamStraddles=(min,max)=>modTick(min)>modTick(max);
 const deg=(r)=>(r*180/Math.PI);
 const degs=(r)=>`${r>=0?"+":""}${deg(r).toFixed(1)}°`;
 const esc=(s)=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -600,7 +643,7 @@ const esc=(s)=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;
 const SERVO_MODELS = ["sts3215","sts3250","st3120"];
 const DEFAULT_MAP = {
   1: { ros:"joint_base",       lerobot:"shoulder_pan",  sign:+1, model:"sts3215" },
-  2: { ros:"joint_shoulder",   lerobot:"shoulder_lift", sign:+1, model:"sts3215" },
+  2: { ros:"joint_shoulder",   lerobot:"shoulder_lift", sign:-1, model:"sts3215" },
   3: { ros:"joint_elbow",      lerobot:"elbow_flex",    sign:+1, model:"sts3215" },
   4: { ros:"joint_wrist_tilt", lerobot:"wrist_flex",    sign:-1, model:"sts3215" },
   5: { ros:"joint_wrist_roll", lerobot:"wrist_roll",    sign:+1, model:"sts3215" },
@@ -630,22 +673,144 @@ function mapFor(id){
 // ======================================================================
 // Calibration math — PURE, no DOM, unit-tested below
 // ======================================================================
-function computeCalibration(samples){
-  const ps = samples.map(s=>s.p);
-  const min_p = Math.min(...ps) + MARGIN;
-  const max_p = Math.max(...ps) - MARGIN;
-  const center_p = Math.round((min_p + max_p)/2);
+// The guided flow's result: limits from the two captured hard stops, home from
+// the captured URDF default. Everything is computed as SIGNED TICKS FROM HOME
+// and only converted back to raw ticks at the end, so an arc that crosses the
+// 0/4095 seam stays contiguous — `min_p + MARGIN` in raw ticks would be
+// nonsense there, which is why the old midpoint version had to run in a
+// separately-unwrapped sample space.
+//
+// `home_residual` is step 5 minus step 1: the joint was returned to the same
+// physical pose, so anything but ~0 is an encoder that slipped during the
+// sweeps, and every limit here is off by that much.
+// Ticks from home to a captured point. Prefers the CONTINUOUS reading taken
+// while the joint was moved there over a shortest-arc guess from the raw tick.
+//
+// wrapSigned answers "which way round is shorter", and past 180 degrees from
+// home that is the wrong way round. mod101's shoulder measures 198.7 degrees of
+// real travel with its zero at one end, so its far stop sits 2261 ticks away
+// and wrapSigned reports it as +1835 — the wrong sign and the wrong magnitude,
+// which silently turns the travel inside out. The unwrapped stream has no such
+// limit: it is integrated from the home capture as the joint is moved, so it is
+// right for anything up to a full turn.
+function capDelta(cap, key){
+  const u = cap[key+"_u"];
+  if(u!=null && cap.home_u!=null) return u - cap.home_u;
+  return wrapSigned(cap[key+"_p"] - cap.home_p);        // imported / synthetic
+}
+function computeGuided(samples, cap){
+  const da = capDelta(cap, "a");
+  const db = capDelta(cap, "b");
+  let lo = Math.min(da, db) + MARGIN;
+  let hi = Math.max(da, db) - MARGIN;
+  // A stop can BE the zero pose — that is the whole premise of "Set zero here".
+  // Pulling MARGIN in from it would then leave home outside its own travel, and
+  // st3215's MotorGroup requires min <= home <= max because a controller asked
+  // for 0 rad has to have somewhere to go.
+  lo = Math.min(lo, 0); hi = Math.max(hi, 0);
   let fault=false, faultAt=null;
-  for(let i=1;i<samples.length;i++){ if(Math.abs(samples[i].p-samples[i-1].p) > JUMP_THRESH){ fault=true; faultAt=samples[i].p; break; } }
-  return {min_p, max_p, center_p, verdict: fault?"fault":"clean", faultAt, n:samples.length};
+  for(let i=1;i<samples.length;i++){
+    if(Math.abs(samples[i].p-samples[i-1].p) > JUMP_THRESH){ fault=true; faultAt=samples[i].p; break; }
+  }
+  const residual = cap.home2_p==null? null : capDelta(cap, "home2");
+  const min_p = modTick(cap.home_p + lo), max_p = modTick(cap.home_p + hi);
+  return {
+    min_p, max_p,
+    center_p: modTick(cap.home_p),
+    home_residual: residual,
+    // The travel is the arc min_p -> max_p counting UP, so it contains the
+    // 0/4095 seam exactly when it has to wrap to get there. Everything on this
+    // page is computed relative to home and handles that fine; the files it
+    // writes cannot, because ticks_min/ticks_max and LeRobot's range_min/max
+    // are plain numbers and come out with min > max. st3215's MotorGroup
+    // rejects the group outright. See seamNote().
+    seam: seamStraddles(min_p, max_p),
+    verdict: fault? "fault" : "clean",
+    faultAt, n: samples.length,
+  };
+}
+
+// Where the joint's ZERO POSE should sit on the encoder, so the travel clears
+// the 0/4095 seam. There are two right answers and which one applies is a fact
+// about the mechanism, not about the numbers:
+//
+//   CENTRE — the zero pose is in the middle of the travel, and the joint moves
+//            both ways from it. joint_base, hn_pan, hn_tilt, joint_wrist_tilt.
+//            Mid-scale, and half the encoder is available in each direction.
+//
+//   ZERO   — the zero pose IS a hard stop and the joint only moves one way from
+//            it. joint_shoulder, joint_elbow, joint_wrist_roll, the jaw. Put the
+//            pose near the bottom of the count and give the whole range to the
+//            side that can actually use it. Nothing can drive past the stop into
+//            the seam, because the stop is what the seam is parked behind.
+//
+// Centring a one-sided joint is what went wrong before: it spends half the
+// encoder on a direction the joint cannot travel, and on the shoulder's full
+// 180 degrees that pushed the far end to 4096.
+// Room left between a hard stop and the seam. Not 0, and not a token either:
+// the stop is a stop, but the pose is set against it BY HAND and the URDF's
+// idea of the default may itself sit a degree or two off it. 250 ticks is 22
+// degrees of slop before anything wraps, and on the widest joint here it still
+// leaves ~1800 ticks unused, so the margin costs nothing that is needed.
+const ZERO_MARGIN = 250;
+const CENTRE_TARGET = SERVO_CENTER;
+const ONE_SIDED_TOL = 5*Math.PI/180;  // an end this close to the zero pose is a stop
+
+// Ticks from the zero pose to each declared end, in encoder direction. `sign`
+// is applied because the URDF's limits are in joint radians and this is tick
+// space, which a sign of -1 reverses.
+function urdfTicks(sign, u){
+  if(!u) return null;
+  const a = sign*u.lower/TICK_RAD, b = sign*u.upper/TICK_RAD;
+  return {lo: Math.min(a,b), hi: Math.max(a,b)};
+}
+// The ZERO placement. Bottom of the count when the joint travels up from its
+// zero pose, top when it travels down — a joint declared -180..0 needs the
+// mirror image, and placing it low would wrap on its first move.
+function zeroTarget(sign, u){
+  const t = urdfTicks(sign, u);
+  if(!t) return ZERO_MARGIN;
+  return Math.abs(t.hi) >= Math.abs(t.lo) ? ZERO_MARGIN : TICKS-1-ZERO_MARGIN;
+}
+// Which button this joint wants, from the shape of its declared range. A hint
+// only: the URDF is a model of the arm, and whether a pose is really a hard
+// stop is something the person holding the joint knows better than it does.
+function recommendPlacement(sign, u){
+  const t = urdfTicks(sign, u);
+  if(!t) return null;
+  const tol = ONE_SIDED_TOL/TICK_RAD;
+  return (Math.abs(t.lo) <= tol || Math.abs(t.hi) <= tol) ? "zero" : "centre";
+}
+// Does a placement leave the whole declared travel inside 0..4095?
+function placementFits(target, sign, u){
+  const t = urdfTicks(sign, u);
+  if(!t) return true;
+  return target+t.lo >= 0 && target+t.hi <= TICKS-1;
 }
 
 // ----- Tick -> engineering units. Pure; exercised by the self-test. -----
+// Signed ticks from home to each limit.
+//
+// Read as the arc min -> max going UP, and located by where home sits inside
+// it. Asking wrapSigned for each end on its own is what breaks: it answers
+// "which way round is shorter", so a limit more than half a turn from home
+// comes back with the wrong sign — the shoulder's far stop, 2261 ticks away,
+// reads as +1835 and turns the travel inside out. Reading the arc as a whole
+// has no such limit; it is exact for any travel up to a full turn, and for a
+// range that crosses the 0/4095 seam.
+function limitDeltas(r){
+  const up = modTick(r.max_p - r.min_p);        // length of the arc min -> max
+  const h  = modTick(r.center_p - r.min_p);     // where home sits along it
+  if(h > up)                                    // home outside its own travel:
+    return { lo: wrapSigned(r.min_p - r.center_p),   // inconsistent numbers, so
+             hi: wrapSigned(r.max_p - r.center_p) }; // fall back and show it
+  return { lo: -h, hi: up-h };
+}
 // ROS: radians relative to the joint's calibrated home (center), signed by the
 // URDF axis. min/max are ordered after the sign flip so lower <= upper.
 function rosLimits(r, sign){
-  const a = sign * wrapSigned(r.min_p - r.center_p) * TICK_RAD;
-  const b = sign * wrapSigned(r.max_p - r.center_p) * TICK_RAD;
+  const d = limitDeltas(r);
+  const a = sign * d.lo * TICK_RAD, b = sign * d.hi * TICK_RAD;
   return { lower: Math.min(a,b), upper: Math.max(a,b) };
 }
 // LeRobot: homing_offset shifts the raw count so home reads mid-scale (2047);
@@ -653,12 +818,16 @@ function rosLimits(r, sign){
 // is LeRobot's inverted-direction flag.
 function lerobotEntry(id, r, m){
   const homing = LEROBOT_CENTER - r.center_p;
+  // Expressed from home rather than from the raw ticks, for the same reason
+  // rosLimits is: min_p + homing is only the travel's end when the arc neither
+  // crosses the seam nor runs past half a turn.
+  const d = limitDeltas(r);
   return {
     id: Number(id),
     drive_mode: m.sign < 0 ? 1 : 0,
     homing_offset: homing,
-    range_min: Math.min(r.min_p, r.max_p) + homing,
-    range_max: Math.max(r.min_p, r.max_p) + homing,
+    range_min: LEROBOT_CENTER + Math.min(d.lo, d.hi),
+    range_max: LEROBOT_CENTER + Math.max(d.lo, d.hi),
   };
 }
 // Measured travel vs the URDF's own <limit>. The asymmetry matters: a URDF that
@@ -689,12 +858,58 @@ function runCalibrationTests(){
   const T=[]; const approx=(a,b,t)=>Math.abs(a-b)<=t;
   const assert=(name,cond,detail)=>{ T.push({name,ok:!!cond,detail}); };
 
-  let s=computeCalibration(genSweep(true,null));
-  assert("clean hand sweep -> travel captured", s.verdict==="clean"&&s.max_p>s.min_p, `${s.verdict} [${s.min_p},${s.max_p}]`);
-  assert("home sits mid-travel", approx(s.center_p,(s.min_p+s.max_p)/2,1), `center=${s.center_p}`);
+  const CAP={home_p:2048, a_p:1200, b_p:2900, home2_p:2048};
+  let s=computeGuided(genSweep(true,null), CAP);
+  assert("clean run -> travel captured", s.verdict==="clean"&&s.max_p>s.min_p, `${s.verdict} [${s.min_p},${s.max_p}]`);
+  assert("limits pull MARGIN in from both stops",
+         s.min_p===1200+MARGIN && s.max_p===2900-MARGIN, `[${s.min_p},${s.max_p}]`);
 
-  s=computeCalibration(genSweep(true,2600));
+  s=computeGuided(genSweep(true,2600), CAP);
   assert("encoder slip -> fault @pos", s.verdict==="fault"&&s.faultAt!=null, `${s.verdict} @${s.faultAt}`);
+
+  // --- travel past 180 degrees from home ---
+  // mod101's shoulder, off the bench. Zero placed near the top of the count
+  // (3846) and 2261 ticks (198.7 deg) down to full extension. NOT a stop-to-
+  // stop figure: that reading is one direction only, extension -> home, and
+  // home itself sits ~3 deg (34 ticks) inside the hard stop above it, so the
+  // real travel is a little wider still. What matters here is that it is past
+  // the half-turn where a shortest-arc reading changes sign, which is what
+  // used to turn this joint's travel inside out.
+  const wide={home_p:3846, a_p:3846, b_p:1585,
+              home_u:3846, a_u:3846, b_u:3846-2261, home2_p:3846, home2_u:3846};
+  const w=computeGuided(genSweep(0), wide);
+  assert("travel past 180 deg keeps its sign",
+         approx(rosLimits(w,1).lower, -(2261-MARGIN)*TICK_RAD, 1e-9) &&
+         approx(rosLimits(w,1).upper, 0, 1e-9),
+         `${degs(rosLimits(w,1).lower)} … ${degs(rosLimits(w,1).upper)}`);
+  assert("...and LeRobot's range gets the same arc",
+         lerobotEntry(2,w,{sign:1}).range_min===LEROBOT_CENTER-(2261-MARGIN) &&
+         lerobotEntry(2,w,{sign:1}).range_max===LEROBOT_CENTER,
+         `${lerobotEntry(2,w,{sign:1}).range_min}..${lerobotEntry(2,w,{sign:1}).range_max}`);
+  assert("...where a shortest-arc reading would invert it",
+         Math.sign(wrapSigned(wide.b_p-wide.home_p))!==Math.sign(wide.b_u-wide.home_u),
+         `${wrapSigned(wide.b_p-wide.home_p)} vs ${wide.b_u-wide.home_u}`);
+  // A stop that IS the zero pose must not push home out of its own travel.
+  assert("home stays inside the travel when a stop is home",
+         w.center_p>=Math.min(w.min_p,w.max_p) && w.center_p<=Math.max(w.min_p,w.max_p),
+         `home=${w.center_p} in [${w.min_p},${w.max_p}]`);
+  assert("the far stop still gets its MARGIN",
+         w.min_p===modTick(3846-2261+MARGIN), `${w.min_p}`);
+  // The same joint as it really is: the hard stop sits ~3 deg (34 ticks) ABOVE
+  // the zero pose, not at it. MARGIN is 30 of those 34 ticks, so the usable
+  // travel above zero is 4 ticks — thin, but it must stay on the correct side
+  // of home or the driver rejects the group.
+  const near={home_p:3846, a_p:3880, b_p:1585,
+              home_u:3846, a_u:3880, b_u:3846-2261, home2_p:3846, home2_u:3846};
+  const nw=computeGuided(genSweep(0), near);
+  assert("a stop just above home leaves home inside the travel",
+         nw.max_p===3850 && nw.center_p===3846 && nw.min_p===modTick(3846-2261+MARGIN),
+         `[${nw.min_p},${nw.max_p}] home=${nw.center_p}`);
+  // Re-framing mid-flow keeps the continuous values continuous.
+  const uw=makeUnwrap(); uw(4000); uw(4090); const before=uw(30);   // wrapped up past 4095
+  uw.rebase(-1000);
+  assert("rebasing the unwrapper preserves continuity",
+         Math.abs(uw(modTick(30-1000)) - (before-1000))<1e-9, `${uw(modTick(30-1000))} vs ${before-1000}`);
 
   // --- unit conversion ---
   const quarter={min_p:2048-1024, max_p:2048+1024, center_p:2048};
@@ -722,6 +937,69 @@ function runCalibrationTests(){
   assert("hardware wider than urdf -> conservative (safe)", f.status==="conservative"&&f.ok, f.status);
   f=fitVerdict({lower:-Math.PI/2+0.01, upper:Math.PI/2-0.01}, urdf);
   assert("sub-degree difference still reads 1:1", f.status==="1:1", f.status);
+
+  // ---- the guided flow's captures ----
+  // Home is the URDF default, NOT the middle of the travel: an asymmetric joint
+  // (stops at -300 and +900 ticks) must still call the captured default zero.
+  let g=computeGuided(genSweep(0), {home_p:2000, a_p:2900, b_p:1700, home2_p:2000});
+  assert("guided home is the captured default, not mid-travel",
+         g.center_p===2000 && g.min_p===1700+MARGIN && g.max_p===2900-MARGIN,
+         `home=${g.center_p} [${g.min_p},${g.max_p}]`);
+  let gl=rosLimits(g,1);
+  assert("guided limits are asymmetric about home",
+         approx(gl.lower,(1700+MARGIN-2000)*TICK_RAD,1e-9) && approx(gl.upper,(2900-MARGIN-2000)*TICK_RAD,1e-9),
+         `[${gl.lower.toFixed(4)}, ${gl.upper.toFixed(4)}]`);
+  // Captures either side of the 0/4095 seam.
+  g=computeGuided(genSweep(0), {home_p:20, a_p:400, b_p:4000, home2_p:20});
+  assert("guided captures survive the seam",
+         g.center_p===20 && g.min_p===modTick(4000+MARGIN) && g.max_p===400-MARGIN,
+         `home=${g.center_p} [${g.min_p},${g.max_p}]`);
+  // ...and are correctly refused, because the file cannot express that arc.
+  assert("travel across the seam is flagged", g.seam===true && seamStraddles(g.min_p,g.max_p),
+         `[${g.min_p},${g.max_p}]`);
+  assert("ordinary travel is not flagged", s.seam===false, `[${s.min_p},${s.max_p}]`);
+  // --- the two placements, and which shape of joint wants which ---
+  const symmetric={lower:-1024*TICK_RAD, upper:1024*TICK_RAD};   // joint_base
+  const oneSided ={lower:0,              upper:2048*TICK_RAD};   // joint_wrist_roll
+  const downward ={lower:-2048*TICK_RAD, upper:0};               // its mirror image
+  assert("a two-way joint is told to centre", recommendPlacement(1,symmetric)==="centre",
+         `${recommendPlacement(1,symmetric)}`);
+  assert("a joint that starts at a stop is told to zero", recommendPlacement(1,oneSided)==="zero",
+         `${recommendPlacement(1,oneSided)}`);
+  assert("an undeclared joint gets no suggestion", recommendPlacement(1,null)===null);
+  assert("zero goes to the bottom when travel runs up", zeroTarget(1,oneSided)===ZERO_MARGIN,
+         `${zeroTarget(1,oneSided)}`);
+  assert("zero goes to the top when travel runs down", zeroTarget(1,downward)===TICKS-1-ZERO_MARGIN,
+         `${zeroTarget(1,downward)}`);
+  assert("sign reverses which end is which",
+         zeroTarget(-1,oneSided)===TICKS-1-ZERO_MARGIN && zeroTarget(-1,downward)===ZERO_MARGIN,
+         `${zeroTarget(-1,oneSided)} / ${zeroTarget(-1,downward)}`);
+  // The regression both buttons exist for: each placement fits the shape it is
+  // for, and centring a one-sided joint is exactly what does not fit.
+  assert("centre fits a two-way joint", placementFits(CENTRE_TARGET,1,symmetric));
+  assert("zero fits a one-way joint, both directions",
+         placementFits(zeroTarget(1,oneSided),1,oneSided) &&
+         placementFits(zeroTarget(1,downward),1,downward));
+  assert("centring a one-way joint is what overruns the seam",
+         !placementFits(CENTRE_TARGET,1,oneSided), `${CENTRE_TARGET+2048}`);
+  assert("zeroing a two-way joint overruns it the other way",
+         !placementFits(zeroTarget(1,symmetric),1,symmetric));
+
+  // Re-zeroing at the default is what clears a seam-crossing capture: every
+  // captured tick moves by the same shift, and the arc stops wrapping.
+  const seamCap={home_p:20, a_p:400, b_p:4000, home2_p:20};
+  const shift=CENTRE_TARGET-seamCap.home_p;
+  const reb=Object.fromEntries(Object.entries(seamCap).map(([k,v])=>[k,modTick(v+shift)]));
+  const gr=computeGuided(genSweep(0), reb);
+  assert("re-zeroing at the default clears the seam",
+         gr.seam===false && gr.center_p===SERVO_CENTER, `home=${gr.center_p} [${gr.min_p},${gr.max_p}]`);
+  assert("rebasing preserves the measured travel",
+         approx(rosLimits(gr,1).lower, rosLimits(g,1).lower, 1e-9) &&
+         approx(rosLimits(gr,1).upper, rosLimits(g,1).upper, 1e-9),
+         `${degs(rosLimits(gr,1).lower)}…${degs(rosLimits(gr,1).upper)}`);
+  // Step 5 is the slip check.
+  g=computeGuided(genSweep(0), {home_p:2000, a_p:2900, b_p:1700, home2_p:2037});
+  assert("returning off-default reports the residual", g.home_residual===37, `${g.home_residual}`);
 
   const pass=T.filter(t=>t.ok).length;
   log(`-- self-test: ${pass}/${T.length} passed --`);
@@ -760,6 +1038,18 @@ async function readServo(id){
 async function setTorque(id,on){ if(demoMode){ demoTorque[id]=on; return; } return api(`/servo/${id}/torque`,{on:!!on}); }
 async function moveServo(id,pos){ if(demoMode){ demoGoal[id]=pos; return; } return api(`/servo/${id}/move`,{pos:Math.round(pos)}); }
 async function setServoCfg(id,speed,accel){ if(demoMode) return; return api(`/servo/${id}/profile`,{speed,accel}); }
+// Define the servo's current physical position as `target`. Writes an offset to
+// servo EEPROM, so it outlives this page and the ROS driver reads the same
+// shifted frame. Returns the shift, which the caller owes to anything it has
+// already captured in the old one.
+async function setServoZero(id,target){
+  if(demoMode){
+    const before=demoRead(id).pos, shift=target-before;
+    demoOfs[id]=(demoOfs[id]||0)+shift;
+    return {before, after:target, target, shift};
+  }
+  return api(`/servo/${id}/zero`,{target});
+}
 
 async function torqueJoint(joint,on){ await setTorque(joint.id,on); }
 async function failSafeDisarm(){
@@ -775,21 +1065,54 @@ const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
 // ======================================================================
 let demoMode=false;
 const demoGoal={}, demoTorque={};
-let demoSweep={active:false, p:1200, dir:1, k:0};
-function demoStartSweep(){ demoSweep={active:true,p:1500,dir:1,k:0}; }
+const demoOfs={};                  // per-servo frame shift, as define-middle would
+// The synthetic arm's idea of where the guided flow tells it to be. Without
+// this the demo cannot walk the new flow at all: nothing moves the fake servo
+// between steps, so both "hard stops" capture the same tick and the flow
+// rejects them as too close together — correctly, which is the point of the
+// check, but it makes the whole thing unwalkable without hardware.
+const DEMO_HOME=2048, DEMO_SPAN=850, DEMO_EDGE=40;
+
+// The synthetic joint's two hard stops, in the UNSHIFTED frame that demoRead
+// adds demoOfs to at the end.
+//
+// They have to move with the offset, because a real hard stop is a fact about
+// the mechanism and does not politely stay 850 ticks away from wherever the
+// zero was just placed. Zeroing a joint puts its rest pose near the bottom of
+// the count; a demo servo that kept sweeping 850 ticks either side of it would
+// travel straight through 0 into 4095 — manufacturing exactly the seam crossing
+// the placement exists to prevent, and making the feature look broken in the
+// one mode you can try it without an arm.
+function demoTravel(id){
+  const ofs = demoOfs[id]||0, h = DEMO_HOME+ofs;
+  return { lo: Math.max(DEMO_EDGE, h-DEMO_SPAN) - ofs,
+           hi: Math.min(TICKS-1-DEMO_EDGE, h+DEMO_SPAN) - ofs };
+}
+function demoAt(state, id){
+  const t=demoTravel(id);
+  return {cap_home:DEMO_HOME, cap_right:t.hi, cap_left:t.lo, cap_home2:DEMO_HOME}[state];
+}
+let demoSweep={active:false, p:DEMO_HOME, dir:1, k:0};
+function demoStartSweep(){ demoSweep={active:true,p:DEMO_HOME,dir:1,k:0}; }
 function demoRead(id){
-  if(demoSweep.active){ demoSweep.k++; demoSweep.p+=demoSweep.dir*12;
-    if(demoSweep.p>3100) demoSweep.dir=-1; if(demoSweep.p<1200) demoSweep.dir=1; }
+  // Ramp between the two stops the flow captured, so the traversal counter sees
+  // the ends it is actually looking for.
   const j = wiz.joints[wiz.cur] || {id};
+  const trav = demoTravel(j.id);
+  if(demoSweep.active){ demoSweep.k++; demoSweep.p+=demoSweep.dir*14;
+    if(demoSweep.p>trav.hi) demoSweep.dir=-1; if(demoSweep.p<trav.lo) demoSweep.dir=1; }
   const noise=(((demoSweep.k*131+id*7)%15)-7);
   let pos;
-  if(!demoSweep.active && demoTorque[id] && demoGoal[id]!=null){
+  if(id===j.id && demoAt(wiz.state,id)!=null){
+    // "Hand-placed" where the current step asks for it.
+    pos = demoAt(wiz.state,id) + (noise%3);
+  } else if(!demoSweep.active && demoTorque[id] && demoGoal[id]!=null){
     pos = demoGoal[id] + (noise%3);            // driven: settle near goal
-  } else if(id===j.id && demoSweep.active) pos=Math.round(demoSweep.p);
-  else pos = demoGoal[id]!=null? demoGoal[id] : 2048;
+  } else if(id===j.id && demoSweep.active && wiz.state==="sweeping") pos=Math.round(demoSweep.p);
+  else pos = demoGoal[id]!=null? demoGoal[id] : DEMO_HOME;
   const goal=demoGoal[id];
   const cur = (goal!=null && demoTorque[id]) ? 40+Math.abs(((demoSweep.k*13+id)%30)) : 8;
-  return {id, online:true, pos:modTick(pos), speed:0, current_ma:cur, voltage_mv:12100, load_dpct:Math.round(cur/8), temp_c:34};
+  return {id, online:true, pos:modTick(pos+(demoOfs[id]||0)), speed:0, current_ma:cur, voltage_mv:12100, load_dpct:Math.round(cur/8), temp_c:34};
 }
 
 // ======================================================================
@@ -834,6 +1157,42 @@ async function loadModel(){
 
 function urdfFor(id){ return urdfByName.get(mapFor(id).ros) || null; }
 
+// The model's zero per joint is a guess until the joint is calibrated: the
+// first tick seen after connecting becomes zero, so an arm that was folded up
+// when the bus opened draws every joint offset by however far it was, silently
+// and for the whole session. This is the way out.
+//
+// A calibrated joint does not guess — it re-anchors on its MEASURED home, which
+// is the real thing. Only the uncalibrated ones fall back to "the arm is at its
+// URDF default right now", which is a claim about the arm that the person
+// pressing the button is the one making.
+function rezeroModel(){
+  const ids = wiz.cfg? wiz.cfg.servos.map(s=>s.id)
+                     : [...new Set([...Object.keys(anchors), ...Object.keys(lastSeen)].map(Number))];
+  const cal=[], live=[], blank=[];
+  for(const id of ids){
+    const r=wiz.results[id];
+    if(r && r.center_p!=null){ anchors[id]=r.center_p; cal.push(id); }
+    else if(lastSeen[id]!=null){ anchors[id]=lastSeen[id]; live.push(id); }
+    else { delete anchors[id]; blank.push(id); }   // re-anchors on the next sample
+  }
+  // Repaint from the last tick seen rather than waiting for the next poll: with
+  // the bus closed there is no next poll, and the model would sit wrong until
+  // something reconnected.
+  for(const id of ids){
+    const p=lastSeen[id]; if(p==null || anchors[id]==null) continue;
+    const m=mapFor(id);
+    liveRad[id]=m.sign*wrapSigned(p-anchors[id])*TICK_RAD;
+    viewer.setJoint(m.ros, liveRad[id]);
+  }
+  renderOverlay();
+  const bits=[];
+  if(cal.length)   bits.push(`${cal.length} on measured home [${cal.join(", ")}]`);
+  if(live.length)  bits.push(`${live.length} on the current pose [${live.join(", ")}]`);
+  if(blank.length) bits.push(`${blank.length} waiting for a reading [${blank.join(", ")}]`);
+  log("model re-zeroed: " + (bits.join("; ") || "nothing to re-zero"));
+}
+
 // Every telemetry sample funnels through here, so the model tracks whatever the
 // poller, a sweep or a drive-test happens to be reading.
 function driveModel(t){
@@ -857,7 +1216,7 @@ function noteMotion(id){
   const pip=document.querySelector(`#rail .pip[data-sid="${id}"]`);
   if(pip){ pip.classList.add("moving"); setTimeout(()=>{ if(performance.now()>=(movingUntil[id]||0)) pip.classList.remove("moving"); }, MOTION_HOLD+50); }
   if(!$("follow").checked) return;
-  if(wiz.state==="sweeping" || wiz.state==="arm_check") return;
+  if(CAP_STEPS.includes(wiz.state) || wiz.state==="arm_check") return;
   const j=wiz.joints[wiz.cur];
   if(j && j.id===id) return;                     // already highlighted
   focusJoint(id);
@@ -923,14 +1282,16 @@ function measuredLimits(id){
 }
 // While a sweep is running the travel isn't accepted yet, but it IS interesting
 // live — show what has been covered so far, relative to the moving anchor.
-function sweepLimits(id){
-  const sw=wiz.sweep;
-  if(!sw || !isFinite(sw.minP) || sw.maxP<=sw.minP) return null;
-  const m=mapFor(id), a=anchors[id];
-  if(a==null) return null;
-  const x=m.sign*wrapSigned(modTick(sw.minP)-a)*TICK_RAD;
-  const y=m.sign*wrapSigned(modTick(sw.maxP)-a)*TICK_RAD;
-  return { lower:Math.min(x,y), upper:Math.max(x,y) };
+// The provisional band on the overlay while the guided flow runs. Once both
+// stops are captured they ARE the measured travel, so the bars show the real
+// range from step 3 onward rather than "the widest thing reached so far".
+function capturedLimits(id){
+  const c=wiz.cap, j=wiz.joints[wiz.cur];
+  if(!c || !j || j.id!==id || c.home_p==null) return null;
+  const m=mapFor(id);
+  const ds=[c.a_p,c.b_p].filter(v=>v!=null).map(v=>m.sign*wrapSigned(v-c.home_p)*TICK_RAD);
+  if(ds.length<2) return null;
+  return { lower:Math.min(...ds), upper:Math.max(...ds) };
 }
 
 function renderOverlay(){
@@ -941,7 +1302,7 @@ function renderOverlay(){
   title.innerHTML=`${esc(m.ros)} <span class="unit">#${id}</span>`+(u?"":` <span class="chip bad">not in urdf</span>`);
   if(!host.querySelector(".limbar")) host.innerHTML=limbarHTML();
   updateLimbar(host, u? {lower:u.lower,upper:u.upper}:null,
-                     measuredLimits(id) || (wiz.state==="sweeping"? sweepLimits(id):null),
+                     measuredLimits(id) || capturedLimits(id),
                      liveRad[id] ?? null);
 }
 
@@ -1006,7 +1367,7 @@ function renderFitSnippet(){
 // ======================================================================
 // Wizard state
 // ======================================================================
-const wiz = { joints:[], cur:0, state:"idle", results:{}, cfg:null, sweep:null };
+const wiz = { joints:[], cur:0, state:"idle", results:{}, cfg:null, sweep:null, cap:null };
 
 // One servo, one joint — the joint's name comes from the local map.
 function buildJoints(ids){
@@ -1266,6 +1627,14 @@ function markActive(){
 // ======================================================================
 function renderRail(){
   const rail=$("rail"); rail.innerHTML="";
+  const done=Object.values(wiz.results).filter(r=>r&&r.verdict==="clean").length;
+  const st=$("railState");
+  if(st){
+    st.textContent = !wiz.joints.length? "no joints"
+                   : done? `${done} of ${wiz.joints.length} calibrated` : "nothing calibrated";
+    st.className = "chip "+(done&&done===wiz.joints.length? "ok" : done? "warn" : "mute");
+  }
+  const so=$("startOver"); if(so) so.disabled = !done && !Object.keys(wiz.results).length;
   wiz.joints.forEach((j,i)=>{
     const r=jointResult(j);
     const cls = i===wiz.cur?"active": r? (r.verdict==="clean"?"clean":"bad") : "";
@@ -1290,119 +1659,379 @@ function enterJoint(){
     <div class="panel-head"><h2>${esc(j.name)}</h2>
       <span class="chip">servo #${j.id}</span>
       <span class="spacer"></span><span class="note" style="margin:0">joint ${wiz.cur+1} / ${wiz.joints.length}</span></div>
-    <p class="prompt">Sweep <b>${esc(j.name)}</b> by hand, stop to stop.</p>
-    <p class="note">Pressing start drops torque so the joint moves freely. The model follows the servo while
-      you sweep and re-centres as the travel grows, so you can see the arm's real range land on top of the
-      URDF's declared one.</p>
+    <p class="prompt">Calibrate <b>${esc(j.name)}</b>: URDF default, both stops, two sweeps, back to default.</p>
+    <p class="note">Pressing start drops torque so the joint moves freely. The first step captures the URDF
+      default as this joint's home — the model is anchored to it and holds that anchor for the rest of the
+      flow, so the arm on screen and the arm on the bench agree from the first frame.</p>
     ${u? `<p class="note">URDF declares <b>${degs(u.lower)} … ${degs(u.upper)}</b> for this joint.</p>`
        : `<div class="verdict fault"><b>Not in the URDF.</b> No joint called <code>${esc(j.name)}</code> is
            declared — rename it on the hardware tab, or this joint can be calibrated but never checked.</div>`}
     ${r?`<div class="verdict ${r.verdict}"><b>Previous result:</b> ${verdictLine(j,r)}</div>`:""}
     <div class="bar" style="margin-top:12px">
-      <button id="goSweep">Free joint &amp; sweep travel</button>
+      <button id="goSweep">Free joint &amp; calibrate</button>
       <button id="goManual" class="ghost">Enter limits manually</button>
       ${wiz.cur>0?`<button id="prevJoint" class="ghost">&larr; previous</button>`:""}
       ${allClean()?`<button id="toSave">All clean &rarr; finish</button>`:""}
     </div>`);
-  $("goSweep").onclick=startSweep;
+  $("goSweep").onclick=startGuided;
   $("goManual").onclick=()=>renderManual(j);
   if($("prevJoint")) $("prevJoint").onclick=()=>{ wiz.cur--; enterJoint(); };
   if($("toSave")) $("toSave").onclick=renderGlobalDone;
   renderOverlay();
 }
 
-async function startSweep(){
+// ======================================================================
+// The guided per-joint flow
+// ======================================================================
+// Five steps, in this order, all with torque OFF and the joint moved by hand:
+//
+//   1. urdf default   -> home_p          the tick where the URDF reads 0 rad
+//   2. max right      -> a_p             one hard stop
+//   3. max left       -> b_p             the other hard stop
+//   4. two sweeps                        health check across the known range
+//   5. urdf default   -> home2_p         proves nothing slipped on the way
+//
+// WHY HOME IS CAPTURED FIRST, AND WHY IT IS THE URDF DEFAULT RATHER THAN THE
+// MIDDLE OF THE TRAVEL. Everything downstream is an angle relative to home:
+// the ROS calibration is radians from it, LeRobot's homing_offset is the shift
+// that puts it at mid-scale, and the 3D model draws the joint at (tick - home).
+// If home is the midpoint of the measured travel then "0 rad" means "halfway
+// between the stops", which is only the URDF's zero on a joint that happens to
+// be symmetric — on every other joint the model and the hardware sit at
+// different angles while both claim zero. Capturing the URDF default makes
+// home mean the same thing in both.
+//
+// It also has to be step 1 rather than a correction at the end, because the
+// model has nothing to draw against until it exists: before home is known the
+// anchor is wherever the arm was when first seen, and the joint on screen is
+// offset by an unknown amount for the whole sweep.
+const CAP_STEPS = ["cap_home", "cap_right", "cap_left", "sweeping", "cap_home2"];
+const SWEEPS_WANTED = 2;
+const END_TOL = 0.08;        // fraction of the range that counts as "at the end"
+
+async function startGuided(){
   const j=wiz.joints[wiz.cur];
   wiz.state="torque_off";
   try{ await torqueJoint(j,false); }catch(e){ log("! torque-off failed: "+e.message); return; }
   setTorqueState(j.id,false);
   if(demoMode) demoStartSweep();
-  wiz.state="sweeping";
-  wiz.sweep={samples:[], minP:Infinity, maxP:-Infinity, stall:0, lastSpread:0, hot:false,
-             uwP:makeUnwrap()};                   // unwrap the wrapping raw stream
+  wiz.cap={home_p:null, a_p:null, b_p:null, home2_p:null,
+           home_u:null, a_u:null, b_u:null, home2_u:null};
+  wiz.sweep={samples:[], uwP:makeUnwrap(), hot:false, live:null, liveU:null,
+             traversals:0, atEnd:null, cancel:false};
+  wiz.state="cap_home";
   focusJoint(j.id);
-  renderSweep();
-  sweepLoop(j);                                   // async, runs until Finish
+  renderStep();
+  captureLoop(j);                    // one read loop for all five steps
 }
-function renderSweep(){
-  const j=wiz.joints[wiz.cur];
-  stageCard(`
-    <div class="panel-head"><h2>${esc(j.name)}</h2><span class="chip warn">torque OFF — move by hand</span>
-      <span class="spacer"></span><span class="note" style="margin:0" id="sCount">0 samples</span></div>
-    <p class="prompt">Move <b>${esc(j.name)}</b> slowly through its full travel, stop to stop, then back.</p>
-    <p class="note">Range covered</p>
-    <div class="track"><div class="fill" id="cov"></div></div>
-    <div class="telem" id="sTelem"></div>
-    <div class="bar" style="margin-top:12px">
-      <button id="finishSweep">Finish sweep &amp; compute</button>
-      <button class="ghost" id="cancelSweep">Cancel</button>
-      <span class="spacer"></span><span class="note" style="margin:0" id="sHint"></span>
-    </div>`);
-  $("finishSweep").onclick=finishSweep;
-  $("cancelSweep").onclick=()=>{ wiz.sweep.cancel=true; enterJoint(); };
-}
-async function sweepLoop(j){
+
+// One loop for the whole flow. Steps 1-3 and 5 only need a live readout; step 4
+// also records. Keeping it as a single loop means there is exactly one reader on
+// this servo from start to finish — two loops would interleave reads on a
+// single-threaded bus and drop samples between them.
+async function captureLoop(j){
   const sw=wiz.sweep;
-  while(wiz.state==="sweeping" && !sw.cancel){
+  while(CAP_STEPS.includes(wiz.state) && !sw.cancel){
     try{
       const tp=await readServo(j.id);
-      updateTelemetry(tp);                        // keeps the cards and the model live mid-sweep
+      updateTelemetry(tp);                        // cards + 3D model stay live
       if(tp&&tp.online&&tp.pos>=0){
-        // p is UNWRAPPED (continuous) for the math; rp keeps the raw tick.
-        const s={p:sw.uwP(tp.pos), rp:tp.pos,
-                 load:tp.load_dpct/10, cur:tp.current_ma, temp:tp.temp_c};
-        sw.samples.push(s); onSweepSample(j,s);
-        // Reject bus-garbage temps (>95C) and require sustained heat before
-        // aborting, so a single bad read can't kill the sweep.
-        let maxT=tp.temp_c; if(maxT>95) maxT=0;
-        if(maxT>=TEMP_TRIP){ if((sw.hotN=(sw.hotN||0)+1)>=3){ sw.hot=true; log(`! ${j.name}: ${maxT}C — aborting sweep`); finishSweep(); return; } } else sw.hotN=0;
+        // Integrated from the first sample of the flow, so every capture and
+        // every sweep sample shares one continuous frame with the home tick.
+        // Unwrapping only during step 4 would leave the two hard stops as bare
+        // raw counts, which is where the shortest-arc guess used to go wrong.
+        sw.live=tp.pos; sw.liveU=sw.uwP(tp.pos);
+        if(wiz.state==="sweeping"){
+          const s={p:sw.liveU, rp:tp.pos,
+                   load:tp.load_dpct/10, cur:tp.current_ma, temp:tp.temp_c};
+          sw.samples.push(s); onSweepSample(j,s);
+          // Reject bus-garbage temps (>95C) and require sustained heat before
+          // aborting, so a single bad read can't kill the sweep.
+          let maxT=tp.temp_c; if(maxT>95) maxT=0;
+          if(maxT>=TEMP_TRIP){ if((sw.hotN=(sw.hotN||0)+1)>=3){ sw.hot=true; log(`! ${j.name}: ${maxT}C — aborting`); finishGuided(); return; } } else sw.hotN=0;
+        } else {
+          paintLive(j);
+        }
       }
     }catch(e){ /* transient read miss; keep going */ }
     await sleep(demoMode?28:8);
   }
 }
+
+// Ticks from home, signed, seam-safe. Everything the flow shows or stores is
+// this number — raw ticks only ever leave the page inside the generated files.
+function fromHome(p){
+  const c=wiz.cap; if(!c) return null;
+  if(c.home_u!=null && wiz.sweep?.liveU!=null) return wiz.sweep.liveU - c.home_u;
+  return c.home_p==null? null : wrapSigned(p-c.home_p);
+}
+function paintLive(j){
+  const el=$("capLive"); if(!el) return;
+  const p=wiz.sweep?.live; if(p==null) return;
+  const d=fromHome(p);
+  const m=mapFor(j.id);
+  el.innerHTML = `<span class="tcell">pos <b>${p}</b></span>` +
+    (d!=null? `<span class="tcell">from default <b>${degs(m.sign*d*TICK_RAD)}</b></span>` : "");
+}
+
+function capStepIndex(){ return CAP_STEPS.indexOf(wiz.state); }
+function capRailHTML(){
+  const labels=["urdf default","max right","max left","two sweeps","back to default"];
+  const cur=capStepIndex();
+  return `<div class="steps">`+labels.map((l,i)=>
+    `<span class="step ${i<cur?"done":i===cur?"now":""}">${i+1}. ${l}</span>`).join("")+`</div>`;
+}
+
+function renderStep(){
+  const j=wiz.joints[wiz.cur]; if(!j) return;
+  const u=urdfByName.get(j.name);
+  const head=`<div class="panel-head"><h2>${esc(j.name)}</h2>
+      <span class="chip warn">torque OFF — move by hand</span>
+      <span class="spacer"></span>
+      <span class="note" style="margin:0">joint ${wiz.cur+1} / ${wiz.joints.length}</span></div>
+    ${capRailHTML()}`;
+  const live=`<div class="telem" id="capLive"></div>`;
+  const cancel=`<button class="ghost" id="capCancel">Cancel</button>`;
+  // ONLY on the two steps where the joint is at its zero pose. Both targets are
+  // measured from that pose, so pressing either at a hard stop would place the
+  // range from the wrong reference.
+  const sg=mapFor(j.id).sign;
+  const zt=zeroTarget(sg,u), rec=recommendPlacement(sg,u);
+  const pbtn=(id,label,t,kind)=>`<button class="ghost${rec===kind?" rec":""}" id="${id}"
+      title="Write the servo's offset so this pose reads ${t}${rec===kind?" — suggested for this joint":""}"
+      >${label} &rarr; ${t}</button>`;
+  const zero=pbtn("capZero","Set zero here",zt,"zero")+
+             pbtn("capCentre","Set centre here",CENTRE_TARGET,"centre")+
+    `<button class="ghost sm info" data-info="infoZero" title="why">i</button>`;
+  const ends=(t)=>{ const k=urdfTicks(sg,u); return k? `${Math.round(t+k.lo)} … ${Math.round(t+k.hi)}` : "?"; };
+  const zeroInfo=`<div class="info-body" id="infoZero" hidden>
+      <p class="note">The encoder counts 0…4095 over one turn and wraps at one physical angle — wherever the
+      horn happened to spline on. If that seam falls inside this joint's travel, the calibrated range is an
+      arc across it, <b>ticks_min comes out larger than ticks_max</b>, and the driver rejects the group.
+      Either button writes an offset into the servo's EEPROM so the pose you are holding reads the tick
+      shown, moving the seam out of the way for good — it survives power cycles and the ROS driver sees the
+      same frame.</p>
+      <p class="note"><b>Centre</b> (${CENTRE_TARGET}) is for a joint whose zero pose is in the
+      <b>middle</b> of its travel and which moves both ways from it. <b>Zero</b> (${zt}) is for a joint
+      whose zero pose <b>is a hard stop</b> and which only moves one way — centring one of those spends
+      half the encoder on a direction it cannot travel, which is what pushes the shoulder's far end past
+      4095.${u?` Here the URDF declares <b>${degs(u.lower)} … ${degs(u.upper)}</b>, which lands at ticks
+      ${ends(zt)} from Zero and ${ends(CENTRE_TARGET)} from Centre${rec?`, so <b>${rec}</b> is suggested`:``}.`:
+      ` This joint is not in the URDF, so neither can be checked against a range.`}</p>
+      <p class="note">The suggestion is only a reading of the URDF's numbers. Whether the default pose is
+      really a hard stop is something you can feel and it cannot. Ticks already captured for this joint are
+      rebased, so the flow carries on; other joints are untouched.</p>
+    </div>`;
+
+  if(wiz.state==="cap_home"){
+    stageCard(`${head}
+      <p class="prompt">Put <b>${esc(j.name)}</b> at its <b>URDF default</b> — the pose the model shows at
+        0&deg; — and capture it.</p>
+      <p class="note">This tick becomes the joint's home. Every angle after it, in the ROS config, in the
+        LeRobot config and in the 3D model, is measured from here${u?`, and the URDF's
+        <b>${degs(u.lower)} … ${degs(u.upper)}</b> is measured from here too`:""}.</p>
+      ${live}${zeroInfo}
+      <div class="bar" style="margin-top:12px"><button id="capBtn">Capture default</button>
+        ${zero}${cancel}</div>`);
+  }
+  else if(wiz.state==="cap_right" || wiz.state==="cap_left"){
+    const right = wiz.state==="cap_right";
+    stageCard(`${head}
+      <p class="prompt">Move <b>${esc(j.name)}</b> to its <b>${right?"maximum right":"maximum left"}</b>
+        hard stop and capture it.</p>
+      <p class="note">Go to the stop gently and let it settle before capturing — the tick is taken as-is, then
+        pulled back ${MARGIN} ticks (${deg(MARGIN*TICK_RAD).toFixed(1)}&deg;) so the calibrated limit never
+        commands into the stop itself.</p>
+      ${live}
+      <div class="bar" style="margin-top:12px">
+        <button id="capBtn">Capture ${right?"right":"left"} stop</button>
+        <button class="ghost" id="capBack">&larr; back</button>${cancel}</div>`);
+  }
+  else if(wiz.state==="sweeping"){
+    stageCard(`${head}
+      <p class="prompt">Now sweep <b>${esc(j.name)}</b> ${SWEEPS_WANTED} times, stop to stop.</p>
+      <p class="note">The travel limits are already captured — this pass is the health check. It watches for a
+        position discontinuity, which is an encoder that slipped, and it is the only part of the flow that
+        needs the joint to actually move through its range rather than to its ends.</p>
+      <div class="track"><div class="fill" id="cov"></div></div>
+      <div class="telem" id="sTelem"></div>
+      <div class="bar" style="margin-top:12px">
+        <button id="capBtn" disabled>Finish sweeps</button>
+        <button class="ghost" id="capBack">&larr; back</button>${cancel}
+        <span class="spacer"></span><span class="note" style="margin:0" id="sHint"></span>
+      </div>`);
+  }
+  else if(wiz.state==="cap_home2"){
+    stageCard(`${head}
+      <p class="prompt">Return <b>${esc(j.name)}</b> to the <b>URDF default</b> once more.</p>
+      <p class="note">The same pose as step 1. If the tick has moved, the encoder slipped somewhere in the
+        sweeps and every limit just measured is off by that much — which is worth knowing now rather than
+        after the arm is driven by them.</p>
+      ${live}${zeroInfo}
+      <div class="bar" style="margin-top:12px">
+        <button id="capBtn">Capture &amp; compute</button>
+        <button class="ghost" id="capBack">&larr; back</button>${zero}${cancel}</div>`);
+  }
+  const btn=$("capBtn"); if(btn) btn.onclick=capAdvance;
+  const back=$("capBack"); if(back) back.onclick=capBack;
+  const z=$("capZero"); if(z) z.onclick=()=>setZeroHere("zero");
+  const c=$("capCentre"); if(c) c.onclick=()=>setZeroHere("centre");
+  const cx=$("capCancel"); if(cx) cx.onclick=()=>{ wiz.sweep.cancel=true; enterJoint(); };
+  paintLive(j);
+}
+
+function capAdvance(){
+  const j=wiz.joints[wiz.cur], sw=wiz.sweep, p=sw.live;
+  if(p==null){ log("! no reading from the servo yet"); return; }
+  if(wiz.state==="cap_home"){
+    wiz.cap.home_p=p; wiz.cap.home_u=sw.liveU;
+    // The model has a real zero from here on, and keeps it: nothing later
+    // re-anchors, so the joint on screen tracks the hardware for the rest of
+    // the flow instead of drifting as the measured range grows.
+    anchors[j.id]=p;
+    wiz.state="cap_right";
+  }
+  else if(wiz.state==="cap_right"){ wiz.cap.a_p=p; wiz.cap.a_u=sw.liveU; wiz.state="cap_left"; }
+  else if(wiz.state==="cap_left"){
+    wiz.cap.b_p=p; wiz.cap.b_u=sw.liveU;
+    if(Math.abs(capDelta(wiz.cap,"b")-capDelta(wiz.cap,"a")) < 2*MARGIN+10){
+      log("! the two stops are less than "+(2*MARGIN+10)+" ticks apart — recapture them");
+      wiz.state="cap_right"; renderStep(); return;
+    }
+    wiz.state="sweeping";
+  }
+  else if(wiz.state==="sweeping"){ wiz.state="cap_home2"; }
+  else if(wiz.state==="cap_home2"){ wiz.cap.home2_p=p; wiz.cap.home2_u=sw.liveU; finishGuided(); return; }
+  renderStep(); renderOverlay();
+}
+function capBack(){
+  const i=capStepIndex(); if(i<=0) return;
+  wiz.state=CAP_STEPS[i-1];
+  // Samples are dropped, but NOT the unwrapper: it is anchored to the home
+  // capture and restarting it would strand every tick already captured in a
+  // different frame from the ones about to be.
+  if(wiz.state==="sweeping"){ wiz.sweep.samples=[]; wiz.sweep.traversals=0; wiz.sweep.atEnd=null; }
+  renderStep();
+}
+
+// Every tick captured so far is a number in the servo's old frame; the offset
+// just written shifts that frame by exactly `delta`, so adding it to each one
+// leaves the flow as valid as it was a moment ago. Doing this instead of making
+// the operator start the joint again is the whole reason the button can live
+// mid-flow rather than only before it.
+function rebaseCaptures(delta){
+  if(!delta) return;
+  const j=wiz.joints[wiz.cur], c=wiz.cap, sw=wiz.sweep;
+  if(c){
+    for(const k of ["home_p","a_p","b_p","home2_p"]) if(c[k]!=null) c[k]=modTick(c[k]+delta);
+    // The continuous values shift by the same constant and stay continuous —
+    // they are deliberately NOT wrapped back into 0..4095.
+    for(const k of ["home_u","a_u","b_u","home2_u"]) if(c[k]!=null) c[k]+=delta;
+  }
+  if(anchors[j.id]!=null) anchors[j.id]=modTick(anchors[j.id]+delta);
+  if(sw){
+    sw.samples.forEach(x=>{ x.rp=modTick(x.rp+delta); x.p+=delta; });
+    if(sw.live!=null) sw.live=modTick(sw.live+delta);
+    if(sw.liveU!=null) sw.liveU+=delta;
+    sw.uwP.rebase(delta);
+  }
+}
+
+async function setZeroHere(kind){
+  const j=wiz.joints[wiz.cur], p=wiz.sweep?.live;
+  if(p==null){ log("! no reading from the servo yet"); return; }
+  const m=mapFor(j.id), u=urdfByName.get(m.ros);
+  const target = kind==="centre"? CENTRE_TARGET : zeroTarget(m.sign,u);
+  // Warn, don't block: the URDF is a model, and an operator who knows the real
+  // travel is allowed to overrule it. Blocking here would make an arm whose
+  // URDF is wrong impossible to calibrate — which is what this page is for.
+  if(!placementFits(target,m.sign,u))
+    log(`! ${j.name}: at ${target} the URDF's declared travel runs outside 0…4095 — `+
+        `the other placement fits it; continuing anyway`);
+  const btn=$(kind==="centre"?"capCentre":"capZero");
+  if(btn){ btn.disabled=true; btn.textContent="writing…"; }
+  try{
+    const r=await setServoZero(j.id, target);
+    const shift=r?.shift!=null? r.shift : target-p;
+    rebaseCaptures(shift);
+    // Any earlier verdict for this joint was measured in the old frame and its
+    // ticks no longer name the same physical angles.
+    delete wiz.results[j.id];
+    log(`#${j.id} ${kind==="centre"?"centred":"zeroed"} — ${r?.before ?? p} is now ${target} `+
+        `(${shift>=0?"+":""}${shift} ticks, written to servo EEPROM)`);
+  }catch(e){ log(`! set ${kind} failed: `+e.message); }
+  renderStep(); renderRail(); renderOverlay();
+}
+
 function onSweepSample(j,s){
-  const sw=wiz.sweep;
-  sw.minP=Math.min(sw.minP,s.p); sw.maxP=Math.max(sw.maxP,s.p);
-  // Re-anchor the model on the midpoint of the travel seen so far: the model
-  // self-centres as the sweep grows and is already right when it's accepted.
-  if(sw.maxP>sw.minP) anchors[j.id]=modTick((sw.minP+sw.maxP)/2);
-  const spread=sw.maxP-sw.minP;
-  if(spread<=sw.lastSpread+2) sw.stall++; else sw.stall=0; sw.lastSpread=spread;
+  const sw=wiz.sweep, cap=wiz.cap;
+  // The ends are already known, so a traversal is well defined: arriving at one
+  // end having last been at the other. Counting reversals instead would score a
+  // twitch at the top of the range as a sweep.
+  const da=capDelta(cap,"a"), db=capDelta(cap,"b");
+  const lo=Math.min(da,db), hi=Math.max(da,db), span=hi-lo;
+  const d=s.p-cap.home_u;
+  const tol=span*END_TOL;
+  const end = d<=lo+tol? "lo" : d>=hi-tol? "hi" : null;
+  if(end && end!==sw.atEnd){ if(sw.atEnd) sw.traversals++; sw.atEnd=end; }
   renderOverlay();
   if(!$("cov")) return;
-  $("cov").style.width=Math.min(100,(spread/3500)*100)+"%";
-  $("sCount").textContent=`${sw.samples.length} samples`;
+  $("cov").style.width=Math.min(100,(sw.traversals/SWEEPS_WANTED)*100)+"%";
   const hot=s.temp>=TEMP_WARN;
-  $("sTelem").innerHTML=`<span class="tcell ${hot?"hot":""}">#${j.id} pos <b>${s.rp}</b> · load <b>${s.load.toFixed(0)}%</b> · <b>${s.temp}C</b></span>`;
-  const enough = spread>600 && sw.stall>25 && sw.samples.length>40;
-  if($("sHint")) $("sHint").textContent = enough? "looks complete — finish when ready" : "keep sweeping…";
+  $("sTelem").innerHTML=`<span class="tcell ${hot?"hot":""}">#${j.id} pos <b>${s.rp}</b> · `+
+    `<b>${degs(mapFor(j.id).sign*d*TICK_RAD)}</b> · load <b>${s.load.toFixed(0)}%</b> · <b>${s.temp}C</b></span>`;
+  const done = sw.traversals>=SWEEPS_WANTED;
+  const btn=$("capBtn"); if(btn) btn.disabled=!done;
+  if($("sHint")) $("sHint").textContent = done? `${sw.traversals} sweeps — finish when ready`
+                                              : `${sw.traversals} of ${SWEEPS_WANTED} sweeps`;
 }
-function finishSweep(){
-  const j=wiz.joints[wiz.cur]; if(wiz.state!=="sweeping") return;
+
+function finishGuided(){
+  const j=wiz.joints[wiz.cur];
   if(demoMode) demoSweep.active=false;          // let demoRead follow drive goals next
   wiz.state="computing";
   const sw=wiz.sweep;
-  if(sw.samples.length<10){ log("! too few samples; sweep again"); enterJoint(); return; }
-  const res = computeCalibration(sw.samples);
-  res.sweepHot = sw.hot;
-  // The math ran in unwrapped space; store limits/centre back as raw ticks
-  // (0..4095). The centre stays a valid raw tick inside the arc, so the arc is
-  // recoverable as signed offsets from it even when it crosses the seam.
-  res.min_p=modTick(res.min_p); res.max_p=modTick(res.max_p); res.center_p=modTick(res.center_p);
+  if(sw.samples.length<10){ log("! too few samples; run the sweeps again"); enterJoint(); return; }
+  const res=computeGuided(sw.samples, wiz.cap);
+  res.sweepHot=sw.hot; res.sweeps=sw.traversals;
   wiz.results[j.id]=res;
   wiz.state="verdict"; renderVerdict(j,res);
 }
-
 function verdictLine(j,r){
   return r.verdict==="clean"? `clean — travel [${r.min_p}..${r.max_p}], home ${r.center_p}`
                             : `fault — position jump near ${r.faultAt}`;
 }
+// Step 5 against step 1. Under a tick or two is the servo's own noise; more than
+// that and the limits just measured are all shifted by it.
+const RESIDUAL_WARN = 8;
+function residualLine(r){
+  if(r.home_residual==null) return "";
+  const d=Math.abs(r.home_residual);
+  if(d<=RESIDUAL_WARN)
+    return `<div class="verdict clean"><b>Returned to default within ${d} tick${d===1?"":"s"}</b>
+      (${degs(d*TICK_RAD)}) — nothing slipped during the sweeps.</div>`;
+  return `<div class="verdict fault"><b>Came back ${d} ticks off the default</b> (${degs(d*TICK_RAD)}).
+    The joint was returned to the same pose, so the encoder moved under it: every limit above is shifted by
+    that much. Recapture this joint.</div>`;
+}
 // Editable min / max / home with "capture from current hand-held position"
 // buttons. Torque is OFF at verdict/manual time, so the user can position the
 // joint by hand and grab the live position into any field.
+// The one place a calibration can be arithmetically fine here and useless on
+// the robot. Shown live under the editable limits, and it gates Accept, because
+// the alternative is a file that only fails at launch — inside the driver,
+// as "min_ticks >= max_ticks", a long way from the arm this is measured on.
+function seamBanner(){
+  return `<div class="verdict fault" style="margin:8px 0"><b>The travel crosses the encoder's
+    0/4095 seam.</b> min is a larger number than max, so the driver's clamp and LeRobot's range are both
+    nonsense and <code>st3215_manager</code> refuses the group at startup. Recalibrate this joint and, with
+    it held at its URDF default, press <b>Set zero here</b> if that pose is a hard stop, or
+    <b>Set centre here</b> if the joint moves both ways from it — either places the travel clear of the
+    seam.</div>`;
+}
 function limitsEditorHTML(v){
-  return `<div class="row" style="margin:10px 0 6px">
+  return `<div data-seam></div>
+    <div class="row" style="margin:10px 0 6px">
       <span class="unit">min <input type="number" class="eMin" min="0" max="4095" value="${v.min}" style="width:5rem"></span>
       <span class="unit">max <input type="number" class="eMax" min="0" max="4095" value="${v.max}" style="width:5rem"></span>
       <span class="unit">home <input type="number" class="eCenter" min="0" max="4095" value="${v.center}" style="width:5rem"></span>
@@ -1425,6 +2054,12 @@ function wireLimitsEditor(host,j){
 // joint exists in the URDF, whether they match what it declares.
 function showFit(host,j){
   const ed=readLimitsEditor(host), m=mapFor(j.id);
+  const seam=seamStraddles(ed.min, ed.max);
+  const sl=host.querySelector("[data-seam]"); if(sl) sl.innerHTML = seam? seamBanner() : "";
+  // `data-ok` carries whether the sweep itself passed, so re-running this on
+  // every keystroke can clear the seam block without also clearing a fault.
+  const acc=$("bake")||$("manBake");
+  if(acc) acc.disabled = acc.dataset.ok!=="1" || seam;
   const L=rosLimits({min_p:ed.min,max_p:ed.max,center_p:ed.center}, m.sign);
   const u=urdfByName.get(m.ros);
   const el=host.querySelector("[data-fit]"); if(!el) return;
@@ -1449,15 +2084,18 @@ function renderVerdict(j,r){
   stageCard(`
     <div class="panel-head"><h2>${esc(j.name)}</h2>
       <span class="chip ${ok?"ok":"bad"}">${ok?"travel ok":"fault"}</span><span class="spacer"></span></div>
-    <div class="kv"><div>travel<b>${r.min_p} … ${r.max_p}</b></div><div>home<b>${r.center_p}</b></div><div>samples<b>${r.n}</b></div></div>
+    <div class="kv"><div>travel<b>${r.min_p} … ${r.max_p}</b></div><div>home<b>${r.center_p}</b></div>${
+      r.sweeps!=null?`<div>sweeps<b>${r.sweeps}</b></div>`:""}<div>samples<b>${r.n}</b></div></div>
     <div class="verdict ${ok?"clean":"fault"}">${
-      ok? `<b>Travel captured.</b> Confirm the limits and home below — home becomes 0 rad in ROS and mid-scale in LeRobot.`
-        : `<b>Fault.</b> Position jumped near ${r.faultAt} — possible encoder slip. Check, then re-sweep or enter manually.`
+      ok? `<b>Travel captured.</b> Confirm the limits and home below — home is the URDF default you captured,
+           which becomes 0 rad in ROS and mid-scale in LeRobot.`
+        : `<b>Fault.</b> Position jumped near ${r.faultAt} — possible encoder slip. Check, then recalibrate or enter manually.`
     }${r.sweepHot?` <br>Temperature hit the trip during the sweep.`:""}</div>
+    ${residualLine(r)}
     <div id="limEd"></div>
     <div class="bar" style="margin-top:8px">
-      <button id="bake" ${ok?"":"disabled"}>Accept</button>
-      <button class="ghost" id="resweep">Re-sweep</button>
+      <button id="bake" data-ok="${ok?1:0}" ${ok?"":"disabled"}>Accept</button>
+      <button class="ghost" id="resweep">Recalibrate</button>
       <span class="spacer"></span>
     </div>`);
   $("limEd").innerHTML=limitsEditorHTML(v); wireLimitsEditor($("limEd"),j);
@@ -1477,7 +2115,7 @@ async function renderManual(j){
     <p class="prompt">Set min, max and home for <b>${esc(j.name)}</b>.</p>
     <p class="note">Torque is OFF — hand-position the joint and capture, or type values directly.</p>
     <div id="limEd"></div>
-    <div class="bar" style="margin-top:8px"><button id="manBake">Accept</button><button class="ghost" id="manBack">&larr; back</button></div>`);
+    <div class="bar" style="margin-top:8px"><button id="manBake" data-ok="1">Accept</button><button class="ghost" id="manBack">&larr; back</button></div>`);
   $("limEd").innerHTML=limitsEditorHTML(v); wireLimitsEditor($("limEd"),j);
   $("manBack").onclick=enterJoint;
   $("manBake").onclick=()=>{
@@ -1493,6 +2131,11 @@ async function renderManual(j){
 async function bakeJoint(j,r,ed){
   if(!wiz.cfg) return;
   ed=ed||{min:r.min_p,max:r.max_p,center:r.center_p};
+  if(seamStraddles(ed.min, ed.max)){
+    log(`! ${j.name}: travel ${ed.min}…${ed.max} crosses the 0/4095 seam — not accepted. `+
+        `Recalibrate and set the servo zero at the default pose.`);
+    return;
+  }
   r.min_p=ed.min; r.max_p=ed.max; r.center_p=ed.center;
   const s=wiz.cfg.servos.find(x=>x.id===j.id);
   if(s){ s.min=ed.min; s.max=ed.max; s.center=ed.center; }
@@ -1636,6 +2279,45 @@ async function attachMotionTest(j){
   q("#tNext").onclick=()=>finish(true);
   q("#tStop").onclick=()=>finish(false);
 }
+// Throw away every calibrated value and run the wizard again from joint one.
+//
+// The servo MAP is deliberately NOT cleared. Joint names, signs, LeRobot names
+// and models describe how the bus is wired, not what a sweep found — re-typing
+// them after every restart is exactly how a sign ends up wrong, and a wrong
+// sign is the failure that survives all the way to a policy driving the arm
+// backwards. Use Import/Export on the hardware tab to move a map between
+// machines; use this to redo the measurements.
+function startOver(){
+  const n=Object.keys(wiz.results).length;
+  const armed=Object.values(torqueState).some(Boolean);
+  if(n || armed){
+    const lines=[];
+    if(n) lines.push(`Discard calibration for ${n} joint${n===1?"":"s"}?`);
+    if(armed) lines.push("Any armed servo will be disarmed.");
+    lines.push("");
+    lines.push("The servo map — joint names, signs, LeRobot names, models — is kept.");
+    if(!confirm(lines.join("\n"))) return;
+  }
+  // A sweep or drive-test loop reads `wiz.state`/`wiz.sweep` to decide whether
+  // to keep going; stop it before the state underneath it changes.
+  if(wiz.sweep) wiz.sweep.cancel=true;
+  wiz.state="idle";
+  // A drive-test leaves its joint under power, and its Disarm button goes away
+  // with the card that owned it. Nothing else would put that torque down.
+  failSafeDisarm().catch(()=>{});
+  for(const k in torqueState) torqueState[k]=false;
+  paintAllDrive();
+
+  wiz.results={}; wiz.sweep=null; wiz.cur=0;
+  for(const k of Object.keys(anchors)) delete anchors[k];   // model re-anchors on the next sample
+  for(const k of Object.keys(goalTick)) delete goalTick[k];
+  if(wiz.cfg) wiz.cfg.servos.forEach(s=>{ s.min=0; s.max=4095; s.center=2048; });
+  $("genOut").innerHTML=""; $("fitOut").innerHTML="";
+
+  renderRail(); renderFit(); refreshGenState(); enterJoint(); renderOverlay();
+  log(`start over — cleared ${n} calibrated joint${n===1?"":"s"}; servo map kept`);
+}
+
 function nextJoint(){
   if(wiz.cur < wiz.joints.length-1){ wiz.cur++; enterJoint(); }
   else renderGlobalDone();
@@ -1676,6 +2358,22 @@ function calibratedJoints(){
     .filter(x=>x.r && x.r.verdict==="clean")
     .map(x=>({ joint:x.j, res:x.r, map:mapFor(x.j.id) }));
 }
+// The wiring half of the hardware config: which motor ID is which joint and
+// which way it turns. The server matches these against the groups declared in
+// mod101_hw_bringup/config/servos.yaml and writes servos.generated.yaml.
+//
+// EVERY MAPPED SERVO IS SENT, not just the calibrated ones. A joint whose sweep
+// has not been accepted yet still has a known ID and sign, and leaving it out
+// would silently shorten that group's command array — which shifts every joint
+// after it onto the wrong motor.
+function servoMapPayload(){
+  if(!wiz.cfg) return [];
+  return wiz.cfg.servos.map(s=>{
+    const m=mapFor(s.id);
+    return { id: s.id, joint: m.ros, sign: m.sign };
+  });
+}
+
 function buildArtifacts(){
   const rows=calibratedJoints();
   const ros={}, lerobot={};
@@ -1723,6 +2421,15 @@ function refreshGenState(){
 }
 const PRE_STYLE = "background:var(--bg-surface);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);"+
                   "padding:10px 12px;overflow-x:auto;font-family:var(--font-mono);font-size:11px;line-height:1.55;";
+// Mirrors what the server writes, for the preview. It cannot know the group
+// split — that lives in the authored servos.yaml the server reads — so the
+// preview lists the mapping flat and the file on disk carries the grouping.
+function servoMapPreview(){
+  const rows=servoMapPayload();
+  if(!rows.length) return "(no servos on the bus)";
+  const w=Math.max(...rows.map(r=>r.joint.length));
+  return rows.map(r=>`  id ${String(r.id).padStart(2)}  ${r.joint.padEnd(w)}  direction ${r.sign>0?"+1":"-1"}`).join("\n");
+}
 function renderGenerated(){
   const a=buildArtifacts();
   if(!a.count){ $("genOut").innerHTML=`<p class="note">No joint has calibrated clean yet.</p>`; return; }
@@ -1731,6 +2438,14 @@ function renderGenerated(){
   $("genOut").innerHTML=
     `<div class="row" style="margin-top:10px"><span class="chip mute">src/mod101_control/config/calibration.yaml</span></div>`+
     `<pre style="${PRE_STYLE}margin:6px 0 12px">${esc(yaml)}</pre>`+
+    `<div class="row"><span class="chip mute">src/hardware/mod101_hw_bringup/config/servos.generated.yaml</span></div>`+
+    `<pre style="${PRE_STYLE}margin:6px 0 12px">${esc(servoMapPreview())}</pre>`+
+    `<p class="note">The wiring half of the servo driver's config — IDs, joints and
+      directions. Group membership, the bus port, speeds and accelerations stay
+      hand-authored in <code>servos.yaml</code>, which this never overwrites;
+      <code>bringup.launch.py</code> merges the two, and takes the travel limits
+      from the calibration above. After a write, the arm comes up with
+      <code>ros2 launch mod101_hw_bringup bringup.launch.py</code>.</p>`+
     `<div class="row"><span class="chip mute">LeRobot calibration JSON</span></div>`+
     `<pre style="${PRE_STYLE}margin:6px 0 0">${esc(json)}</pre>`+
     `<p class="note">Drop the JSON at
@@ -1743,8 +2458,11 @@ async function writeArtifacts(){
   if(!a.count){ log("! nothing to write"); return; }
   renderGenerated();
   try{
-    const d=await api("/calibration", { ros:a.ros, lerobot:a.lerobot, yaml: yamlDump(a.ros) });
+    const d=await api("/calibration", { ros:a.ros, lerobot:a.lerobot,
+                                        yaml: yamlDump(a.ros),
+                                        servos: servoMapPayload() });
     log(`wrote ${d.written.join(", ")}`);
+    for(const w of (d.warnings||[])) log(`! ${w}`);
     $("genState").textContent="written"; $("genState").className="chip ok";
   }catch(e){ log("! write failed: "+(e.message||e)); }
 }
@@ -1789,7 +2507,7 @@ function startPoller(){
       // covers all the OTHERS (no double-read of the active joint, and no
       // competing for the single-threaded server).
       let ids=pollIds;
-      if(wiz.state==="sweeping" || wiz.state==="arm_check"){
+      if(CAP_STEPS.includes(wiz.state) || wiz.state==="arm_check"){
         const aj=wiz.joints[wiz.cur];
         if(aj) ids=pollIds.filter(id=>id!==aj.id);
       }
@@ -1899,6 +2617,8 @@ $("connect").onclick=async()=>{
 };
 $("estop").onclick=async()=>{ await failSafeDisarm(); for(const k in torqueState) torqueState[k]=false; paintAllDrive(); log("E-STOP: all servos disarmed"); };
 $("selftest").onclick=()=>runCalibrationTests();
+$("startOver").onclick=startOver;
+$("rezero").onclick=rezeroModel;
 $("rescan").onclick=async()=>{
   try{ const d=await api("/bus/scan",{}); log(`scan: [${d.servos.join(", ")}]`); adoptServos(d.servos); }
   catch(e){ log("! rescan failed: "+e.message); }

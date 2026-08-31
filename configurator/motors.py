@@ -34,9 +34,12 @@ DEFAULT_SCAN_HI = 99      # servo IDs above this aren't scanned (ListServos
 # EEPROM registers and the comm status code, from st3215/values.py. Mirrored
 # here rather than imported because st3215 is imported lazily, in connect().
 REG_ID = 5
+REG_OFS_L = 31            # position-correction offset, EEPROM, 2 bytes
+REG_TORQUE_ENABLE = 40
 REG_LOCK = 55
 COMM_OK = 0
 TICKS = 4096
+MAX_OFS = 2047            # the offset register is 11 bits plus a sign bit
 LOAD_FULL_SCALE = 1023.0  # ReadLoad duty-cycle range
 
 
@@ -236,6 +239,22 @@ class MotorBus:
             'temp_c': int(temp or 0),
         }
 
+    def correction(self, sid: int) -> dict:
+        """The servo's stored position-correction offset (EEPROM, reg 31/32).
+
+        Read-only, and separate from telemetry() on purpose: it is one more bus
+        round trip per motor and it only changes when set_zero writes it, so
+        putting it in the 50 Hz poll would spend the bus on a constant.
+        """
+        st = self._require()
+        with self._lock:
+            ofs = st.ReadCorrection(int(sid))
+            pos = st.ReadPosition(int(sid))
+        if ofs is None:
+            raise BusError(f'servo {sid}: could not read its position correction')
+        return {'id': int(sid), 'correction': int(ofs),
+                'pos': None if pos is None else int(pos)}
+
     def torque(self, sid: int, on: bool) -> bool:
         st = self._require()
         with self._lock:
@@ -353,6 +372,112 @@ class MotorBus:
 
             self._seen = sorted(set(self._seen) - {old} | {new})
         return True
+
+    @staticmethod
+    def _wrap_ofs(x: int) -> int:
+        """An offset is only meaningful mod 4096, so fold it into what the
+        register can actually hold."""
+        v = ((int(x) % TICKS) + TICKS) % TICKS
+        if v > TICKS // 2 - 1:
+            v -= TICKS
+        return max(-MAX_OFS, min(MAX_OFS, v))
+
+    def set_zero(self, sid: int, target: int) -> dict:
+        """Make the servo's CURRENT physical position read `target`.
+
+        The servo carries a position-correction offset in EEPROM (REG_OFS):
+        what it reports is the raw encoder count minus that offset. Rewriting
+        it moves the whole reported frame, permanently and for every later
+        reader — this page, the ROS driver, LeRobot — which is the only reason
+        it is worth touching at all. A correction that lived in a config file
+        would be undone by the next tool that didn't read that file.
+
+        WHY A JOINT NEEDS IT. The encoder is absolute over one turn and its
+        count wraps 4095 -> 0 at one physical angle, fixed by nothing but how
+        the horn happened to spline on. If that seam lands inside a joint's
+        travel, the calibrated range is an arc across it: min_ticks comes out
+        numerically GREATER than max_ticks, the clamp and LeRobot's range are
+        both nonsense, and st3215_manager refuses the group outright.
+
+        WHY `target` IS A PARAMETER AND NOT 2048. The obvious move is the
+        servo's own "define middle" command, which puts the held pose at
+        mid-scale. That is right only for a joint whose zero pose sits in the
+        middle of its travel. mod101's shoulder, elbow and wrist roll all run
+        0..180 degrees FROM their zero pose, so centring their zero pushes the
+        far end to 4096 — it creates the seam crossing it was meant to cure.
+        The caller knows the joint's range and picks a target that fits the
+        whole of it inside 0..4095; here that is just a number to hit.
+
+        Returns the frame shift, which the caller owes to any tick it captured
+        before this: every one of them moves by exactly that much.
+        """
+        st = self._require()
+        sid, target = int(sid), int(target)
+        if not (0 <= target < TICKS):
+            raise BusError(f'target must be 0..{TICKS - 1}')
+        with self._lock:
+            if not st.PingServo(sid):
+                raise BusError(f'servo {sid} is not responding')
+
+            # A servo that is HOLDING a position must not be re-framed under
+            # its own goal: the goal register keeps its number while the number
+            # comes to mean a different angle, so the joint slews there the
+            # instant the offset lands. Refuse rather than disarm — dropping
+            # torque on an arm that is holding itself up is its own accident.
+            armed, res, _ = st.read1ByteTxRx(sid, REG_TORQUE_ENABLE)
+            if res != COMM_OK:
+                raise BusError(f'servo {sid}: could not read its torque state')
+            if armed:
+                raise BusError(
+                    f'servo {sid} is under torque — disarm it and hold the joint by '
+                    f'hand before setting its zero')
+
+            before = st.ReadPosition(sid)
+            if before is None or before < 0:
+                raise BusError(f'servo {sid}: could not read its position')
+            ofs0 = st.ReadCorrection(sid)
+            if ofs0 is None:
+                raise BusError(f'servo {sid}: could not read its position correction')
+
+            # reported = raw - ofs, so to report `target` at the raw count we
+            # are sitting on now: ofs_new = (before + ofs0) - target.
+            ofs_new = self._wrap_ofs(before + ofs0 - target)
+
+            # REG_OFS is in the EEPROM block, so unlock first — and prove it,
+            # because a rejected write reports success either way. Same dance
+            # as change_id, for the same reason.
+            res, _ = st.write1ByteTxRx(sid, REG_LOCK, 0)
+            if res != COMM_OK:
+                raise BusError(f'servo {sid}: EEPROM unlock was not acknowledged')
+            time.sleep(0.05)
+            lock, res, _ = st.read1ByteTxRx(sid, REG_LOCK)
+            if res != COMM_OK or lock != 0:
+                raise BusError(f'servo {sid}: EEPROM is still locked — zero not set')
+
+            res, _ = st.CorrectPosition(sid, ofs_new)
+            if res != COMM_OK:
+                raise BusError(f'servo {sid}: the offset write was not acknowledged')
+            time.sleep(0.1)
+
+            relock, _ = st.write1ByteTxRx(sid, REG_LOCK, 1)
+            after = st.ReadPosition(sid)
+            correction = st.ReadCorrection(sid)
+
+        if relock != COMM_OK:
+            raise BusError(f'servo {sid}: zero was set but the EEPROM did not re-lock')
+        if after is None or after < 0:
+            raise BusError(f'servo {sid}: zero was set but the position did not read back')
+        # Torque is off and the joint is hand-held, so a few ticks of drift are
+        # normal; a large miss means the offset did not take.
+        drift = ((after - target + TICKS // 2) % TICKS) - TICKS // 2
+        if abs(drift) > 50:
+            raise BusError(
+                f'servo {sid}: after the write it reads {after}, not ~{target} — '
+                f'the offset did not take; nothing has been rebased')
+
+        return {'before': int(before), 'after': int(after), 'target': target,
+                'shift': target - int(before),
+                'correction': None if correction is None else int(correction)}
 
     # ---- safety --------------------------------------------------------
 

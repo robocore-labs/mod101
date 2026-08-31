@@ -53,3 +53,10 @@ dist/
 /reference/*
 !/reference/README.md
 .bench/
+
+# The two generic hardware drivers are their own repos (robocore-labs/
+# ros2_control_bridge, robocore-labs/ros2_feetech_manager). They get symlinked
+# or vcs-imported into src/hardware/ so colcon builds them with this workspace;
+# either way they are not this repo's content.
+/src/hardware/ros2_control_bridge
+/src/hardware/ros2_feetech_manager

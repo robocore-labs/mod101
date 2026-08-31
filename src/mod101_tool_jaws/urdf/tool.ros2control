@@ -16,13 +16,29 @@
       </hardware>
     </xacro:if>
     <xacro:unless value="${use_sim}">
-      <hardware>
-        <!-- Placeholder: replace with the real bus driver once wired up. -->
-        <plugin>mock_components/GenericSystem</plugin>
-      </hardware>
+      <xacro:if value="${'$(arg hardware)' == 'bridge'}">
+        <hardware>
+          <!-- Own <ros2_control> system, so its own bridge instance. The jaw
+               servo is on the same Feetech bus as the arm, but ros2_control
+               components are independent: both instances subscribe to the same
+               joint-state topic and each ignores the joints it does not own. -->
+          <plugin>ros2_control_bridge/TopicBridge</plugin>
+          <param name="state_topic">/motor_manager/joint_states</param>
+          <param name="cmd_topic_prefix">/motor_manager</param>
+        </hardware>
+      </xacro:if>
+      <xacro:unless value="${'$(arg hardware)' == 'bridge'}">
+        <hardware>
+          <!-- Commands loop back as state. Fine for a dry run, moves nothing. -->
+          <plugin>mock_components/GenericSystem</plugin>
+        </hardware>
+      </xacro:unless>
     </xacro:unless>
 
     <joint name="${prefix}6">
+      <!-- Group -> /motor_manager/tool_cmd, one value. The name has to match
+           the group in mod101_hw_bringup/config/servos.yaml. -->
+      <param name="group">tool</param>
       <command_interface name="position">
         <param name="min">0.0</param>
         <param name="max">2.14</param>

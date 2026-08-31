@@ -17,6 +17,11 @@
 # could never finish: `simulation` declared no volumes, so it watched a file
 # in its own empty /ws forever.
 
+# Explicit, because docker/hardware.compose.yaml sits beside this file and both
+# would otherwise default to the project name "docker" — sharing a project with
+# the real robot's stack, where `down` on either reaches the other's containers.
+name: mod101-sim
+
 x-ros: &ros
   # HOST NETWORKING + IPC. Plain localhost DDS discovery, no bridge network
   # and no container DNS, and the agent's port 10101 is reachable from this

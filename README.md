@@ -179,6 +179,90 @@ python3 configurator/server.py  # http://localhost:8001/
 ```
 
 
+## Running on real hardware
+
+The bench in containers, against the actual arm. Same shape as the sim stack:
+one image built from this repo, one pulled for the agent.
+
+**Calibrate first.** The arm has no configuration stored on it, so without a
+calibration every joint angle is offset by wherever its servo horn happened to
+be splined on. See [`docs/calibration.md`](docs/calibration.md); it takes a few
+minutes per joint and only has to be done once per arm.
+
+```bash
+docker compose -f docker/hardware.compose.yaml up --build
+```
+
+That is the whole thing. The build clones the driver packages itself
+(`src/hardware/hardware.repos`), and the servo bus is found at
+`/dev/link101-servo` — the Link101's udev name for its Motor endpoint, stable
+whatever `ttyACMn` it lands on. `docker/hardware.env.example` covers the cases
+that differ from this bench; none of it is required.
+
+Working on the drivers? The image contains what is on `main`, not what is
+checked out locally — push first, then bust the cached clone:
+
+```bash
+docker compose -f docker/hardware.compose.yaml build \
+  --build-arg DRIVERS_CACHEBUST=$(date +%s)
+```
+
+That gives you three things:
+
+| | |
+|---|---|
+| the robot | `ros2_control` on the real servo bus |
+| <http://localhost:8888> | ROSBoard — the graph in a browser, **and joint sliders that move the arm** |
+| `ws://localhost:10101` | the robocore agent |
+
+Stop it with `docker compose -f docker/hardware.compose.yaml down`. Use that
+rather than Ctrl-C'ing a host launch: killing a launch by hand takes the
+launcher and leaves its `robot_state_publisher` running, which then publishes
+`/robot_description` and TF into the *next* run's graph.
+
+### Before the first run
+
+**Bringing the stack up energises the arm.** Every servo is armed and told to
+hold its present position — no jump, but live and drawing current. Two things
+follow from that:
+
+- **Put the arm somewhere it can hold, and near its calibrated home.** A joint
+  resting outside its calibrated travel gets its first command clamped back
+  into range, which turns "hold still" into a move of however far outside it
+  was. The driver refuses to start when that distance is more than a few
+  degrees, rather than making the move.
+- **There is no e-stop in this stack.** `brake_method: torque_disable` drops
+  torque when a group is commanded to stop; nothing here cuts power.
+
+A dry run first is free, and touches nothing:
+
+```bash
+docker compose -f docker/hardware.compose.yaml run --rm --no-deps hardware \
+  ros2 launch mod101_hw_bringup bringup.launch.py \
+  hardware:=mock bus:=false cameras:=false
+```
+
+`bus:=false` is the real dry run — the servo driver does not start, so nothing
+is energised. `hardware:=mock` alone is not: it only swaps the `ros2_control`
+plugin, and the driver is a separate node that arms motors regardless.
+
+### When it doesn't come up
+
+| what it says | what it is |
+|---|---|
+| `N of M motors did not answer` | motor power. The logic side is USB-fed, so the port opens and the chain stays silent — it looks like a working driver with a dead robot |
+| `is at N, outside its calibrated travel` | move that joint back by hand (torque is off) and start again, or recalibrate if the range is wrong |
+| `could not open port` | no `/dev/link101-servo` (udev rules not installed?), or the container user is not in the host's `dialout` group (`DIALOUT_GID` in `.env`) |
+| `NO CALIBRATION at ...` | it will run, uncalibrated, and every angle will be wrong. Run the configurator |
+
+Never point the bus at `/dev/ttyACMn`. The Link101 exposes five CDC endpoints
+and their numbering moves whenever anything re-enumerates — it shifted once
+mid-session on this bench. `/dev/link101-servo` is the udev name that does not.
+
+Full detail, including the arguments and what each config file owns:
+[`src/hardware/mod101_hw_bringup/README.md`](src/hardware/mod101_hw_bringup/README.md).
+
+
 ## Embedding in another robot
 
 The arm is defined as the `mod101_arm` xacro macro

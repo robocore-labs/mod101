@@ -31,9 +31,11 @@ Servo bus (see motors.py — talks to the Feetech chain over USB-TTL directly):
   POST /bus/scan          - re-ping the bus
   POST /bus/disarm        - torque off everything (also the unload beacon)
   GET  /servo/<id>        - one servo's telemetry
+  GET  /servo/<id>/correction - its stored zero offset (EEPROM reg 31/32)
   POST /servo/<id>/torque - {on}
   POST /servo/<id>/move   - {pos, speed?, accel?}
   POST /servo/<id>/profile- {speed, accel}
+  POST /servo/<id>/zero   - {target} define the current position as `target`
   POST /servo/<id>/id     - {to} reassign servo ID
 
 Stdlib only. Run from project root:
@@ -41,6 +43,7 @@ Stdlib only. Run from project root:
 """
 
 import atexit
+import datetime
 import http.server
 import json
 import threading
@@ -52,6 +55,7 @@ import socketserver
 import subprocess
 import sys
 import tempfile
+import yaml
 from pathlib import Path
 
 # Run as `python3 configurator/server.py` this is already sys.path[0], but be
@@ -78,6 +82,21 @@ MASSES = DESC / 'link_masses.json'
 CAL_DIR = SRC / 'mod101_control' / 'config'
 CAL_YAML = CAL_DIR / 'calibration.yaml'
 CAL_LEROBOT = CAL_DIR / 'lerobot_calibration.json'
+
+# The hardware bringup's servo config. `SERVOS_YAML` is HAND-AUTHORED — bus
+# port, rates, which groups exist, speeds, accelerations, safety flags — and
+# this server never writes it. `SERVOS_GENERATED` is the half the configurator
+# knows: which motor ID is which joint and which way it turns. The launch
+# merges the second over the first.
+#
+# Two files rather than one because a generator that rewrites a hand-authored
+# file eats the comments explaining why the numbers are what they are, and
+# those comments are the only record of, say, why the shoulder runs at half
+# speed. Keeping the machine's half separate means neither can clobber the
+# other.
+HW_DIR = SRC / 'hardware' / 'mod101_hw_bringup' / 'config'
+SERVOS_YAML = HW_DIR / 'servos.yaml'
+SERVOS_GENERATED = HW_DIR / 'servos.generated.yaml'
 
 # The two rail-length build args: <xacro:arg name="shoulder_ext_length" default="0.130"/>
 LEN_ARG_RE = re.compile(
@@ -315,10 +334,106 @@ def read_calibration() -> dict:
         'yaml': CAL_YAML.read_text() if CAL_YAML.is_file() else None,
         'lerobot': (json.loads(CAL_LEROBOT.read_text())
                     if CAL_LEROBOT.is_file() else None),
+        'servos': (SERVOS_GENERATED.read_text()
+                   if SERVOS_GENERATED.is_file() else None),
     }
 
 
-def write_calibration(yaml_text: str, lerobot: dict) -> list[str]:
+def _authored_groups() -> dict:
+    """group name -> list of joint names, from the hand-authored servos.yaml.
+
+    GROUP MEMBERSHIP IS READ, NOT INFERRED. The obvious shortcut is to sort
+    joints by name here — anything starting `hn_` is the head, `6` is the tool
+    — which is exactly the guessing that used to live in the ros2_control
+    bridge and put the pan/tilt joints on the arm's topic. The authored file
+    already states the answer; this reads it.
+    """
+    if not SERVOS_YAML.is_file():
+        raise ValueError(
+            f'{SERVOS_YAML.relative_to(ROOT)} not found — it defines which '
+            f'groups exist and which joints belong to them, and this server '
+            f'only fills in the per-motor half')
+    doc = yaml.safe_load(SERVOS_YAML.read_text()) or {}
+    params = (doc.get('servo_manager_node') or {}).get('ros__parameters') or {}
+    groups = {}
+    for name in params.get('group_names') or []:
+        block = params.get(name)
+        if isinstance(block, dict):
+            groups[name] = [str(j) for j in (block.get('joint_names') or [])]
+    if not groups:
+        raise ValueError(f'{SERVOS_YAML.name} declares no usable groups')
+    return groups
+
+
+def render_servo_map(entries: list) -> tuple[str, list]:
+    """The configurator's servo map as servo-manager parameters.
+
+    `entries` is one dict per servo: {id, joint, sign}. Returns the YAML text
+    and a list of human-readable warnings.
+
+    The order of joints inside a group is NOT this function's choice — it comes
+    from the authored file, because that same order is the layout of the
+    Float64MultiArray the ros2_control bridge publishes on that group's topic.
+    Sorting by motor ID here would silently reorder the wire format.
+    """
+    groups = _authored_groups()
+    by_joint = {}
+    for e in entries:
+        joint = str(e.get('joint') or '').strip()
+        if joint:
+            by_joint[joint] = e
+
+    warnings, out, state_index = [], {}, 0
+    for gname, joints in groups.items():
+        ids, names, dirs, cmd_idx, st_idx = [], [], [], [], []
+        for joint in joints:
+            e = by_joint.pop(joint, None)
+            if e is None:
+                warnings.append(
+                    f'group "{gname}": no servo mapped to {joint} — left as authored')
+                continue
+            ids.append(int(e['id']))
+            names.append(joint)
+            dirs.append(1 if int(e.get('sign', 1)) >= 0 else -1)
+            cmd_idx.append(len(names) - 1)     # index within this group's array
+            st_idx.append(state_index)         # slot in the shared JointState
+            state_index += 1
+        if ids:
+            out[gname] = dict(motor_ids=ids, joint_names=names, direction=dirs,
+                              command_indices=cmd_idx, state_indices=st_idx)
+    for joint in by_joint:
+        warnings.append(f'{joint} is mapped to a servo but belongs to no group '
+                        f'in servos.yaml — it will not be driven')
+
+    lines = [
+        '# GENERATED by configurator/calibrate.html — do not edit.',
+        '#',
+        '# The per-motor half of the servo manager config: which motor ID is',
+        '# which joint, which way it turns, and where it sits in the arrays.',
+        '# Everything else — port, rates, speeds, accelerations, which groups',
+        '# exist — is hand-authored in servos.yaml, which this never touches.',
+        '# bringup.launch.py loads servos.yaml and merges this over it.',
+        '#',
+        '# Joint order within a group comes from servos.yaml and IS the layout',
+        '# of the command array on that group\'s topic. It is not sorted here.',
+        '#',
+        f'# generated: {datetime.datetime.now(datetime.timezone.utc).isoformat()}',
+        'servo_manager_node:',
+        '  ros__parameters:',
+    ]
+    for gname, g in out.items():
+        lines.append(f'    {gname}:')
+        lines.append(f'      motor_ids: {g["motor_ids"]}')
+        lines.append('      joint_names: [' +
+                     ', '.join(f'"{n}"' for n in g['joint_names']) + ']')
+        lines.append(f'      direction: {g["direction"]}')
+        lines.append(f'      command_indices: {g["command_indices"]}')
+        lines.append(f'      state_indices: {g["state_indices"]}')
+    return '\n'.join(lines) + '\n', warnings
+
+
+def write_calibration(yaml_text: str, lerobot: dict,
+                      servos: list | None = None) -> tuple[list, list]:
     """Persist the wizard's output. `yaml_text` is rendered client-side so the
     page's preview and the file on disk can't drift; we only sanity-check it."""
     if not isinstance(yaml_text, str) or 'mod101_calibration:' not in yaml_text:
@@ -334,7 +449,15 @@ def write_calibration(yaml_text: str, lerobot: dict) -> list[str]:
     CAL_DIR.mkdir(parents=True, exist_ok=True)
     CAL_YAML.write_text(yaml_text)
     CAL_LEROBOT.write_text(json.dumps(lerobot, indent=2) + '\n')
-    return [str(p.relative_to(ROOT)) for p in (CAL_YAML, CAL_LEROBOT)]
+    written = [CAL_YAML, CAL_LEROBOT]
+
+    warnings = []
+    if servos:
+        text, warnings = render_servo_map(servos)
+        HW_DIR.mkdir(parents=True, exist_ok=True)
+        SERVOS_GENERATED.write_text(text)
+        written.append(SERVOS_GENERATED)
+    return [str(p.relative_to(ROOT)) for p in written], warnings
 
 
 _SRC_OVERLAY: str | None = None
@@ -492,6 +615,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 try:    return self._json(200, BUS.telemetry(int(parts[0])))
                 except BusError as e:   return self._json(409, {'error': str(e)})
                 except Exception as e:  return self._json(500, {'error': str(e)})
+            if len(parts) == 2 and parts[0].isdigit() and parts[1] == 'correction':
+                try:    return self._json(200, BUS.correction(int(parts[0])))
+                except BusError as e:   return self._json(409, {'error': str(e)})
+                except Exception as e:  return self._json(500, {'error': str(e)})
             return self._json(400, {'error': 'expected GET /servo/<id>'})
 
         if path.rstrip('/') == '/urdf':
@@ -567,8 +694,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
         if path == '/calibration':
             try:
-                written = write_calibration(data.get('yaml'), data.get('lerobot'))
-                return self._json(200, {'ok': True, 'written': written})
+                written, warnings = write_calibration(
+                    data.get('yaml'), data.get('lerobot'), data.get('servos'))
+                return self._json(200, {'ok': True, 'written': written,
+                                        'warnings': warnings})
             except Exception as e:
                 return self._json(400, {'error': str(e)})
 
@@ -616,6 +745,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 if action == 'profile':
                     BUS.profile(sid, int(data['speed']), int(data['accel']))
                     return self._json(200, {'ok': True})
+                if action == 'zero':
+                    return self._json(200, {'ok': True,
+                                            **BUS.set_zero(sid, int(data['target']))})
                 if action == 'id':
                     BUS.change_id(sid, int(data['to']))
                     return self._json(200, {'ok': True, **BUS.status()})

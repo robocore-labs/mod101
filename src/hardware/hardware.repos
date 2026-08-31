@@ -1,0 +1,25 @@
+# The generic packages mod101_hw_bringup configures. None of them knows
+# anything about mod101 — they are shared with every other robocore robot,
+# which is why they are separate repos rather than packages in this tree.
+#
+#   vcs import src/hardware < src/hardware/hardware.repos
+#
+# The container build runs exactly this line (docker/Dockerfile.hw), so what
+# ends up in the image is whatever is on `main` at build time — not whatever
+# happens to be checked out here.
+#
+# HTTPS, not SSH. `git@github.com:...` needs a key agent, which a docker build
+# does not have; these have to be clonable by a container with no credentials.
+repositories:
+  ros2_control_bridge:
+    type: git
+    url: https://github.com/robocore-labs/ros2_control_bridge.git
+    version: main
+  ros2_feetech_manager:
+    type: git
+    url: https://github.com/robocore-labs/ros2_feetech_manager.git
+    version: main
+  rosboard:
+    type: git
+    url: https://github.com/cristidragomir97/rosboard-with-extras.git
+    version: main

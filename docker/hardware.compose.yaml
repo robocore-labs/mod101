@@ -1,0 +1,143 @@
+# The mod101 bench stack ON REAL HARDWARE: the arm on its camera-tower
+# harness, with the robocore agent in front of it.
+#
+#   cp docker/hardware.env.example docker/.env   # then edit MOD101_BUS
+#   docker compose -f docker/hardware.compose.yaml up --build
+#   docker compose -f docker/hardware.compose.yaml down
+#
+# The sim twin is docker/compose.yaml, and the shape is the same: one image
+# built from this repo, one image pulled for the agent.
+#
+# WHY THIS EXISTS AT ALL, beyond parity with the sim. Running the stack from a
+# host shell leaves orphans — a `kill` on the launch takes the launcher and
+# misses its robot_state_publisher, which keeps publishing /robot_description
+# and TF into the next run's graph. Three of those accumulated in one
+# afternoon. `docker compose down` cannot leave one behind.
+
+# BOTH COMPOSE FILES LIVE IN docker/, so without this they would both default
+# to the project name "docker" — and `down` on one would report the other's
+# containers as orphans and offer to remove them.
+name: mod101-hw
+
+x-ros: &ros
+  # HOST NETWORKING + IPC, as in the sim stack: plain localhost DDS discovery,
+  # and the agent's port 10101 reachable from this machine with no mapping.
+  network_mode: host
+  ipc: host
+  # BOTH SERVICES RUN AS THE SAME UID. With ipc:host they share the host's
+  # /dev/shm, which is also FastDDS's transport between them; mixed UIDs there
+  # means participants discover each other and exchange no data.
+  user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+  # The serial device is usually root:dialout 0660. The container user is not
+  # in that group unless it is added here, and the failure reads as "could not
+  # open port" — indistinguishable from an unplugged robot.
+  group_add: ["${DIALOUT_GID:-20}"]
+  environment: &ros-env
+    # A DIFFERENT DOMAIN FROM THE SIM, and this one is not cosmetic. The sim
+    # stack runs on domain 1. Sharing a domain would put a simulated
+    # controller_manager and a real one on the same graph: the sim's
+    # arm_controller would publish onto the topics this arm's bridge is reading,
+    # and a `ros2 topic pub` meant for the bench would reach the robot. Keep
+    # them apart even though they are never meant to run together.
+    ROS_DOMAIN_ID: "${ROS_DOMAIN_ID:-2}"
+    ROS_AUTOMATIC_DISCOVERY_RANGE: LOCALHOST
+    RMW_IMPLEMENTATION: rmw_fastrtps_cpp
+    RCUTILS_COLORIZED_OUTPUT: "1"
+    HOME: /home/ubuntu
+
+services:
+
+  # The robot: the description, ros2_control over the topic bridge, and the
+  # Feetech bus driver.
+  hardware:
+    <<: *ros
+    image: mod101-hw:jazzy
+    build:
+      context: ..                    # the repo root: the image needs src/
+      dockerfile: docker/Dockerfile.hw
+    # The servo bus by its udev name: /dev/link101-servo is the Link101's Motor
+    # endpoint whatever ttyACMn it lands on, so neither this file nor
+    # servos.yaml has to care about enumeration order.
+    devices:
+      - ${MOD101_BUS:-/dev/link101-servo}:/dev/link101-servo
+    command:
+      - ros2
+      - launch
+      - mod101_hw_bringup
+      - bringup.launch.py
+      # Cameras are off because the image ships no camera drivers — see the
+      # `cameras` note at the bottom of this file.
+      - cameras:=false
+      # The pan/tilt is harness hardware, fitted and calibrated separately from
+      # the arm; head:=true once its servos are on the bus.
+      - head:=${MOD101_HEAD:-false}
+    # A robot holding its own weight should not be dropped by a supervisor
+    # restart loop: if the driver refuses to start (motors silent, or a joint
+    # resting outside its calibrated travel) that is a condition for a person
+    # to resolve, not something to retry into.
+    restart: "no"
+
+  # ROSBoard: a browser view of the graph on http://localhost:8888, and — in
+  # the robocore fork — a Joint sliders card that COMMANDS THE ARM.
+  #
+  # THIS SERVICE CAN MOVE THE ROBOT. Its publish allowlist includes
+  # std_msgs/Float64MultiArray, which is exactly what /arm_controller/commands
+  # takes, and a JointGroupPositionController treats what it receives as a step:
+  # every joint heads for its target at once, at servo speed, with no
+  # trajectory and no collision checking. A slider dragged across its range is a
+  # full-speed sweep of the arm.
+  #
+  # It binds 0.0.0.0:8888, and with network_mode: host there is no port mapping
+  # to narrow that — so anything that can reach this machine on the LAN can
+  # drive the arm. On a bench that is the convenience you want it for; on a
+  # shared network it is worth knowing you have published robot control.
+  #
+  # The zero-on-silence watchdog deliberately does not cover position commands:
+  # a "safe" zero for a Twist is a stop, but for a joint position it is a
+  # command to travel to home. Closing the tab therefore holds the arm where it
+  # is rather than moving it.
+  rosboard:
+    <<: *ros
+    image: mod101-hw:jazzy
+    command: [ros2, run, rosboard, rosboard_node]
+    depends_on: [hardware]
+    restart: "no"
+
+  # The robocore agent: the JSON-RPC/WebSocket API in front of the robot, on
+  # ws://localhost:10101. Robot specifics reach it only through the profile.
+  agent:
+    <<: *ros
+    image: robocore-agent:latest
+    volumes:
+      - ../profiles/mod101_harness.yaml:/etc/robocore/profile.yaml:ro
+      - agent-state:/var/lib/robocore
+    # use_sim_time FALSE, and it is the one line that must differ from the sim
+    # compose file. There is no /clock here, and a node waiting for simulated
+    # time on a robot with no simulator never ticks — which looks exactly like
+    # the hardware being dead.
+    command:
+      - agent
+      - --profile
+      - /etc/robocore/profile.yaml
+      - --ros-args
+      - -p
+      - use_sim_time:=false
+    depends_on: [hardware]
+    restart: "no"
+
+volumes:
+  # The agent's audit log, saved maps and places.
+  agent-state:
+
+# CAMERAS are deliberately not wired up here yet. mod101_hw_bringup can start
+# them (cameras:=true, launch/cameras.launch.py), but that needs
+# realsense2_camera and usb_cam in the image and the video devices mapped in:
+#
+#   devices:
+#     - /dev/video0:/dev/video0            # and the RealSense's several nodes
+#   volumes:
+#     - /dev/bus/usb:/dev/bus/usb          # librealsense claims USB directly
+#
+# The RealSense driver in particular wants more than a video node, so this is
+# left until there is a camera on the bench to test it against rather than
+# guessed at.

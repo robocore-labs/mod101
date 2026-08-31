@@ -1,0 +1,48 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>mod101_hw_bringup</name>
+  <version>0.1.0</version>
+  <description>
+    Real-hardware bringup for the mod101 arm on the camera-tower harness: the
+    Feetech servo bus, the ros2_control stack on top of it, and the cameras.
+    This package holds THIS robot's configuration; the drivers it configures
+    (st3215_manager, ros2_control_bridge) know nothing about mod101.
+  </description>
+  <maintainer email="cristian@robocore.dev">Cristian Dragomir</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <!-- The robot description and its controllers. -->
+  <exec_depend>mod101_description</exec_depend>
+  <exec_depend>mod101_harness</exec_depend>
+  <exec_depend>robot_state_publisher</exec_depend>
+  <exec_depend>xacro</exec_depend>
+
+  <!-- ros2_control. -->
+  <exec_depend>controller_manager</exec_depend>
+  <exec_depend>joint_state_broadcaster</exec_depend>
+  <exec_depend>joint_trajectory_controller</exec_depend>
+  <exec_depend>position_controllers</exec_depend>
+
+  <!-- The two generic drivers this package configures. They live in their own
+       repos (github.com/robocore-labs/...) and are not vendored here — see the
+       README for how to get them into the workspace. -->
+  <exec_depend>ros2_control_bridge</exec_depend>
+  <exec_depend>st3215_manager</exec_depend>
+
+  <!-- Cameras. Optional at runtime (cameras:=false), but declared so rosdep
+       installs them for a machine that will actually run the robot. -->
+  <exec_depend>realsense2_camera</exec_depend>
+  <exec_depend>usb_cam</exec_depend>
+  <exec_depend>image_transport</exec_depend>
+  <exec_depend>compressed_image_transport</exec_depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

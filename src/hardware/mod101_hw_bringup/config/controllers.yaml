@@ -1,0 +1,86 @@
+# ros2_control controllers for the harness ON REAL HARDWARE.
+#
+# The same controller set as the sim (mod101_control/config/controllers.sim.yaml
+# + mod101_harness/config/pan_tilt_controllers.yaml +
+# mod101_tool_jaws/config/controllers.yaml), collected into one file because
+# ros2_control_node takes its parameters directly instead of through
+# gz_ros2_control's <parameters> tags.
+#
+# THE ONE DIFFERENCE THAT MATTERS IS use_sim_time. There is no /clock here, so
+# it must be false: a controller waiting for simulated time on a robot with no
+# simulator never ticks, and the failure looks like the hardware being dead.
+controller_manager:
+  ros__parameters:
+    update_rate: 100  # Hz — must be int (Jazzy crashes on `100.0`)
+    use_sim_time: false
+    catch_exceptions: true
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+    # Spawned at boot. Float64MultiArray on /<controller>/commands.
+    arm_controller:
+      type: position_controllers/JointGroupPositionController
+    pan_tilt_controller:
+      type: position_controllers/JointGroupPositionController
+    gripper_controller:
+      type: position_controllers/JointGroupPositionController
+
+    # Declared, not spawned. Each claims the same joints as its twin above, and
+    # controller_manager allows one active claim per joint — the agent or MoveIt
+    # loads these on entering a trajectory session and unloads them on exit.
+    arm_trajectory_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+    pan_tilt_trajectory_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+    gripper_trajectory_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+
+arm_controller:
+  ros__parameters:
+    joints: ["joint_base", "joint_shoulder", "joint_elbow", "joint_wrist_tilt", "joint_wrist_roll"]
+    command_interfaces: [position]
+    state_interfaces: [position]
+    # The bridge publishes commands onward and reads state back from the
+    # servos; there is no loop to close here, and closing one would fight the
+    # servo's own position loop.
+    open_loop_control: true
+
+arm_trajectory_controller:
+  ros__parameters:
+    joints: ["joint_base", "joint_shoulder", "joint_elbow", "joint_wrist_tilt", "joint_wrist_roll"]
+    command_interfaces: [position]
+    state_interfaces: [position, velocity]
+    open_loop_control: true
+    allow_partial_joints_goal: false
+    allow_integration_in_goal_trajectories: true
+
+pan_tilt_controller:
+  ros__parameters:
+    joints: [hn_pan_joint, hn_tilt_joint]
+    command_interfaces: [position]
+    state_interfaces: [position]
+    open_loop_control: true
+
+pan_tilt_trajectory_controller:
+  ros__parameters:
+    joints: [hn_pan_joint, hn_tilt_joint]
+    command_interfaces: [position]
+    state_interfaces: [position, velocity]
+    allow_partial_joints_goal: false
+    allow_integration_in_goal_trajectories: true
+
+gripper_controller:
+  ros__parameters:
+    joints: ["6"]
+    command_interfaces: [position]
+    state_interfaces: [position]
+    open_loop_control: true
+
+gripper_trajectory_controller:
+  ros__parameters:
+    joints: ["6"]
+    command_interfaces: [position]
+    state_interfaces: [position, velocity]
+    allow_partial_joints_goal: false
+    allow_integration_in_goal_trajectories: true
