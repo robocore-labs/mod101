@@ -195,9 +195,23 @@ docker compose -f docker/hardware.compose.yaml up --build
 
 That is the whole thing. The build clones the driver packages itself
 (`src/hardware/hardware.repos`), and the servo bus is found at
-`/dev/link101-servo` — the Link101's udev name for its Motor endpoint, stable
-whatever `ttyACMn` it lands on. `docker/hardware.env.example` covers the cases
-that differ from this bench; none of it is required.
+`/dev/mod101-servo`. `docker/hardware.env.example` covers the cases that differ
+from this bench; none of it is required.
+
+**Install the udev rules once**, so the bus and the camera come up under names
+that survive a replug:
+
+```bash
+sudo cp docker/udev/*.rules /etc/udev/rules.d/
+sudo udevadm control --reload-rules && sudo udevadm trigger
+ls -l /dev/mod101-servo          # -> ../ttyACMn
+```
+
+The servo rule matches the RS-485 adapter by **serial number**, so edit it if
+you swap cables (the file says how). Without it, set `MOD101_BUS=/dev/ttyACMn`
+in `.env` and re-check it after every replug. The RealSense rule grants raw USB
+access to a non-root container; **replug the camera** after installing it,
+because udev does not re-apply modes to a device that is already open.
 
 Working on the drivers? The image contains what is on `main`, not what is
 checked out locally — push first, then bust the cached clone:
@@ -211,7 +225,8 @@ That gives you three things:
 
 | | |
 |---|---|
-| the robot | `ros2_control` on the real servo bus |
+| the robot | `ros2_control` on the real servo bus, plus per-motor telemetry on `/motor_telemetry/<joint>/*` |
+| the head camera | the D435 on `/harness/depth_camera/*` — the same topic names the sim publishes |
 | <http://localhost:8888> | ROSBoard — the graph in a browser, **and joint sliders that move the arm** |
 | `ws://localhost:10101` | the robocore agent |
 
@@ -252,12 +267,22 @@ plugin, and the driver is a separate node that arms motors regardless.
 |---|---|
 | `N of M motors did not answer` | motor power. The logic side is USB-fed, so the port opens and the chain stays silent — it looks like a working driver with a dead robot |
 | `is at N, outside its calibrated travel` | move that joint back by hand (torque is off) and start again, or recalibrate if the range is wrong |
-| `could not open port` | no `/dev/link101-servo` (udev rules not installed?), or the container user is not in the host's `dialout` group (`DIALOUT_GID` in `.env`) |
+| `could not open port` | no `/dev/mod101-servo` (udev rules not installed?), or the container user is not in the host's `dialout` group (`DIALOUT_GID` in `.env`) |
 | `NO CALIBRATION at ...` | it will run, uncalibrated, and every angle will be wrong. Run the configurator |
+| camera: `no device detected` while `lsusb` shows it | the RealSense udev rule is missing or the camera was not replugged after installing it. The `cameras` service runs as your UID and librealsense needs raw USB **write** access |
 
-Never point the bus at `/dev/ttyACMn`. The Link101 exposes five CDC endpoints
-and their numbering moves whenever anything re-enumerates — it shifted once
-mid-session on this bench. `/dev/link101-servo` is the udev name that does not.
+Prefer `/dev/mod101-servo` to `/dev/ttyACMn`. ACM numbering is assignment
+order, not identity, and it moves whenever anything re-enumerates — it shifted
+once mid-session on this bench. Getting it wrong does not report a wrong port:
+the port opens, nothing answers, and it reads as unpowered motors.
+
+The cameras are their own service, so they can be restarted, stopped or
+followed without touching the arm:
+
+```bash
+docker compose -f docker/hardware.compose.yaml logs -f cameras
+docker compose -f docker/hardware.compose.yaml restart cameras
+```
 
 Full detail, including the arguments and what each config file owns:
 [`src/hardware/mod101_hw_bringup/README.md`](src/hardware/mod101_hw_bringup/README.md).

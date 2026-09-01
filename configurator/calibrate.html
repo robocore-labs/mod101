@@ -648,6 +648,12 @@ const DEFAULT_MAP = {
   4: { ros:"joint_wrist_tilt", lerobot:"wrist_flex",    sign:-1, model:"sts3215" },
   5: { ros:"joint_wrist_roll", lerobot:"wrist_roll",    sign:+1, model:"sts3215" },
   6: { ros:"6",                lerobot:"gripper",       sign:+1, model:"sts3215" },
+  // The camera tower's pan/tilt. It is harness hardware, not part of the
+  // SO-101 arm, so there is no lerobot joint to map it onto — the names here
+  // only keep the export keyed by something unique. Both signs are +1: ticks
+  // already count the way the URDF axes do.
+  7: { ros:"hn_pan_joint",     lerobot:"head_pan",      sign:+1, model:"sts3215" },
+  8: { ros:"hn_tilt_joint",    lerobot:"head_tilt",     sign:+1, model:"sts3215" },
 };
 const MAP_KEY = "mod101.calibration.map";
 let jointMap = loadMap();

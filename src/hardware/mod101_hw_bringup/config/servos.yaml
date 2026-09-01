@@ -24,18 +24,25 @@
 # zero is defined in two places; see bringup.launch.py.
 servo_manager_node:
   ros__parameters:
-    # A udev name, not /dev/ttyACMn. The Link101 exposes five CDC endpoints and
-    # their numbering moves whenever anything re-enumerates; /dev/link101-servo
-    # is always the Motor endpoint. Override with serial_port:=... for a bare
-    # USB adapter or a second bench.
-    port: "/dev/link101-servo"
+    # A udev name, not /dev/ttyACMn, because ACM numbering is assignment order
+    # and moves whenever anything re-enumerates — this bench has already gone
+    # ACM1 -> ACM0 once. docker/udev/99-mod101-servo.rules pins the adapter by
+    # its serial number so this name always lands on the same cable. Override
+    # with serial_port:=... for a second bench.
+    #
+    # INSIDE THE CONTAINER THIS IS ALWAYS THE NAME, whatever the host calls the
+    # device: hardware.compose.yaml maps ${MOD101_BUS} onto /dev/mod101-servo,
+    # so a host with no udev rules only has to set that one variable.
+    port: "/dev/mod101-servo"
     baud: 1000000
     ticks_per_rev: 4096
 
-    # 50 Hz of joint states for a 100 Hz controller_manager. Every sample is a
-    # blocking read per motor over one serial line, so this is bounded by the
-    # bus, not by choice: 8 motors x (position + speed) at 1 Mbaud is already
-    # most of the budget.
+    # 50 Hz of joint states for a 50 Hz controller_manager. This used to be
+    # "already most of the budget" and no longer is: read_motor_state now
+    # fetches position AND speed in ONE 4-byte read (registers 56-59 are
+    # contiguous) instead of two, so eight motors cost 2.1 ms per cycle rather
+    # than 4.1 — about a tenth of the bus. Kept at 50 rather than cut, because
+    # the reason to cut it has been removed.
     telemetry_rate: 50.0
     joint_states_topic: "/motor_manager/joint_states"
     total_joints: 8
@@ -45,9 +52,19 @@ servo_manager_node:
     brake_acceleration: 100
 
     # Per-motor current/voltage/load/temperature on /motor_telemetry/<joint>/*.
-    # Off by default: it is another read per motor per cycle on the same bus.
-    motor_telemetry_enable: false
-    motor_telemetry_rate: 5.0
+    # ON, but at 1 Hz rather than the 5 it was first set to.
+    #
+    # AVERAGE DUTY IS NOT THE PROBLEM HERE, BURST LENGTH IS. This is four
+    # separate reads per motor -- current, voltage, load, temperature -- so
+    # eight motors is 32 round trips, 8.3 ms, taken back to back on a
+    # single-threaded executor. Nothing else on that thread runs during it:
+    # not a joint state, not an incoming position command. At 5 Hz that stall
+    # landed five times a second and was long enough to swallow a whole
+    # control cycle. At 1 Hz it lands once, and load and temperature are slow
+    # signals that lose nothing by being sampled that way -- they are here to
+    # warn before a servo stalls or cooks, not to be controlled on.
+    motor_telemetry_enable: true
+    motor_telemetry_rate: 1.0
 
     # Never true on an assembled arm. The test sequence drives each motor a
     # little way with no knowledge of its travel limits.
@@ -82,11 +99,68 @@ servo_manager_node:
       direction: [1, -1, 1, -1, 1]
       command_indices: [0, 1, 2, 3, 4]
       state_indices: [0, 1, 2, 3, 4]
-      # Halves the speed of every position command. The arm carries its own
-      # weight through the shoulder; full speed is for an unloaded bench.
-      speed_scale: 0.5
-      accel: [20, 20, 20, 15, 25]
+
+      # ---- motion profile ------------------------------------------------
+      # THE GLOBAL DERATE, and nothing else now. It multiplies both `speed`
+      # and `accel`, so 0.5 halves the whole group for a cautious bench
+      # without touching ten other numbers. It is 1.0 because the arrays below
+      # are the honest values rather than something pre-halved.
+      speed_scale: 1.0
+      #
+      # SPEED, steps/s, per motor. 1 tick = 360/4096 deg, so ticks/s is
+      # deg/s x 11.378:
+      #   base 45, shoulder 35, elbow 45, wrist_tilt 70, wrist_roll 90 deg/s
+      #
+      # These are ~5x what the group ran at before, and the reason is not
+      # impatience. A controller publishing at 100 Hz moves the target every
+      # 10 ms; at 45 deg/s that is 5.1 ticks per update. The old effective
+      # speed was 100 steps/s = 1 tick per update, so the servo could never
+      # reach an update before the next one arrived — permanently saturated,
+      # permanently lagging, which is felt as stuttering and not as slowness.
+      # The right-hand column of that arithmetic is what these are chosen to
+      # cover.
+      speed: [512, 398, 512, 796, 1024]
+      #
+      # ACCELERATION, register unit 100 steps/s^2, per motor. Ramp to the
+      # speed above takes speed / (100 x accel):
+      #   base 0.14s  shoulder 0.16s  elbow 0.13s  wrist_tilt 0.09s  roll 0.07s
+      #
+      # LOWER than before (was an effective 100), and deliberately: the old
+      # pair reached its speed in 10 ms, which is a step, not a ramp. Gentle
+      # ramp to a usable speed is what smooth means here; the previous config
+      # was a jerk to a crawl. Heavier joints get longer ramps — the shoulder
+      # is lifting the whole arm, the roll axis is lifting almost nothing.
+      #
+      # THIS ARRAY USED TO DO NOTHING. command_handler overwrote it with the
+      # group-wide position_accel on the first command, so all five ran at one
+      # value; fixed in ros2_feetech_manager alongside this.
+      accel: [37, 25, 39, 88, 146]
+
+      # ---- servo-side tuning (EEPROM, applied at init only if different) ---
+      # UNVALIDATED, and worth knowing that before trusting it: the base
+      # oscillation these are partly aimed at could not be reproduced on the
+      # bench, so this is reasoned from the one capture (14 ticks p-p, 8-17 Hz,
+      # load to 9%) rather than tuned against it. Every write is logged with a
+      # readback at startup, and reverting is editing these back to 32/32/0/1.
+      #
+      # joint_base gets less P and more D than the rest: it is one of the two
+      # joints with a vertical axis, so gravity never preloads its gear train
+      # and nothing damps it. Lower loop gain into the backlash, more
+      # derivative against the overshoot. The other four are left near stock
+      # with a small D bump on the two that carry weight.
+      kp: [24, 32, 32, 32, 32]
+      kd: [48, 40, 40, 36, 32]
+      # Integral stays off everywhere. On a train with backlash it winds up
+      # across the slack and hands back exactly the overshoot we are trying to
+      # remove.
+      ki: [0, 0, 0, 0, 0]
+      # Deadband in ticks (0.088 deg each). 2 on the base: it was hunting +-7
+      # ticks around a 1-tick deadband, and giving the loop somewhere to stop
+      # costs a tenth of a degree of resolution it does not have anyway.
+      deadband: [2, 1, 1, 1, 1]
+
       unwrap_position: false
+      # Fallbacks, used only for a motor the arrays above do not cover.
       position_speed: 200
       position_accel: 200
 
@@ -102,8 +176,17 @@ servo_manager_node:
       direction: [1]
       command_indices: [0]
       state_indices: [5]
-      speed_scale: 0.5
-      accel: [25]
+      speed_scale: 1.0
+      # 90 deg/s, ramp 0.06s. The jaws carry nothing and a gripper that closes
+      # lazily is a gripper that loses the object on the way.
+      speed: [1024]
+      accel: [171]
+      # Left at stock. The tool needs to hold a grip, and softening P is the
+      # one change that would make it let go.
+      kp: [32]
+      kd: [32]
+      ki: [0]
+      deadband: [1]
       unwrap_position: false
       position_speed: 200
       position_accel: 200
@@ -121,8 +204,20 @@ servo_manager_node:
       # The head carries a camera and nothing else, so it can move faster than
       # the arm — but it is also the thing you watch a scene through, and a
       # fast pan is a motion-blurred frame.
-      speed_scale: 0.6
-      accel: [30, 30]
+      speed_scale: 1.0
+      # 50 deg/s, ramp 0.10s, for both. The head is lighter than any arm joint
+      # and could go faster, but it is also the thing you watch a scene
+      # through: a fast pan is a motion-blurred frame, and the ramp matters
+      # more than the top speed for what the camera actually records.
+      speed: [569, 569]
+      accel: [57, 57]
+      # hn_pan_joint is the OTHER vertical-axis joint, and it shows the same
+      # shake as joint_base — same treatment, same caveat that it is reasoned
+      # rather than measured.
+      kp: [24, 32]
+      kd: [48, 40]
+      ki: [0, 0]
+      deadband: [2, 1]
       unwrap_position: false
       position_speed: 300
       position_accel: 200

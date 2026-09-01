@@ -11,7 +11,21 @@
 # simulator never ticks, and the failure looks like the hardware being dead.
 controller_manager:
   ros__parameters:
-    update_rate: 100  # Hz — must be int (Jazzy crashes on `100.0`)
+    # 50 Hz, HALVED FROM 100, because the bottleneck is the serial bus and not
+    # the CPU. Every cycle in which a command changes turns into a bus write
+    # per motor on one 1 Mbaud half-duplex line shared by eight servos and all
+    # their feedback. At 100 Hz the command traffic alone did not fit: the
+    # measured round trip is 258 us, so eight motors needed 2.1 ms of a 10 ms
+    # cycle just for position writes, on top of 2.1 ms of feedback — and
+    # before the driver was fixed, MoveTo's four round trips per command made
+    # that 8.3 ms and the total over 100%. Commands then arrive late and
+    # irregularly, and a position servo restarts its motion profile on each
+    # one, which is felt as stutter that gets WORSE the faster you drive it.
+    #
+    # These servos close their own position loop internally. 50 Hz is a
+    # setpoint stream to that loop, not a control loop of our own, so halving
+    # it costs nothing real and buys back the timing margin.
+    update_rate: 50  # Hz — must be int (Jazzy crashes on `50.0`)
     use_sim_time: false
     catch_exceptions: true
 

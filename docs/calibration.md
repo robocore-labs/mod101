@@ -318,15 +318,30 @@ only source of truth for which servo is which joint. Defaults follow
 | ID | ROS joint | LeRobot | Sign |
 |---|---|---|---|
 | 1 | `joint_base` | `shoulder_pan` | +1 |
-| 2 | `joint_shoulder` | `shoulder_lift` | +1 |
+| 2 | `joint_shoulder` | `shoulder_lift` | **−1** |
 | 3 | `joint_elbow` | `elbow_flex` | +1 |
 | 4 | `joint_wrist_tilt` | `wrist_flex` | **−1** |
 | 5 | `joint_wrist_roll` | `wrist_roll` | +1 |
 | 6 | `6` (tool joint) | `gripper` | +1 |
+| 7 | `hn_pan_joint` | — | +1 |
+| 8 | `hn_tilt_joint` | — | +1 |
 
 **Sign** reconciles the servo's counting direction with the URDF joint axis.
-`joint_wrist_tilt` has axis `0 -1 0`, hence −1 by default. The tool joint is
-literally named `6` per [tool-convention.md](tool-convention.md).
+`joint_wrist_tilt` has axis `0 -1 0`, hence −1 by default. `joint_shoulder`'s
+axis is `0 1 0` and positive does lift the arm, but the servo on this build
+counts the other way, so it is −1 too — measured, not derived. The tool joint
+is literally named `6` per [tool-convention.md](tool-convention.md).
+
+**7 and 8 are the camera tower**, not the arm, so they have no LeRobot
+counterpart — the export keys them `head_pan` / `head_tilt` only to keep the
+JSON unique. Their travel is **declared, not swept**: the pan/tilt was driven to
+its URDF zero and given ±90° (1024 ticks) each way by decision, because the
+mechanism has no hard stop to sweep into within that range. That makes
+`ticks_min`/`ticks_max` a policy limit rather than a measured one — if the head
+does foul something before 90°, the driver will happily drive into it instead
+of clamping short. Re-sweep them here to replace the declared numbers with real
+ones. Neither arc crosses the 0/4095 seam, but servo 8's max lands at 4068, 27
+ticks short of it; moving the tilt zero up would push the arc over.
 
 **ROS joint** is a picker over the joints the loaded URDF actually declares,
 not free text — a typo there is a joint that silently never matches the model,

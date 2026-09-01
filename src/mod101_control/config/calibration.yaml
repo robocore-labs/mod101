@@ -25,14 +25,21 @@ mod101_calibration:
       ticks_home: 2048
       limit_lower: -1.464952
       limit_upper: 1.429670
+    # ticks_max WIDENED 3815 -> 3860. The sweep under-measured this end: the
+    # joint springs back to 3850-3853 with torque off, which is ABOVE the max
+    # it was calibrated with, so every boot the driver clamped its own resting
+    # position by ~40 ticks and then held it there against the spring. That is
+    # a servo permanently commanded to a place it does not sit — the log said
+    # so on every startup ("+4.4 deg -> 3853 is outside [1598, 3815]").
+    # 3860 is where it goes on its own, so nothing is being forced open here.
     joint_shoulder:
       servo_id: 2
       model: "sts3250"
       sign: -1
       ticks_min: 1598
-      ticks_max: 3815
+      ticks_max: 3860
       ticks_home: 3803
-      limit_lower: -0.018408
+      limit_lower: -0.087437
       limit_upper: 3.382428
     joint_elbow:
       servo_id: 3
@@ -52,12 +59,50 @@ mod101_calibration:
       ticks_home: 2048
       limit_lower: -1.428136
       limit_upper: 1.510971
+    # ticks_min WIDENED 2049 -> 2040, same fault as the shoulder and smaller:
+    # home was captured AT the min, so the joint's rest at 2048 fell one tick
+    # outside its own floor and every command was clamped up by one. One tick
+    # is 0.088 deg and harmless on its own; what is not harmless is a command
+    # that can never be satisfied being re-issued at controller rate.
     joint_wrist_roll:
       servo_id: 5
       model: "sts3215"
       sign: 1
-      ticks_min: 2049
+      ticks_min: 2040
       ticks_max: 4051
       ticks_home: 2049
-      limit_lower: 0.000000
+      limit_lower: -0.013806
       limit_upper: 3.071030
+    # THE HEAD IS DECLARED, NOT SWEPT. Unlike the six above, these two did not
+    # come from a hand sweep to the hard stops: the pan/tilt was moved to its
+    # URDF zero and given +/- 90 deg (1024 ticks) each way by decision. So
+    # ticks_min/ticks_max are a POLICY limit, not a measured one — if the
+    # mechanism stops short of 90 deg somewhere, a command to the limit stalls
+    # the servo against a hard stop rather than being clamped before it.
+    # Re-sweep in the configurator to replace these with measured travel.
+    #
+    # Both signs are +1: ticks and the URDF axis already agree. Negative pan
+    # turns the camera towards the arm (which sits 54 deg clockwise of the home
+    # boresight), and negative tilt looks up, positive down — the aerospace
+    # sense harness_body.xacro documents on the joint.
+    #
+    # Neither arc crosses the 0/4095 seam, but servo 8's max is 4068 — 27 ticks
+    # of headroom. Anything that shifts the tilt zero upward pushes it over.
+    hn_pan_joint:
+      servo_id: 7
+      model: "sts3215"
+      sign: 1
+      ticks_min: 454
+      ticks_max: 2502
+      ticks_home: 1478
+      limit_lower: -1.570796
+      limit_upper: 1.570796
+    hn_tilt_joint:
+      servo_id: 8
+      model: "sts3215"
+      sign: 1
+      ticks_min: 2020
+      ticks_max: 4068
+      ticks_home: 3044
+      limit_lower: -1.570796
+      limit_upper: 1.570796

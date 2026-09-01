@@ -1,0 +1,33 @@
+# A stable name for the Feetech RS-485 adapter: /dev/mod101-servo.
+#
+#   sudo cp docker/udev/99-mod101-servo.rules /etc/udev/rules.d/
+#   sudo udevadm control --reload-rules && sudo udevadm trigger
+#   ls -l /dev/mod101-servo          # -> ../ttyACMn
+#
+# WHY THIS EXISTS. /dev/ttyACMn is assignment order, not identity: unplug the
+# arm and plug it back, add a second adapter, or reboot with a different device
+# enumerating first, and the same bus comes up under a different number. Nothing
+# reports that — servos.yaml opens a port that exists, gets no reply from motor
+# 1, and the driver refuses to start with `require_motors`. It reads as dead
+# hardware. This bench has already moved ACM1 -> ACM0 once.
+#
+# MATCHED ON THE SERIAL NUMBER, not VID:PID. This adapter is a CH9102
+# (1a86:55d3) and the vendor/product pair is shared by every CH340/CH9102 cable
+# in the drawer, so VID:PID alone would claim whichever one enumerated first.
+# The serial is unique to this cable.
+#
+# SWAPPED THE ADAPTER? The serial below no longer matches and the symlink never
+# appears. Read the new one and edit this file:
+#
+#   udevadm info -q property -n /dev/ttyACM0 | grep -E 'ID_SERIAL_SHORT|ID_VENDOR_ID|ID_MODEL_ID'
+#
+# A cable with NO unique serial (many plain CH340s report none) cannot be
+# matched this way at all. Match the physical USB port instead — KERNELS=="1-1"
+# from the DEVPATH — and accept that the name then follows the socket, not the
+# cable.
+#
+# MODE/GROUP are deliberately not set here: the device stays root:dialout 0660
+# from the distro's own rules, and the container reaches it through
+# `group_add: ["${DIALOUT_GID}"]` in docker/hardware.compose.yaml. Widening it
+# to 0666 would hand every process on the machine write access to the arm.
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="55d3", ATTRS{serial}=="5B90148929", SYMLINK+="mod101-servo"

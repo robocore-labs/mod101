@@ -65,7 +65,7 @@ flickers between two robots. `docker compose down` cannot leave one behind.
 
 Three things the compose file gets right that are easy to get wrong by hand:
 
-- **The bus is mapped by its udev name**, `/dev/link101-servo`, which is what
+- **The bus is mapped by its udev name**, `/dev/mod101-servo`, which is what
   `servos.yaml` already names. The Link101 exposes five CDC endpoints and their
   numbering moves — it shifted once mid-session on this bench. Never map
   `/dev/ttyACMn`.

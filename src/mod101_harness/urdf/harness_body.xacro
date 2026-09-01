@@ -297,7 +297,12 @@
   <child link="${prefix}pitch_servo_1"/>
 </joint>
 
-<!-- TILT (pitch). Was `continuous`; bounded like the pan joint.
+<!-- TILT (pitch). Was `continuous`; bounded like the pan joint, and to the
+     SAME +/- 90 deg since the head was calibrated: mod101_control/config/
+     calibration.yaml gives servo 8 1024 ticks each way from its URDF zero, and
+     a URDF narrower than the calibration would clamp motion the driver was
+     told to allow. The earlier +/- 80 deg here was a guess made before there
+     was hardware to measure.
      AXIS IS X, WHICH IS WHAT THE CAD EXPORT SAID. An earlier edit here changed
      it to +Y on the premise that the RealSense boresight is +X. That premise is
      wrong, and +Y is the one axis that breaks this joint completely: the true
@@ -323,7 +328,7 @@
   <parent link="${prefix}pitch_servo_1"/>
   <child link="${prefix}pitch_link__1"/>
   <axis xyz="1.0 0.0 0.0"/>
-  <limit lower="-1.396263" upper="1.396263" effort="5" velocity="3.0"/>
+  <limit lower="-1.570796" upper="1.570796" effort="5" velocity="3.0"/>
   <dynamics damping="0.05" friction="0.05"/>
 </joint>
 

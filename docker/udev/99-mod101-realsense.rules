@@ -1,0 +1,42 @@
+# Non-root access to the RealSense D435 on the head.
+#
+#   sudo cp docker/udev/99-mod101-realsense.rules /etc/udev/rules.d/
+#   sudo udevadm control --reload-rules && sudo udevadm trigger
+#   # then REPLUG the camera — udev does not re-apply modes to an open device
+#
+# WHY IT IS NEEDED. librealsense talks to the camera over raw USB
+# (/dev/bus/usb/BBB/DDD), not V4L2, and those nodes are root:root 0664 by
+# default. The `cameras` service in docker/hardware.compose.yaml runs as the
+# host UID — it has to, because every service shares /dev/shm for FastDDS and
+# mixed UIDs there means nodes discover each other and exchange no data — so
+# without this rule it opens the device read-only and the driver reports
+# "failed to set power state" or finds no device at all. Neither says
+# "permissions".
+#
+# The ROS deb (ros-jazzy-librealsense2) ships no udev rules, so nothing installs
+# this for you. Intel's full version lives at
+# librealsense/config/99-realsense-libusb.rules and covers every SKU they make;
+# this is the D400 family only, which is what the harness carries.
+#
+# TAG+="uaccess" is what actually grants a *logged-in* user access on a systemd
+# machine, and it is the right mechanism. MODE:="0666" is the fallback for a
+# headless bench where nobody is logged in on seat0 — a docker service is not a
+# session, so uaccess alone does not cover it. Both are set for that reason.
+# This is world-writable access to a camera, not to the arm; the servo bus is
+# deliberately left at 0660 in 99-mod101-servo.rules.
+
+# D415, D435, D435i, D405, D455, D456
+SUBSYSTEM=="usb", ATTRS{idVendor}=="8086", ATTRS{idProduct}=="0ad3", MODE:="0666", GROUP:="plugdev", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="8086", ATTRS{idProduct}=="0b07", MODE:="0666", GROUP:="plugdev", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="8086", ATTRS{idProduct}=="0b3a", MODE:="0666", GROUP:="plugdev", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="8086", ATTRS{idProduct}=="0b5b", MODE:="0666", GROUP:="plugdev", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="8086", ATTRS{idProduct}=="0b5c", MODE:="0666", GROUP:="plugdev", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="8086", ATTRS{idProduct}=="0b56", MODE:="0666", GROUP:="plugdev", TAG+="uaccess"
+# DFU / recovery mode, so a firmware update does not need root either.
+SUBSYSTEM=="usb", ATTRS{idVendor}=="8086", ATTRS{idProduct}=="0adb", MODE:="0666", GROUP:="plugdev", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="8086", ATTRS{idProduct}=="0ade", MODE:="0666", GROUP:="plugdev", TAG+="uaccess"
+
+# The V4L2 nodes the same camera also exposes (usb_cam uses these; librealsense
+# uses them for metadata). /dev/video* is normally root:video 0660 already, so
+# this only matters on a host where the container user is not in `video`.
+SUBSYSTEM=="video4linux", ATTRS{idVendor}=="8086", MODE:="0666", GROUP:="plugdev", TAG+="uaccess"

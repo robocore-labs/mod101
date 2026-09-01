@@ -20,6 +20,11 @@
 #   - the agent and the robocore SDK. They ship as their own image, which
 #     hardware.compose.yaml pulls and runs alongside this one.
 #
+# CAMERAS ARE IN HERE (realsense2_camera + usb_cam), unlike the first cut of
+# this file. They need no display and no GPU: the D435 does its own depth on
+# the ASIC, and nothing in the stack renders. What they DO need is raw USB
+# access from a non-root container — see docker/udev/99-mod101-realsense.rules.
+#
 # ROSBOARD IS IN HERE, from the same `drivers` context as the two drivers. It is
 # the robocore fork, whose publish allowlist includes Float64MultiArray, so its
 # Joint sliders card publishes straight onto a controller's /commands topic.
@@ -68,6 +73,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       ros-${ROS_DISTRO}-pluginlib \
       python3-pil \
       python3-tornado \
+    && rm -rf /var/lib/apt/lists/*
+
+# CAMERAS. realsense2_camera pulls librealsense2 with it, so there is no Intel
+# apt repo to add — the ROS build of the SDK is in the same archive as
+# everything above. usb_cam is the wrist camera's driver; it is small and comes
+# along so `cameras.launch.py wrist_camera:=true` works the day one is fitted,
+# rather than needing an image rebuild on the bench.
+#
+# The camera driver runs in its own compose service, not in the arm's, so that
+# a USB reset on the D435 cannot take the servo bus down with it. Both services
+# run this same image.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      ros-${ROS_DISTRO}-realsense2-camera \
+      ros-${ROS_DISTRO}-usb-cam \
     && rm -rf /var/lib/apt/lists/*
 
 # st3215 is the FEETECH protocol library st3215_manager imports, and it is on

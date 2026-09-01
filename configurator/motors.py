@@ -37,6 +37,7 @@ REG_ID = 5
 REG_OFS_L = 31            # position-correction offset, EEPROM, 2 bytes
 REG_TORQUE_ENABLE = 40
 REG_LOCK = 55
+REG_MODE = 33             # 0 position, 1 constant speed, 2 PWM, 3 step
 COMM_OK = 0
 TICKS = 4096
 MAX_OFS = 2047            # the offset register is 11 bits plus a sign bit
@@ -259,6 +260,19 @@ class MotorBus:
         st = self._require()
         with self._lock:
             if on:
+                # ARMING ASSERTS POSITION MODE FIRST. A servo left in constant-
+                # speed mode (1) accepts WritePosition, acks it, and does not
+                # move — while telemetry keeps reporting position, voltage and
+                # temperature perfectly. That is exactly how servo 7 presented:
+                # "shows telemetry but no movement". MoveTo() hid it, because
+                # st3215's MoveTo re-sends the mode on every call and jog does
+                # not (see move()).
+                #
+                # Read before writing: REG_MODE is in the EEPROM block, so an
+                # unconditional write here would be an erase cycle on every arm.
+                mode, res, _ = st.read1ByteTxRx(sid, REG_MODE)
+                if res == COMM_OK and mode != 0:
+                    st.SetMode(sid, 0)
                 # StartServo hands back writeTxRx's raw (comm, error) tuple.
                 res = st.StartServo(sid)
                 ok = (tuple(res) == (0, 0)) if isinstance(res, tuple) else bool(res)

@@ -24,3 +24,9 @@ servo_manager_node:
       direction: [1]
       command_indices: [0]
       state_indices: [5]
+    head:
+      motor_ids: [7, 8]
+      joint_names: ["hn_pan_joint", "hn_tilt_joint"]
+      direction: [1, 1]
+      command_indices: [0, 1]
+      state_indices: [6, 7]
