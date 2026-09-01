@@ -1,0 +1,84 @@
+# RoboStack / pixi environment for the mod101 workspace.
+#
+#   curl -fsSL https://pixi.sh/install.sh | bash      # one-time, if you don't have pixi
+#   pixi install                                      # solve + fetch ROS 2 Jazzy
+#   pixi run build                                    # colcon build the workspace
+#   pixi shell                                        # drop into the env (workspace overlaid)
+#   pixi run sim                                      # ros2 launch mod101_harness sim.launch.py
+#
+# This is a self-contained ROS 2 Jazzy from the RoboStack conda channel - it does
+# NOT use /opt/ros. Never `source /opt/ros/jazzy/setup.bash` inside `pixi shell`;
+# the mixed PYTHONPATH breaks both. Close other ROS terminals before `pixi shell`.
+#
+# See https://robostack.github.io/GettingStarted.html
+
+[workspace]                       # older pixi (<0.40): rename this table to [project]
+name = "mod101"
+description = "mod101 5-DOF arm - ROS 2 Jazzy workspace"
+channels = [
+  "https://prefix.dev/robostack-jazzy",
+  "https://prefix.dev/conda-forge",
+]
+platforms = ["linux-64"]          # add "linux-aarch64" / "osx-arm64" if you build there
+
+# Overlay the colcon workspace on every `pixi shell` / `pixi run`, once it exists.
+[activation]
+scripts = ["pixi/activate.sh"]
+
+# --- runtime: description, ros2_control, Gazebo (the bench sim) ---------------
+[dependencies]
+python = ">=3.11"
+pip = "*"
+setuptools = "*"
+pyyaml = "*"                                   # configurator/server.py
+
+ros-jazzy-desktop = "*"                        # rviz2, robot_state_publisher, joint_state_publisher(_gui), tf, ...
+ros-jazzy-xacro = "*"
+ros-jazzy-pluginlib = "*"
+
+ros-jazzy-ros2-control = "*"                   # controller_manager, hardware_interface, mock_components
+ros-jazzy-ros2-controllers = "*"              # joint_state_broadcaster, joint_trajectory_controller, position_controllers
+ros-jazzy-gz-ros2-control = "*"
+
+ros-jazzy-ros-gz-sim = "*"
+ros-jazzy-ros-gz-bridge = "*"
+ros-jazzy-ros-gz-image = "*"
+
+# --- build toolchain --------------------------------------------------------
+[build-dependencies]
+c-compiler = "*"
+cxx-compiler = "*"
+cmake = "*"
+ninja = "*"
+pkg-config = "*"
+colcon-common-extensions = "*"
+ros-jazzy-ament-cmake = "*"
+ros-jazzy-ament-cmake-python = "*"
+ros-jazzy-ament-lint-auto = "*"
+ros-jazzy-ament-lint-common = "*"
+pytest = "*"
+
+[tasks]
+build = "colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release"
+test = { cmd = "colcon test && colcon test-result --verbose", depends-on = ["build"] }
+clean = "rm -rf build install log"
+sim = "ros2 launch mod101_harness sim.launch.py"
+configurator = "python configurator/server.py"
+
+# --- optional feature: MoveIt 2 (motion planning, not needed for the bench) --
+[feature.moveit.dependencies]
+ros-jazzy-moveit = "*"
+ros-jazzy-pick-ik = "*"
+
+# --- optional feature: real-hardware cameras -------------------------------
+[feature.hardware.dependencies]
+ros-jazzy-realsense2-camera = "*"
+ros-jazzy-usb-cam = "*"
+ros-jazzy-image-transport = "*"
+ros-jazzy-compressed-image-transport = "*"
+
+[environments]
+# `pixi shell`            -> bench sim only
+# `pixi shell -e full`    -> + MoveIt + camera drivers
+default = { features = [], solve-group = "main" }
+full = { features = ["moveit", "hardware"], solve-group = "main" }
