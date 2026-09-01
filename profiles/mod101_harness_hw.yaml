@@ -1,0 +1,233 @@
+# mod101 on the camera-tower harness — REAL HARDWARE.
+#
+# The twin of profiles/mod101_harness.yaml, which is the SIM profile. They are
+# separate files rather than one file with switches because the two differ in
+# the places that matter most and agree in the places that matter least: the
+# groups, frames and tool are identical, and every topic that carries an image
+# is different.
+#
+# Launch:  docker compose -f docker/hardware.compose.yaml up
+#          (the agent service mounts this at /etc/robocore/profile.yaml)
+#
+# EVERY TOPIC HERE WAS READ OFF A RUNNING ROBOT, not from a launch file. That
+# distinction earned its place: cameras.launch.py remaps the RealSense onto
+# /harness/depth_camera/* to match the sim, and on hardware those remappings
+# DO NOT TAKE — realsense2_camera puts everything under /camera/<node name>/
+# regardless. A profile written from the launch file would name four topics
+# that do not exist. See the camera section.
+#
+# RESTORED 2026-09-01 after this file was overwritten by a stray
+# `bench.py --json` run. Every value below was verified against the agent that
+# was still running with the original loaded — groups, controllers, tool,
+# joints, camera frame and intrinsics, and the eight sensor names all match
+# what that process had in memory. The prose is reconstructed. The one section
+# nobody re-read before the overwrite is the TF warning at the bottom, which
+# has been rewritten from a fresh measurement rather than from memory.
+
+name: mod101-harness-hw
+model: mod101 arm on the camera-tower harness (pan/tilt + D435), real hardware
+version: "0.1"
+protocol: 1
+
+frames:
+  # Unchanged from sim: the harness is bolted down, so `world` — the URDF root,
+  # fixed to hn_base_link — is both map and odom. `robot.pose` always reads the
+  # same value, which is correct and slightly disconcerting.
+  map: world
+  odom: world
+  base: hn_base_link
+
+# Published by joint_state_broadcaster, which reads the ros2_control state
+# interfaces — NOT /motor_manager/joint_states, which is the servo driver's
+# raw feed into the ros2_control_bridge. Both are real and they carry the same
+# numbers; this is the one with the controller_manager's timestamps on it.
+joint_states: /joint_states
+
+# No mobility, lidar, slam or exploration — no wheels on this robot. Their
+# absence is what makes robot.has("mobility") answer False instead of a stub
+# quietly doing nothing.
+
+groups:
+  # ---------------------------------------------------------------- arm --
+  arm:
+    kind: arm
+    tip: wrist_flange
+    # Same chain as sim and as base101 — one yaw, three pitch, one roll — so
+    # the same deficiency: position, roll and pitch are free, yaw is not.
+    dof_mask: [1, 1, 1, 1, 1, 0]
+    controllers:
+      # Declared in mod101_hw_bringup/config/controllers.yaml but NOT spawned
+      # by bringup.launch.py. The agent loads it on trajectory session entry
+      # and unloads it on exit; validation accepts declared-or-loaded.
+      trajectory: /arm_trajectory_controller
+      # Spawned at boot, and the one that is actually active on the bench.
+      # Claims the same five joints as the trajectory twin, so only one of the
+      # pair is ever live.
+      stream: /arm_controller
+      # Disjoint from the arm pair — claims joint 6 alone — so it stays active
+      # during an arm session and tool.close() needs no controller switch.
+      tool: /gripper_controller
+    tool:
+      type: jaws
+      # QUOTED. The jaws tool names its joint `6`; unquoted YAML makes that the
+      # integer 6, which matches no joint name anywhere. Note that the servo
+      # driver's telemetry topics spell it `joint_6` instead — see `sensors`.
+      joint: "6"
+      open: 2.14
+      closed: 0.0
+
+  # --------------------------------------------------------------- head --
+  head:
+    kind: pointing
+    pointing_frame: hn_realsense_optical_frame
+    controllers:
+      trajectory: /pan_tilt_trajectory_controller
+      stream: /pan_tilt_controller
+    # No `tip:`. A pointing group has nothing to reach with, and the missing
+    # tip is what gates IK off — an omission on purpose.
+
+cameras:
+  head:
+    # THE REAL TOPIC NAMES, which are not the ones cameras.launch.py asks for.
+    # realsense2_camera composes its namespace as /<camera_namespace>/<node
+    # name> and publishes everything beneath that, so the launch file's
+    # remappings onto /harness/depth_camera/* never match anything. Read off
+    # `ros2 topic list` on the running stack.
+    rgb: /camera/head_camera/color/image_raw
+    # ALIGNED depth, not /camera/head_camera/depth/image_rect_raw. The driver
+    # runs with align_depth.enable, and only the aligned stream has depth
+    # pixels that correspond to colour pixels — deproject() against the raw
+    # stream reads the distance of a different part of the scene.
+    depth: /camera/head_camera/aligned_depth_to_color/image_raw
+    # Colour intrinsics, because the aligned depth is in the colour frame.
+    info: /camera/head_camera/color/camera_info
+    # NO `cloud:`. The point cloud is off (MOD101_POINTCLOUD=false) because it
+    # is the most expensive stream the D435 produces. Set that to true and add
+    #   cloud: /camera/head_camera/depth/color/points
+    # here; declaring it while the driver is not publishing would advertise a
+    # handle that blocks forever.
+    #
+    # THE FRAME THE DRIVER ACTUALLY STAMPS, which is NOT the URDF's
+    # hn_realsense_optical_frame the sim profile names. And it is currently
+    # UNREACHABLE from `world` — see the warning at the bottom of this file.
+    frame: camera_color_optical_frame
+    optical: true
+  # NO WRIST CAMERA. The harness has no wrist camera fitted, and the compose
+  # file starts the driver with wrist_camera:=false, so /wrist_camera/* does
+  # not exist. Declaring it would hand out a handle onto silence — worse than
+  # a missing attribute, which at least raises.
+
+# ---------------------------------------------------------------------------
+# SERVO TELEMETRY. Eight motors x four scalars, straight off the Feetech bus at
+# 1 Hz (servos.yaml: motor_telemetry_rate). This is the section the sim profile
+# cannot have: Gazebo has no bus voltage and no servo that gets hot.
+#
+# UNITS ARE RAW AND ARE NOT CONVERTED ANYWHERE. st3215_manager publishes what
+# the register holds, so `current` is a count (x6.5 for mA) and `load` is a
+# signed duty cycle on a +-1023 scale, NOT a percentage. The schema's own note
+# is exactly this case — "Int32 celsius sitting beside Float32 milliamps is
+# the pair that misleads silently" — so the scale is written into `units`
+# rather than left to be guessed.
+#
+# WHAT IT IS FOR: load and temperature are the only warning a servo gives
+# before it stalls or cooks, and joint_shoulder is the one to watch because it
+# holds the whole arm's weight. A sign REVERSAL on `load` at a few Hz is the
+# signature of a joint hunting rather than holding.
+#
+# TOPIC SPELLING: the tool joint is `6` everywhere else in this file, but its
+# telemetry topics are /motor_telemetry/joint_6/* — the driver prefixes a
+# name that would otherwise be a bare number. Read off the running robot, not
+# derived, precisely because it does not follow the rule.
+sensors:
+  joint_base:
+    current:     {topic: /motor_telemetry/joint_base/current,     type: std_msgs/Float32, units: "count (x6.5 = mA)"}
+    voltage:     {topic: /motor_telemetry/joint_base/voltage,     type: std_msgs/Float32, units: V}
+    load:        {topic: /motor_telemetry/joint_base/load,        type: std_msgs/Float32, units: "count (signed, 1023 = full)"}
+    temperature: {topic: /motor_telemetry/joint_base/temperature, type: std_msgs/Int32,   units: degC}
+  joint_shoulder:
+    current:     {topic: /motor_telemetry/joint_shoulder/current,     type: std_msgs/Float32, units: "count (x6.5 = mA)"}
+    voltage:     {topic: /motor_telemetry/joint_shoulder/voltage,     type: std_msgs/Float32, units: V}
+    load:        {topic: /motor_telemetry/joint_shoulder/load,        type: std_msgs/Float32, units: "count (signed, 1023 = full)"}
+    temperature: {topic: /motor_telemetry/joint_shoulder/temperature, type: std_msgs/Int32,   units: degC}
+  joint_elbow:
+    current:     {topic: /motor_telemetry/joint_elbow/current,     type: std_msgs/Float32, units: "count (x6.5 = mA)"}
+    voltage:     {topic: /motor_telemetry/joint_elbow/voltage,     type: std_msgs/Float32, units: V}
+    load:        {topic: /motor_telemetry/joint_elbow/load,        type: std_msgs/Float32, units: "count (signed, 1023 = full)"}
+    temperature: {topic: /motor_telemetry/joint_elbow/temperature, type: std_msgs/Int32,   units: degC}
+  joint_wrist_tilt:
+    current:     {topic: /motor_telemetry/joint_wrist_tilt/current,     type: std_msgs/Float32, units: "count (x6.5 = mA)"}
+    voltage:     {topic: /motor_telemetry/joint_wrist_tilt/voltage,     type: std_msgs/Float32, units: V}
+    load:        {topic: /motor_telemetry/joint_wrist_tilt/load,        type: std_msgs/Float32, units: "count (signed, 1023 = full)"}
+    temperature: {topic: /motor_telemetry/joint_wrist_tilt/temperature, type: std_msgs/Int32,   units: degC}
+  joint_wrist_roll:
+    current:     {topic: /motor_telemetry/joint_wrist_roll/current,     type: std_msgs/Float32, units: "count (x6.5 = mA)"}
+    voltage:     {topic: /motor_telemetry/joint_wrist_roll/voltage,     type: std_msgs/Float32, units: V}
+    load:        {topic: /motor_telemetry/joint_wrist_roll/load,        type: std_msgs/Float32, units: "count (signed, 1023 = full)"}
+    temperature: {topic: /motor_telemetry/joint_wrist_roll/temperature, type: std_msgs/Int32,   units: degC}
+  # The jaws tool. `joint_6` here, `6` in groups.arm.tool.joint — see above.
+  joint_6:
+    current:     {topic: /motor_telemetry/joint_6/current,     type: std_msgs/Float32, units: "count (x6.5 = mA)"}
+    voltage:     {topic: /motor_telemetry/joint_6/voltage,     type: std_msgs/Float32, units: V}
+    load:        {topic: /motor_telemetry/joint_6/load,        type: std_msgs/Float32, units: "count (signed, 1023 = full)"}
+    temperature: {topic: /motor_telemetry/joint_6/temperature, type: std_msgs/Int32,   units: degC}
+  hn_pan_joint:
+    current:     {topic: /motor_telemetry/hn_pan_joint/current,     type: std_msgs/Float32, units: "count (x6.5 = mA)"}
+    voltage:     {topic: /motor_telemetry/hn_pan_joint/voltage,     type: std_msgs/Float32, units: V}
+    load:        {topic: /motor_telemetry/hn_pan_joint/load,        type: std_msgs/Float32, units: "count (signed, 1023 = full)"}
+    temperature: {topic: /motor_telemetry/hn_pan_joint/temperature, type: std_msgs/Int32,   units: degC}
+  hn_tilt_joint:
+    current:     {topic: /motor_telemetry/hn_tilt_joint/current,     type: std_msgs/Float32, units: "count (x6.5 = mA)"}
+    voltage:     {topic: /motor_telemetry/hn_tilt_joint/voltage,     type: std_msgs/Float32, units: V}
+    load:        {topic: /motor_telemetry/hn_tilt_joint/load,        type: std_msgs/Float32, units: "count (signed, 1023 = full)"}
+    temperature: {topic: /motor_telemetry/hn_tilt_joint/temperature, type: std_msgs/Int32,   units: degC}
+
+audit:
+  retention_mb: 200
+
+watches: {}
+places: {}
+status: {}
+
+safety:
+  stop_on_disconnect: true
+  confirm_required: []
+
+# ---------------------------------------------------------------------------
+# CAMERA TF: RESOLVED 2026-09-01. This section previously carried a warning
+# that the camera was not attached to the robot in TF. It was true; it is not
+# any more, and what follows is measured against the running stack rather than
+# remembered.
+#
+#   tf tree            ONE root, `world`            (was two disconnected)
+#   world -> camera_color_optical_frame
+#                      RESOLVES  [0.140, -0.009, 0.385]
+#   chain              camera_color_optical_frame <- camera_color_frame
+#                        <- camera_link <- hn_realsense_1 <- hn_pitch_link__1
+#                        <- hn_yaw_mount_1 <- ... <- hn_base_link <- world
+#
+# The chain runs through hn_pitch_link__1 and hn_yaw_mount_1 — the MOVING pan
+# and tilt links — so the camera frame tracks the head instead of being pinned
+# to the mast. And that translation agrees to a millimetre with the camera
+# position computed independently from the URDF meshes, [0.140, -0.0105,
+# 0.3858], which is a stronger check than the transform merely resolving.
+#
+# WHAT FIXED IT, both in mod101_hw_bringup/launch/cameras.launch.py:
+#   - `base_frame_id` back to its default 'link'. It is a SUFFIX, not a frame
+#     reference: the driver names every frame <camera_name>_<base_frame_id>,
+#     so setting it to hn_realsense_1 produced a root called
+#     `camera_hn_realsense_1` — URDF-looking, in no URDF, still its own tree.
+#     That was a first attempt at this fix, and it made the symptom harder to
+#     see rather than better.
+#   - a static transform hn_realsense_1 -> camera_link, identity, because
+#     harness_body.xacro already places hn_realsense_1 where the camera sits.
+#
+# So deproject(pixel, frame, "@base") now has a path, and turning a detection
+# into a place the arm can reach is no longer blocked.
+#
+# STILL DO NOT point `frame:` at hn_realsense_optical_frame. That frame is
+# where the URDF believes the lens is; the pixels come from where the lens
+# actually is, and the two agree only as well as the model does. Naming it
+# would make deproject() return a number for every pixel, wrong by however far
+# the model is off. `camera_color_optical_frame` is the frame the driver
+# stamps, and now that it is reachable there is no reason to name anything
+# else.

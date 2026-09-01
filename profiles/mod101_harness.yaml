@@ -126,8 +126,8 @@ cameras:
     # RGBD on the pan/tilt head. The gz sensor publishes under
     # `harness/depth_camera`; image streams are bridged by ros_gz_image's
     # image_bridge and the rest by parameter_bridge (gz_bridge.yaml).
-    rgb: /harness/depth_camera/image
-    depth: /harness/depth_camera/depth_image
+    rgb: /camera/head_camera/color/image_raw
+    depth: /camera/head_camera/depth/image_rect_raw
     info: /harness/depth_camera/camera_info
     cloud: /harness/depth_camera/points
     # The frame the sensor stamps its messages with (gz_frame_id in

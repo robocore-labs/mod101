@@ -168,8 +168,14 @@ services:
   agent:
     <<: *ros
     image: robocore-agent:latest
+    # THE HARDWARE PROFILE, not profiles/mod101_harness.yaml. That one is the
+    # SIM profile and this file used to mount it: four of its six camera
+    # topics name Gazebo bridge topics that do not exist on the real robot,
+    # and its camera `frame:` names a URDF frame the RealSense driver never
+    # stamps. It also has no `sensors:` section, so none of the servo
+    # telemetry — load, current, temperature — reached the agent at all.
     volumes:
-      - ../profiles/mod101_harness.yaml:/etc/robocore/profile.yaml:ro
+      - ../profiles/mod101_harness_hw.yaml:/etc/robocore/profile.yaml:ro
       - agent-state:/var/lib/robocore
     # use_sim_time FALSE, and it is the one line that must differ from the sim
     # compose file. There is no /clock here, and a node waiting for simulated
