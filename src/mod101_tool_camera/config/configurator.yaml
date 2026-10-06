@@ -1,0 +1,18 @@
+schema_version: 1
+label: Camera mount
+actuated: false
+servo_count: 0
+options:
+  camera_sensor:
+    type: enum
+    label: Depth camera
+    default: luxonis
+    choices:
+      - value: luxonis
+        label: Luxonis · 61 g
+      - value: realsense
+        label: RealSense · 72 g
+  camera_gopro:
+    type: boolean
+    label: Top GoPro · 153 g
+    default: false

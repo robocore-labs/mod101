@@ -1,98 +1,114 @@
 {
   "Parallel_gripper_assembly_v1_1": {
     "V_cm3": 26.167,
-    "mass_g": 32.447,
+    "mass_g": 33.232,
+    "profile": "PETG 1.27 g/cm3, 15% infill, 1.6mm shell",
     "shell_frac": 1.0,
     "source": "geometry",
     "watertight": true
   },
   "base_cover_1": {
     "V_cm3": 23.96,
-    "mass_g": 25.73,
+    "mass_g": 26.3525,
+    "profile": "PETG 1.27 g/cm3, 15% infill, 1.6mm shell",
     "source": "printed"
   },
   "base_link": {
     "V_cm3": 110.46,
-    "mass_g": 83.28,
+    "mass_g": 85.2948,
+    "profile": "PETG 1.27 g/cm3, 15% infill, 1.6mm shell",
     "source": "printed"
   },
   "base_rotation_body_1": {
     "V_cm3": 89.771,
-    "mass_g": 60.979,
+    "mass_g": 62.4543,
+    "profile": "PETG 1.27 g/cm3, 15% infill, 1.6mm shell",
     "shell_frac": 0.468,
     "source": "geometry",
     "watertight": true
   },
   "camera_adapter_1": {
     "V_cm3": 9.29,
-    "mass_g": 11.51,
+    "mass_g": 11.7885,
+    "profile": "PETG 1.27 g/cm3, 15% infill, 1.6mm shell",
     "source": "printed"
   },
   "camera_mount_1": {
     "V_cm3": 8.45,
-    "mass_g": 10.478,
+    "mass_g": 10.7315,
+    "profile": "PETG 1.27 g/cm3, 15% infill, 1.6mm shell",
     "shell_frac": 1.0,
     "source": "geometry",
     "watertight": true
   },
   "camera_tilter_1": {
     "V_cm3": 5.019,
-    "mass_g": 6.224,
+    "mass_g": 6.3746,
+    "profile": "PETG 1.27 g/cm3, 15% infill, 1.6mm shell",
     "shell_frac": 1.0,
     "source": "geometry",
     "watertight": true
   },
   "camera_wing_1": {
     "V_cm3": 8.45,
-    "mass_g": 10.48,
+    "mass_g": 10.7335,
+    "profile": "PETG 1.27 g/cm3, 15% infill, 1.6mm shell",
     "source": "printed"
   },
   "elbow_adapter_1": {
     "V_cm3": 27.13,
-    "mass_g": 24.55,
+    "mass_g": 25.144,
+    "profile": "PETG 1.27 g/cm3, 15% infill, 1.6mm shell",
     "source": "printed"
   },
   "elbow_fork_1": {
     "V_cm3": 56.172,
-    "mass_g": 41.656,
+    "mass_g": 42.6638,
+    "profile": "PETG 1.27 g/cm3, 15% infill, 1.6mm shell",
     "shell_frac": 0.527,
     "source": "geometry",
     "watertight": true
   },
   "elbow_link_1": {
     "V_cm3": 43.89,
-    "mass_g": 31.05,
+    "mass_g": 31.8012,
+    "profile": "PETG 1.27 g/cm3, 15% infill, 1.6mm shell",
     "source": "printed"
   },
   "elbow_servo_adapter_L_1": {
     "V_cm3": 9.106,
-    "mass_g": 8.686,
+    "mass_g": 8.8961,
+    "profile": "PETG 1.27 g/cm3, 15% infill, 1.6mm shell",
     "shell_frac": 0.728,
     "source": "geometry",
     "watertight": true
   },
   "elbow_servo_adapter_R_1": {
     "V_cm3": 9.106,
-    "mass_g": 8.686,
+    "mass_g": 8.8961,
+    "profile": "PETG 1.27 g/cm3, 15% infill, 1.6mm shell",
     "shell_frac": 0.728,
     "source": "geometry",
     "watertight": true
   },
   "elbow_wrist_body_1": {
     "V_cm3": 19.337,
-    "mass_g": 17.309,
+    "mass_g": 17.7278,
+    "profile": "PETG 1.27 g/cm3, 15% infill, 1.6mm shell",
     "shell_frac": 0.673,
     "source": "geometry",
     "watertight": true
   },
   "jaws_body": {
     "V_cm3": 56.95,
-    "mass_g": 43.8,
+    "mass_g": 44.8597,
+    "profile": "PETG 1.27 g/cm3, 15% infill, 1.6mm shell",
     "source": "printed"
   },
   "jaws_moving": {
     "V_cm3": 20.22,
-    "mass_g": 18.08,
+    "mass_g": 18.5174,
+    "profile": "PETG 1.27 g/cm3, 15% infill, 1.6mm shell",
     "source": "printed"
   },
   "jaws_servo": {
@@ -102,52 +118,60 @@
   },
   "left_jaw_v1_1": {
     "V_cm3": 15.673,
-    "mass_g": 19.435,
+    "mass_g": 19.9052,
+    "profile": "PETG 1.27 g/cm3, 15% infill, 1.6mm shell",
     "shell_frac": 1.0,
     "source": "geometry",
     "watertight": false
   },
   "right_jaw_v1_1": {
     "V_cm3": 15.673,
-    "mass_g": 19.435,
+    "mass_g": 19.9052,
+    "profile": "PETG 1.27 g/cm3, 15% infill, 1.6mm shell",
     "shell_frac": 1.0,
     "source": "geometry",
     "watertight": false
   },
   "shoulder_adapter_1": {
     "V_cm3": 27.13,
-    "mass_g": 24.55,
+    "mass_g": 25.144,
+    "profile": "PETG 1.27 g/cm3, 15% infill, 1.6mm shell",
     "source": "printed"
   },
   "shoulder_elbow_body_1": {
     "V_cm3": 129.806,
-    "mass_g": 80.417,
+    "mass_g": 82.3626,
+    "profile": "PETG 1.27 g/cm3, 15% infill, 1.6mm shell",
     "shell_frac": 0.411,
     "source": "geometry",
     "watertight": true
   },
   "shoulder_fork_1": {
     "V_cm3": 43.269,
-    "mass_g": 38.105,
+    "mass_g": 39.0269,
+    "profile": "PETG 1.27 g/cm3, 15% infill, 1.6mm shell",
     "shell_frac": 0.659,
     "source": "geometry",
     "watertight": true
   },
   "shoulder_rotation_link_1": {
     "V_cm3": 43.52,
-    "mass_g": 32.95,
+    "mass_g": 33.7472,
+    "profile": "PETG 1.27 g/cm3, 15% infill, 1.6mm shell",
     "source": "printed"
   },
   "shoulder_thingy_L_1": {
     "V_cm3": 9.106,
-    "mass_g": 8.686,
+    "mass_g": 8.8961,
+    "profile": "PETG 1.27 g/cm3, 15% infill, 1.6mm shell",
     "shell_frac": 0.729,
     "source": "geometry",
     "watertight": true
   },
   "shoulder_thingy_R_1": {
     "V_cm3": 9.106,
-    "mass_g": 8.686,
+    "mass_g": 8.8961,
+    "profile": "PETG 1.27 g/cm3, 15% infill, 1.6mm shell",
     "shell_frac": 0.729,
     "source": "geometry",
     "watertight": true
@@ -159,17 +183,20 @@
   },
   "wrist_roll_adapter_1": {
     "V_cm3": 24.38,
-    "mass_g": 26.47,
+    "mass_g": 27.1104,
+    "profile": "PETG 1.27 g/cm3, 15% infill, 1.6mm shell",
     "source": "printed"
   },
   "wrist_servo_adapter_1": {
     "V_cm3": 22.96,
-    "mass_g": 19.87,
+    "mass_g": 20.3507,
+    "profile": "PETG 1.27 g/cm3, 15% infill, 1.6mm shell",
     "source": "printed"
   },
   "wrist_tilt_body_1": {
     "V_cm3": 23.101,
-    "mass_g": 24.447,
+    "mass_g": 25.0385,
+    "profile": "PETG 1.27 g/cm3, 15% infill, 1.6mm shell",
     "shell_frac": 0.828,
     "source": "geometry",
     "watertight": true

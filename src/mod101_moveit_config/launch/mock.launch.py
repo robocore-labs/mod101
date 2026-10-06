@@ -12,6 +12,7 @@ plugin for the real servo bus driver and this same launch drives the physical
 arm — that's the point of the overlay.
 """
 
+from mod101_description.tool_config import tool_option_arguments
 import os
 import re
 import tempfile
@@ -26,8 +27,16 @@ from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 import xacro
 
-BUILD_ARGS = ('shoulder_ext_length', 'elbow_ext_length',
+BUILD_ARGS = (*tool_option_arguments(), 'wrist_camera', 'arm_dof', 'shoulder_ext_length', 'elbow_ext_length',
               'shoulder_mount', 'elbow_mount')
+
+
+def _tool_actuated(tool):
+    path = os.path.join(get_package_share_directory(f'mod101_tool_{tool}'), 'config', 'controllers.yaml')
+    if not os.path.exists(path):
+        return False
+    with open(path) as stream:
+        return bool(yaml.safe_load(stream))
 
 
 def _configured_tool():
@@ -63,7 +72,9 @@ def _build(context):
         hardware_xacro,
         mappings={**params, 'tool': tool, 'use_sim': 'false'}).toxml())
 
-    controllers = _controller_params(tool)
+    import xml.etree.ElementTree as ET
+    arm_dof = 7 if ET.fromstring(robot_description).find("joint[@name='joint_wrist_yaw']") is not None else 6
+    controllers = _controller_params(tool, arm_dof)
 
     ros2_control_node = Node(
         package='controller_manager',
@@ -98,7 +109,7 @@ def _build(context):
 
     spawners = [spawner('joint_state_broadcaster', 3.0),
                 spawner('arm_trajectory_controller', 5.0)]
-    if tool != 'none':
+    if _tool_actuated(tool):
         spawners.append(spawner('gripper_trajectory_controller', 7.0))
 
     move_group = IncludeLaunchDescription(
@@ -147,7 +158,7 @@ def _force_mock_hardware(urdf):
     return ET.tostring(root, encoding='unicode')
 
 
-def _controller_params(tool):
+def _controller_params(tool, arm_dof=6):
     """Merge the arm + tool controller YAMLs, with use_sim_time forced off.
 
     Written to one temp file rather than handed to Node(parameters=[...]) as a
@@ -158,8 +169,8 @@ def _controller_params(tool):
     enough to undo that, so merge it here where the precedence is explicit.
     """
     paths = [os.path.join(get_package_share_directory('mod101_control'),
-                          'config', 'controllers.sim.yaml')]
-    if tool != 'none':
+                          'config', 'controllers.sim.7dof.yaml' if arm_dof == 7 else 'controllers.sim.yaml')]
+    if _tool_actuated(tool):
         paths.append(os.path.join(
             get_package_share_directory(f'mod101_tool_{tool}'),
             'config', 'controllers.yaml'))
@@ -186,6 +197,9 @@ def _controller_params(tool):
 
 def generate_launch_description():
     return LaunchDescription([
+        *(DeclareLaunchArgument(key, default_value='') for key in tool_option_arguments()),
+        DeclareLaunchArgument('wrist_camera', default_value=''),
+        DeclareLaunchArgument('arm_dof', default_value=''),
         DeclareLaunchArgument('tool', default_value=_configured_tool()),
         # Empty = "whatever the configurator last saved": mod101_config.xacro
         # holds the defaults, and _drop_unset() below keeps unset args out of

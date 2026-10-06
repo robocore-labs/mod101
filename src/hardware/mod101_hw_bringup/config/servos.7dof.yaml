@@ -1,0 +1,176 @@
+# 7DOF wiring defaults: wrist yaw ID 9; calibrate against the actual bus.
+servo_manager_node:
+  ros__parameters:
+    port: /dev/mod101-servo
+    baud: 1000000
+    ticks_per_rev: 4096
+    telemetry_rate: 50.0
+    joint_states_topic: /motor_manager/joint_states
+    total_joints: 9
+    brake_method: torque_disable
+    velocity_ramp_time: 0.1
+    brake_acceleration: 100
+    motor_telemetry_enable: true
+    motor_telemetry_rate: 1.0
+    test_on_startup: false
+    require_motors: true
+    group_names:
+    - arm
+    - tool
+    - head
+    arm:
+      enable: true
+      mode: position
+      topic: /motor_manager/arm_cmd
+      motor_ids:
+      - 1
+      - 2
+      - 3
+      - 9
+      - 4
+      - 5
+      joint_names:
+      - joint_base
+      - joint_shoulder
+      - joint_elbow
+      - joint_wrist_yaw
+      - joint_wrist_tilt
+      - joint_wrist_roll
+      direction:
+      - 1
+      - -1
+      - 1
+      - 1
+      - -1
+      - 1
+      command_indices:
+      - 0
+      - 1
+      - 2
+      - 3
+      - 4
+      - 5
+      state_indices:
+      - 0
+      - 1
+      - 2
+      - 3
+      - 4
+      - 5
+      speed_scale: 1.0
+      speed:
+      - 512
+      - 398
+      - 512
+      - 512
+      - 796
+      - 1024
+      accel:
+      - 37
+      - 25
+      - 39
+      - 39
+      - 88
+      - 146
+      kp:
+      - 24
+      - 32
+      - 32
+      - 32
+      - 32
+      - 32
+      kd:
+      - 48
+      - 40
+      - 40
+      - 36
+      - 36
+      - 32
+      ki:
+      - 0
+      - 0
+      - 0
+      - 0
+      - 0
+      - 0
+      deadband:
+      - 2
+      - 1
+      - 1
+      - 1
+      - 1
+      - 1
+      unwrap_position: false
+      position_speed: 200
+      position_accel: 200
+    tool:
+      enable: true
+      mode: position
+      topic: /motor_manager/tool_cmd
+      motor_ids:
+      - 6
+      joint_names:
+      - '6'
+      direction:
+      - 1
+      command_indices:
+      - 0
+      state_indices:
+      - 6
+      speed_scale: 1.0
+      speed:
+      - 1024
+      accel:
+      - 171
+      kp:
+      - 32
+      kd:
+      - 32
+      ki:
+      - 0
+      deadband:
+      - 1
+      unwrap_position: false
+      position_speed: 200
+      position_accel: 200
+    head:
+      enable: true
+      mode: position
+      topic: /motor_manager/head_cmd
+      motor_ids:
+      - 7
+      - 8
+      joint_names:
+      - hn_pan_joint
+      - hn_tilt_joint
+      direction:
+      - 1
+      - 1
+      command_indices:
+      - 0
+      - 1
+      state_indices:
+      - 7
+      - 8
+      speed_scale: 1.0
+      speed:
+      - 569
+      - 569
+      accel:
+      - 57
+      - 57
+      kp:
+      - 24
+      - 32
+      kd:
+      - 48
+      - 40
+      ki:
+      - 0
+      - 0
+      deadband:
+      - 2
+      - 1
+      unwrap_position: false
+      position_speed: 300
+      position_accel: 200

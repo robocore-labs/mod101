@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <robot name="mod101" xmlns:xacro="http://www.ros.org/wiki/xacro">
 
-<xacro:macro name="mod101_arm_ros2control" params="prefix">
+<xacro:macro name="mod101_arm_ros2control" params="prefix arm_dof:=6">
 
   <ros2_control name="${prefix}mod101_sim_system" type="system">
     <hardware>
@@ -28,6 +28,11 @@
       <state_interface name="velocity"/>
     </joint>
 
+    <xacro:if value="${int(arm_dof) == 7}">
+      <joint name="${prefix}joint_wrist_yaw">
+        <command_interface name="position"/><state_interface name="position"/><state_interface name="velocity"/>
+      </joint>
+    </xacro:if>
     <joint name="${prefix}joint_wrist_tilt">
       <command_interface name="position"/>
       <state_interface name="position"/>

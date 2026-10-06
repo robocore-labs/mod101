@@ -1,0 +1,62 @@
+<?xml version="1.0"?>
+<!-- DESIGN LEDGER: passive camera end effector from camera_tool.step.
+Mount origin = CAD (0,0,0), at the centred +/-7mm bolt pattern, rear Z=0 face.
+Tool +X = CAD +Z (lens forward), +Y = CAD -X, +Z = CAD -Y (GoPro above).
+All meshes are transformed to this shared tool frame, in mm; scale is 0.001.
+Root-to-wrist_flange mount and physical-link joints are identity. No actuators.
+The primary link contains exactly ONE camera: Luxonis 61g OR RealSense 72g.
+GoPro 153g is optional. Holder PETG 15% infill / 1.6mm shell / 1270kg/m3.
+COM/inertia use CAD geometry at uniform effective density; cameras use user
+weights, not CAD densities. See config/measurements.json for source SHA/data.
+Primary collision is the UNION bounding box of both cameras, conservative and
+identical for every choice. GoPro collision uses its CAD bounding box.
+GoPro optical datum is the front glass centre, derived from the 753.097mm2
+planar face: CAD (-21.593041865,-66,35.185104237)mm. Actual optical principal
+point/extrinsics require calibration; this supplies the CAD mechanical datum.
+Optical convention: +Z forward (+tool X), +X image right (-tool Y), +Y down
+(-tool Z), represented by rpy (-pi/2,0,-pi/2). Frame-only links have no mass.
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+<xacro:include filename="$(find mod101_tool_camera)/urdf/tool_config.xacro"/>
+<xacro:macro name="mod101_tool_camera" params="prefix:='' use_sim:='true' with_ros2_control:='true' sensor:='luxonis' gopro:='false'">
+  <xacro:property name="selected_camera" value="${dict([('luxonis','luxonis'),('realsense','realsense')])[str(sensor)]}"/>
+  <xacro:property name="include_gopro" value="${str(gopro).lower() == 'true'}"/>
+  <material name="${prefix}camera_tool_plastic"><color rgba="0.06 0.065 0.07 1"/></material>
+  <material name="${prefix}camera_tool_luxonis"><color rgba="0.16 0.18 0.20 1"/></material>
+  <material name="${prefix}camera_tool_realsense"><color rgba="0.7 0.72 0.74 1"/></material>
+  <material name="${prefix}camera_tool_gopro"><color rgba="0.10 0.11 0.12 1"/></material>
+  <link name="${prefix}camera_tool_root"/>
+  <joint name="${prefix}camera_tool_mount" type="fixed"><parent link="${prefix}wrist_flange"/><child link="${prefix}camera_tool_root"/></joint>
+  <link name="${prefix}camera_tool_holder">
+<inertial><origin xyz="0.0142247693072 0.000231441218903 -0.00799286389578"/><mass value="0.0462171234991"/><inertia ixx="4.27453889651e-05" iyy="1.67898256433e-05" izz="3.1249095453e-05" ixy="-1.3781806632e-07" ixz="-1.51451308902e-07" iyz="2.93068523754e-07"/></inertial>
+<visual><geometry><mesh filename="package://mod101_tool_camera/meshes/holder.stl" scale="0.001 0.001 0.001"/></geometry><material name="${prefix}camera_tool_plastic"/></visual>
+<collision><origin xyz="0.0151005769164 6.01949046164e-15 -0.000499999949995"/><geometry><box size="0.0302011540328 0.0900000070781 0.0670000001"/></geometry></collision>
+  </link>
+  <joint name="${prefix}camera_tool_holder_mount" type="fixed"><parent link="${prefix}camera_tool_root"/><child link="${prefix}camera_tool_holder"/></joint>
+  <link name="${prefix}camera_tool_primary">
+<xacro:if value="${selected_camera == 'luxonis'}">
+<inertial><origin xyz="0.0222144854677 -0.000226399068764 -0.0111994169646"/><mass value="0.061"/><inertia ixx="4.77605359029e-05" iyy="6.25898269621e-06" izz="4.5389224224e-05" ixy="2.75446810096e-08" ixz="-6.95165962541e-09" iyz="1.15896192044e-07"/></inertial>
+<visual><geometry><mesh filename="package://mod101_tool_camera/meshes/luxonis.stl" scale="0.001 0.001 0.001"/></geometry><material name="${prefix}camera_tool_luxonis"/></visual>
+</xacro:if>
+<xacro:if value="${selected_camera == 'realsense'}">
+<inertial><origin xyz="0.0246571697216 0.00140686421991 -0.0117734073588"/><mass value="0.072"/><inertia ixx="4.6202371261e-05" iyy="6.92203578749e-06" izz="4.66134070408e-05" ixy="4.15331359352e-07" ixz="2.00367504154e-08" iyz="3.56840922703e-09"/></inertial>
+<visual><geometry><mesh filename="package://mod101_tool_camera/meshes/realsense.stl" scale="0.001 0.001 0.001"/></geometry><material name="${prefix}camera_tool_realsense"/></visual>
+</xacro:if>
+<collision><origin xyz="0.0255249612895 1.74560571241e-08 -0.01125000243"/><geometry><box size="0.0250501044749 0.09100004934 0.02800001532"/></geometry></collision>
+  </link>
+  <joint name="${prefix}camera_tool_primary_mount" type="fixed"><parent link="${prefix}camera_tool_holder"/><child link="${prefix}camera_tool_primary"/></joint>
+  <xacro:if value="${include_gopro}">
+    <link name="${prefix}camera_tool_gopro">
+<inertial><origin xyz="0.0164169769157 0.0030071968387 0.0576687780931"/><mass value="0.153"/><inertia ixx="9.40923340359e-05" iyy="4.20152317153e-05" izz="7.47655982088e-05" ixy="-2.78502734855e-06" ixz="-1.24046024169e-06" iyz="-1.56636744147e-06"/></inertial>
+<visual><geometry><mesh filename="package://mod101_tool_camera/meshes/gopro.stl" scale="0.001 0.001 0.001"/></geometry><material name="${prefix}camera_tool_gopro"/></visual>
+<collision><origin xyz="0.0184351042371 0.00188289193665 0.0504999999399"/><geometry><box size="0.0335 0.073420300057 0.0650000001201"/></geometry></collision>
+    </link>
+    <joint name="${prefix}camera_tool_gopro_mount" type="fixed"><parent link="${prefix}camera_tool_holder"/><child link="${prefix}camera_tool_gopro"/></joint>
+    <link name="${prefix}camera_tool_gopro_optical_frame"/>
+    <joint name="${prefix}camera_tool_gopro_optical_joint" type="fixed">
+      <origin xyz="0.035185104237 0.021593041865 0.066" rpy="-1.5707963267948966 0 -1.5707963267948966"/>
+      <parent link="${prefix}camera_tool_gopro"/><child link="${prefix}camera_tool_gopro_optical_frame"/>
+    </joint>
+  </xacro:if>
+</xacro:macro>
+</robot>

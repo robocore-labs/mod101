@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<!-- Planning ledger: one motor joint 6, passive rack followers from URDF;
+     gripper group includes fixed root to remain adjacent to wrist_flange.
+     State values derive from 27mm travel / measured pinion pitch radius. -->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:macro name="mod101_tool_pggripper_srdf" params="prefix:=''">
+    <xacro:property name="pg_limits" value="${xacro.load_yaml('$(find mod101_tool_pggripper)/config/measurements.json')}"/>
+    <group name="${prefix}gripper"><link name="${prefix}pggripper_root"/><joint name="${prefix}6"/></group>
+    <passive_joint name="${prefix}pggripper_left_slider"/>
+    <passive_joint name="${prefix}pggripper_right_slider"/>
+    <group_state name="closed" group="${prefix}gripper"><joint name="${prefix}6" value="0"/></group_state>
+    <group_state name="open" group="${prefix}gripper"><joint name="${prefix}6" value="${pg_limits['max_angle_rad']}"/></group_state>
+    <end_effector name="${prefix}pggripper_ee" parent_link="${prefix}wrist_flange" group="${prefix}gripper" parent_group="${prefix}arm"/>
+  </xacro:macro>
+</robot>

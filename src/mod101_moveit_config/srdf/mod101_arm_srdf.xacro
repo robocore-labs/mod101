@@ -23,18 +23,34 @@
 
 <!-- Tool semantics fragments (see mod101_tool_<name>/srdf/tool.srdf.xacro). -->
 <xacro:include filename="$(find mod101_tool_parallel)/srdf/tool.srdf.xacro"/>
+<xacro:include filename="$(find mod101_tool_pggripper)/srdf/tool.srdf.xacro"/>
 <xacro:include filename="$(find mod101_tool_pincopen)/srdf/tool.srdf.xacro"/>
 <xacro:include filename="$(find mod101_tool_jaws)/srdf/tool.srdf.xacro"/>
 <xacro:include filename="$(find mod101_tool_none)/srdf/tool.srdf.xacro"/>
+<xacro:include filename="$(find mod101_tool_camera)/srdf/tool.srdf.xacro"/>
 
 <!-- Generated collision matrices, one per tool. -->
 <xacro:include filename="$(find mod101_moveit_config)/config/collisions/parallel.srdf.xacro"/>
+<xacro:include filename="$(find mod101_moveit_config)/config/collisions/parallel.7dof.srdf.xacro"/>
 <xacro:include filename="$(find mod101_moveit_config)/config/collisions/pincopen.srdf.xacro"/>
+<xacro:include filename="$(find mod101_moveit_config)/config/collisions/pincopen.7dof.srdf.xacro"/>
 <xacro:include filename="$(find mod101_moveit_config)/config/collisions/jaws.srdf.xacro"/>
+<xacro:include filename="$(find mod101_moveit_config)/config/collisions/jaws.7dof.srdf.xacro"/>
 <xacro:include filename="$(find mod101_moveit_config)/config/collisions/none.srdf.xacro"/>
+<xacro:include filename="$(find mod101_moveit_config)/config/collisions/none.7dof.srdf.xacro"/>
 
-<xacro:macro name="mod101_arm_srdf" params="prefix:='' tool:='jaws'">
+<xacro:include filename="$(find mod101_moveit_config)/config/collisions/camera.srdf.xacro"/>
+<xacro:include filename="$(find mod101_moveit_config)/config/collisions/camera.7dof.srdf.xacro"/>
 
+<xacro:include filename="$(find mod101_moveit_config)/config/collisions/pggripper.srdf.xacro"/>
+<xacro:include filename="$(find mod101_moveit_config)/config/collisions/pggripper.7dof.srdf.xacro"/>
+
+<xacro:macro name="mod101_arm_srdf" params="prefix:='' tool:='jaws' camera_gopro:='false' arm_dof:=6 wrist_camera:='true'">
+
+  <!-- Planning ledger: serial arm IK from base_link to wrist_flange; tool
+       groups remain separate. 6DOF has five arm axes plus tool, 7DOF adds
+       joint_wrist_yaw (radians). New variant uses independently sampled
+       collision matrices; home/ready set yaw to zero. -->
   <!-- ============================== groups ================================ -->
   <!-- 5 DOF: base yaw (Z), shoulder/elbow/wrist_tilt pitch (all ±Y, parallel),
        wrist roll (X). Terminates at wrist_flange — the tool mount contract
@@ -49,6 +65,7 @@
     <joint name="${prefix}joint_base"       value="0.0"/>
     <joint name="${prefix}joint_shoulder"   value="0.0"/>
     <joint name="${prefix}joint_elbow"      value="0.0"/>
+    <xacro:if value="${int(arm_dof) == 7}"><joint name="${prefix}joint_wrist_yaw" value="0.0"/></xacro:if>
     <joint name="${prefix}joint_wrist_tilt" value="0.0"/>
     <joint name="${prefix}joint_wrist_roll" value="0.0"/>
   </group_state>
@@ -59,28 +76,43 @@
     <joint name="${prefix}joint_base"       value="0.0"/>
     <joint name="${prefix}joint_shoulder"   value="1.2"/>
     <joint name="${prefix}joint_elbow"      value="1.5"/>
+    <xacro:if value="${int(arm_dof) == 7}"><joint name="${prefix}joint_wrist_yaw" value="0.0"/></xacro:if>
     <joint name="${prefix}joint_wrist_tilt" value="0.3"/>
     <joint name="${prefix}joint_wrist_roll" value="0.0"/>
   </group_state>
 
   <!-- ============================ active tool ============================= -->
+  <xacro:if value="${tool == 'pggripper'}">
+    <xacro:mod101_tool_pggripper_srdf prefix="${prefix}"/>
+    <xacro:unless value="${int(arm_dof) == 7}"><xacro:mod101_collisions_pggripper prefix="${prefix}" wrist_camera="${wrist_camera}"/></xacro:unless>
+    <xacro:if value="${int(arm_dof) == 7}"><xacro:mod101_collisions_pggripper_7dof prefix="${prefix}" wrist_camera="${wrist_camera}"/></xacro:if>
+  </xacro:if>
   <xacro:if value="${tool == 'parallel'}">
     <xacro:mod101_tool_parallel_srdf prefix="${prefix}"/>
-    <xacro:mod101_collisions_parallel prefix="${prefix}"/>
+    <xacro:unless value="${int(arm_dof) == 7}"><xacro:mod101_collisions_parallel prefix="${prefix}" wrist_camera="${wrist_camera}"/></xacro:unless>
+    <xacro:if value="${int(arm_dof) == 7}"><xacro:mod101_collisions_parallel_7dof prefix="${prefix}" wrist_camera="${wrist_camera}"/></xacro:if>
   </xacro:if>
   <xacro:if value="${tool == 'pincopen'}">
     <xacro:mod101_tool_pincopen_srdf prefix="${prefix}"/>
-    <xacro:mod101_collisions_pincopen prefix="${prefix}"/>
+    <xacro:unless value="${int(arm_dof) == 7}"><xacro:mod101_collisions_pincopen prefix="${prefix}" wrist_camera="${wrist_camera}"/></xacro:unless>
+    <xacro:if value="${int(arm_dof) == 7}"><xacro:mod101_collisions_pincopen_7dof prefix="${prefix}" wrist_camera="${wrist_camera}"/></xacro:if>
   </xacro:if>
   <xacro:if value="${tool == 'jaws'}">
     <xacro:mod101_tool_jaws_srdf prefix="${prefix}"/>
-    <xacro:mod101_collisions_jaws prefix="${prefix}"/>
+    <xacro:unless value="${int(arm_dof) == 7}"><xacro:mod101_collisions_jaws prefix="${prefix}" wrist_camera="${wrist_camera}"/></xacro:unless>
+    <xacro:if value="${int(arm_dof) == 7}"><xacro:mod101_collisions_jaws_7dof prefix="${prefix}" wrist_camera="${wrist_camera}"/></xacro:if>
   </xacro:if>
   <xacro:if value="${tool == 'none'}">
     <xacro:mod101_tool_none_srdf prefix="${prefix}"/>
-    <xacro:mod101_collisions_none prefix="${prefix}"/>
+    <xacro:unless value="${int(arm_dof) == 7}"><xacro:mod101_collisions_none prefix="${prefix}" wrist_camera="${wrist_camera}"/></xacro:unless>
+    <xacro:if value="${int(arm_dof) == 7}"><xacro:mod101_collisions_none_7dof prefix="${prefix}" wrist_camera="${wrist_camera}"/></xacro:if>
   </xacro:if>
 
+  <xacro:if value="${tool == 'camera'}">
+    <xacro:mod101_tool_camera_srdf prefix="${prefix}" gopro="${camera_gopro}"/>
+    <xacro:unless value="${int(arm_dof) == 7}"><xacro:mod101_collisions_camera prefix="${prefix}" wrist_camera="${wrist_camera}" camera_gopro="${camera_gopro}"/></xacro:unless>
+    <xacro:if value="${int(arm_dof) == 7}"><xacro:mod101_collisions_camera_7dof prefix="${prefix}" wrist_camera="${wrist_camera}" camera_gopro="${camera_gopro}"/></xacro:if>
+  </xacro:if>
 </xacro:macro>
 
 </robot>

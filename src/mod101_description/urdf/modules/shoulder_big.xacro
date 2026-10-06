@@ -36,8 +36,8 @@
 <link name="${prefix}shoulder_rotation_link_1">
   <inertial>
     <origin xyz="0.032744272167771385 0.0004962194281389748 -0.013844865838515547" rpy="0 0 0"/>
-    <mass value="0.049583984"/>
-    <inertia ixx="1.84372307e-05" iyy="2.5269301e-05" izz="2.32103209e-05" ixy="-2.80770011e-07" iyz="-1.87180007e-07" ixz="-2.33975009e-06"/>
+    <mass value="0.0507835965161"/>
+    <inertia ixx="1.88832927331e-05" iyy="2.58806550565e-05" izz="2.37718609218e-05" ixy="-2.87562833847e-07" iyz="-1.91708555556e-07" ixz="-2.39635694702e-06"/>
   </inertial>
   <visual>
     <origin xyz="${-0.001130+snx} ${-0.000787+sny} ${-0.049192+snz}" rpy="0 0 0"/>
@@ -55,8 +55,8 @@
 <link name="${prefix}servo_shoulder_1">
   <inertial>
     <origin xyz="-0.010248506820219064 0.016877231540248554 0.021914022574664543" rpy="0 0 0"/>
-    <mass value="0.210"/>
-    <inertia ixx="5.7e-05" iyy="4.5e-05" izz="3.2e-05" ixy="0.0" iyz="-0.0" ixz="0.0"/>
+    <mass value="0.21"/>
+    <inertia ixx="5.7e-05" iyy="4.5e-05" izz="3.2e-05" ixy="0" iyz="-0" ixz="0"/>
   </inertial>
   <visual>
     <origin xyz="${-0.059990+snx} ${0.015210+sny} ${-0.042608+snz}" rpy="0 0 0"/>
@@ -74,8 +74,8 @@
 <link name="${prefix}shoulder_adapter_1">
   <inertial>
     <origin xyz="-0.020137432669050628 -0.01850241218843865 0.0002933203996578482" rpy="0 0 0"/>
-    <mass value="0.0407909635"/>
-    <inertia ixx="1.43752861e-05" iyy="8.79941757e-06" izz="1.85571876e-05" ixy="0" iyz="0" ixz="1.74245893e-07"/>
+    <mass value="0.0417778416492"/>
+    <inertia ixx="1.47230752798e-05" iyy="9.01230670476e-06" izz="1.90061518161e-05" ixy="0" iyz="0" ixz="1.78461519444e-07"/>
   </inertial>
   <visual>
     <origin xyz="${-0.049740+snx} ${-0.019990+sny} ${-0.075358+snz}" rpy="0 0 0"/>

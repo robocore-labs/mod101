@@ -16,6 +16,7 @@ TO GO LIVE:
 Build args (tool + the four build params) behave exactly as in sim.launch.py.
 """
 
+from mod101_description.tool_config import tool_option_arguments
 import os
 import re
 
@@ -28,7 +29,7 @@ from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 import xacro
 
-BUILD_ARGS = ('tool', 'shoulder_ext_length', 'elbow_ext_length',
+BUILD_ARGS = (*tool_option_arguments(), 'wrist_camera', 'arm_dof', 'tool', 'shoulder_ext_length', 'elbow_ext_length',
               'shoulder_mount', 'elbow_mount')
 
 
@@ -55,7 +56,7 @@ def _build(context):
         urdf_file, mappings={**params, 'use_sim': 'false'}).toxml()
 
     controllers = [
-        os.path.join(pkg_control, 'config', 'controllers.sim.yaml'),
+        os.path.join(pkg_control, 'config', 'controllers.sim.7dof.yaml' if 'name="joint_wrist_yaw"' in robot_description else 'controllers.sim.yaml'),
         os.path.join(pkg_harness, 'config', 'pan_tilt_controllers.yaml'),
     ]
 
@@ -97,7 +98,7 @@ def _build(context):
             'launch', 'tool.launch.py')
         tool_launch_actions.append(IncludeLaunchDescription(
             PythonLaunchDescriptionSource(tool_launch_file),
-            launch_arguments={'spawn_controllers': spawn_controllers}.items()))
+            launch_arguments={'spawn_controllers': spawn_controllers, 'use_sim': 'false'}.items()))
     except Exception:
         pass
 
@@ -107,6 +108,9 @@ def _build(context):
 
 def generate_launch_description():
     return LaunchDescription([
+        *(DeclareLaunchArgument(key, default_value='') for key in tool_option_arguments()),
+        DeclareLaunchArgument('wrist_camera', default_value=''),
+        DeclareLaunchArgument('arm_dof', default_value=''),
         DeclareLaunchArgument('tool', default_value=_configured_tool()),
         DeclareLaunchArgument('shoulder_ext_length', default_value=''),
         DeclareLaunchArgument('elbow_ext_length', default_value=''),

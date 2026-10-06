@@ -1,0 +1,93 @@
+# Six arm axes; tool package controller is unchanged.
+controller_manager:
+  ros__parameters:
+    update_rate: 50
+    use_sim_time: false
+    catch_exceptions: true
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+    arm_controller:
+      type: position_controllers/JointGroupPositionController
+    pan_tilt_controller:
+      type: position_controllers/JointGroupPositionController
+    gripper_controller:
+      type: position_controllers/JointGroupPositionController
+    arm_trajectory_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+    pan_tilt_trajectory_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+    gripper_trajectory_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+arm_controller:
+  ros__parameters:
+    joints:
+    - joint_base
+    - joint_shoulder
+    - joint_elbow
+    - joint_wrist_yaw
+    - joint_wrist_tilt
+    - joint_wrist_roll
+    command_interfaces:
+    - position
+    state_interfaces:
+    - position
+    open_loop_control: true
+arm_trajectory_controller:
+  ros__parameters:
+    joints:
+    - joint_base
+    - joint_shoulder
+    - joint_elbow
+    - joint_wrist_yaw
+    - joint_wrist_tilt
+    - joint_wrist_roll
+    command_interfaces:
+    - position
+    state_interfaces:
+    - position
+    - velocity
+    open_loop_control: true
+    allow_partial_joints_goal: false
+    allow_integration_in_goal_trajectories: true
+pan_tilt_controller:
+  ros__parameters:
+    joints:
+    - hn_pan_joint
+    - hn_tilt_joint
+    command_interfaces:
+    - position
+    state_interfaces:
+    - position
+    open_loop_control: true
+pan_tilt_trajectory_controller:
+  ros__parameters:
+    joints:
+    - hn_pan_joint
+    - hn_tilt_joint
+    command_interfaces:
+    - position
+    state_interfaces:
+    - position
+    - velocity
+    allow_partial_joints_goal: false
+    allow_integration_in_goal_trajectories: true
+gripper_controller:
+  ros__parameters:
+    joints:
+    - '6'
+    command_interfaces:
+    - position
+    state_interfaces:
+    - position
+    open_loop_control: true
+gripper_trajectory_controller:
+  ros__parameters:
+    joints:
+    - '6'
+    command_interfaces:
+    - position
+    state_interfaces:
+    - position
+    - velocity
+    allow_partial_joints_goal: false
+    allow_integration_in_goal_trajectories: true

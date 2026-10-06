@@ -1,0 +1,60 @@
+<?xml version="1.0"?>
+<!--
+  PGGripper hardware block: one motor command and two passive mimic states. In sim runs
+  under gz_ros2_control; on real hardware swap for whichever Feetech serial
+  bus driver is wired up to the arm (jaw servo lives on the same bus).
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+<xacro:macro name="mod101_tool_pggripper_ros2control" params="prefix:='' use_sim:='true' max_angle:=2.271">
+
+  <ros2_control name="${prefix}mod101_tool_pggripper_system" type="system">
+
+    <xacro:if value="${use_sim}">
+      <hardware>
+        <plugin>gz_ros2_control/GazeboSimSystem</plugin>
+      </hardware>
+    </xacro:if>
+    <xacro:unless value="${use_sim}">
+      <xacro:if value="${'$(arg hardware)' == 'bridge'}">
+        <hardware>
+          <!-- Own <ros2_control> system, so its own bridge instance. The jaw
+               servo is on the same Feetech bus as the arm, but ros2_control
+               components are independent: both instances subscribe to the same
+               joint-state topic and each ignores the joints it does not own. -->
+          <plugin>ros2_control_bridge/TopicBridge</plugin>
+          <param name="state_topic">/motor_manager/joint_states</param>
+          <param name="cmd_topic_prefix">/motor_manager</param>
+        </hardware>
+      </xacro:if>
+      <xacro:unless value="${'$(arg hardware)' == 'bridge'}">
+        <hardware>
+          <!-- Commands loop back as state. Fine for a dry run, moves nothing. -->
+          <plugin>mock_components/GenericSystem</plugin>
+        </hardware>
+      </xacro:unless>
+    </xacro:unless>
+
+    <joint name="${prefix}6">
+      <!-- Group -> /motor_manager/tool_cmd, one value. The name has to match
+           the group in mod101_hw_bringup/config/servos.yaml. -->
+      <param name="group">tool</param>
+      <command_interface name="position">
+        <param name="min">0.0</param>
+        <param name="max">${max_angle}</param>
+      </command_interface>
+      <state_interface name="position">
+        <param name="initial_value">0.0</param>
+      </state_interface>
+      <state_interface name="velocity">
+        <param name="initial_value">0.0</param>
+      </state_interface>
+    </joint>
+
+    <joint name="${prefix}pggripper_left_slider"><param name="mimic">${prefix}6</param><param name="multiplier">0.011888874248964582</param><state_interface name="position"/><state_interface name="velocity"/></joint>
+    <joint name="${prefix}pggripper_right_slider"><param name="mimic">${prefix}6</param><param name="multiplier">-0.011888874248964582</param><state_interface name="position"/><state_interface name="velocity"/></joint>
+  </ros2_control>
+
+</xacro:macro>
+
+</robot>

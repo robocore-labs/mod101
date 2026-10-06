@@ -23,7 +23,7 @@
 <xacro:include filename="$(find mod101_tool_jaws)/urdf/tool.ros2control"/>
 <xacro:include filename="$(find mod101_tool_jaws)/urdf/tool.gazebo"/>
 
-<xacro:macro name="mod101_tool_jaws" params="prefix:='' use_sim:='true'">
+<xacro:macro name="mod101_tool_jaws" params="prefix:='' with_ros2_control:='true' use_sim:='true'">
 
   <!-- ============================================================
        Convention root: a tiny link at the bolt pattern.
@@ -69,8 +69,8 @@
   <link name="${prefix}jaws_body">
     <inertial>
       <origin xyz="0.018214 -0.013763 -0.022966" rpy="0 0 0"/>
-      <mass value="0.0437956016"/>
-      <inertia ixx="2.58658586e-05" iyy="2.94909979e-05" izz="2.30245333e-05" ixy="3.82109275e-06" iyz="-3.91906949e-06" ixz="8.03409246e-06"/>
+      <mass value="0.0448551726065"/>
+      <inertia ixx="2.64916455016e-05" iyy="3.02044897847e-05" izz="2.35815784605e-05" ixy="3.91353854234e-06" iyz="-4.01388568734e-06" ixz="8.22846566468e-06"/>
     </inertial>
     <visual>
       <origin xyz="-0.181143 -0.004550 -0.189344" rpy="0 0 0"/>
@@ -90,8 +90,8 @@
   <link name="${prefix}jaws_servo">
     <inertial>
       <origin xyz="-0.005824 -0.004501 -0.018111" rpy="0 0 0"/>
-      <mass value="0.066"/>
-      <inertia ixx="1.53380282e-05" iyy="9.29577465e-06" izz="1.60352113e-05" ixy="0" iyz="0" ixz="-1.3943662e-06"/>
+      <mass value="0.056"/>
+      <inertia ixx="1.30140845333e-05" iyy="7.88732394545e-06" izz="1.36056338303e-05" ixy="0" iyz="0" ixz="-1.18309859394e-06"/>
     </inertial>
     <visual>
       <origin xyz="-0.201679 -0.016450 -0.189613" rpy="0 0 0"/>
@@ -111,8 +111,8 @@
   <link name="${prefix}jaws_moving">
     <inertial>
       <origin xyz="0.035386 -0.001620 -0.010188" rpy="0 0 0"/>
-      <mass value="0.0180803214"/>
-      <inertia ixx="6.02677379e-06" iyy="9.89300604e-06" izz="4.66222124e-06" ixy="3.41138139e-07" iyz="-3.41138139e-07" ixz="2.6153924e-06"/>
+      <mass value="0.0185177485306"/>
+      <inertia ixx="6.17258283331e-06" iyy="1.01323529603e-05" izz="4.77501691516e-06" ixy="3.49391481073e-07" iyz="-3.49391481073e-07" ixz="2.67866802258e-06"/>
     </inertial>
     <visual>
       <origin xyz="-0.181539 -0.024750 -0.159670" rpy="0 0 0"/>
@@ -153,7 +153,9 @@
        ros2_control + gazebo extensions
        ============================================================ -->
 
+<xacro:if value="${with_ros2_control}">
 <xacro:mod101_tool_jaws_ros2control prefix="${prefix}" use_sim="${use_sim}"/>
+</xacro:if>
 <xacro:mod101_tool_jaws_gazebo prefix="${prefix}"/>
 
 </xacro:macro>

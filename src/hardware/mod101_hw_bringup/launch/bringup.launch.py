@@ -39,6 +39,7 @@ travel the full encoder range — which is safe on a bare motor and wrong on an
 assembled arm, so it is a loud warning, not a silent default.
 """
 
+from mod101_description.tool_config import tool_option_arguments
 import os
 
 import yaml
@@ -53,7 +54,7 @@ from launch_ros.actions import Node
 import xacro
 
 # Passed straight through to the description, exactly as in sim.launch.py.
-BUILD_ARGS = ('tool', 'shoulder_ext_length', 'elbow_ext_length',
+BUILD_ARGS = (*tool_option_arguments(), 'wrist_camera', 'arm_dof', 'tool', 'shoulder_ext_length', 'elbow_ext_length',
               'shoulder_mount', 'elbow_mount')
 
 # Spawned at boot. The trajectory twins stay declared-not-spawned: they claim
@@ -130,6 +131,9 @@ def _merge_generated(params, generated_path, logger_msgs):
                 f'generated config has group "{group}", which servos.yaml does '
                 f'not declare — ignored')
             continue
+        expected = params[group].get('joint_names', [])
+        if set(block.get('joint_names', [])) != set(expected):
+            raise RuntimeError(f'Generated wiring for {group} does not match the selected arm variant. Recalibrate and write the servo map in the configurator.')
         for key in owned:
             if key in block:
                 params[group][key] = block[key]
@@ -228,11 +232,13 @@ def _build(context):
                   'head': lc['head'],
                   'hardware': lc['hardware']}).toxml()
 
+    seven = 'name="joint_wrist_yaw"' in robot_description
+
     # --- servo bus -----------------------------------------------------------
     calib_path = lc['calibration_file'] or os.path.join(
         pkg_control, 'config', 'calibration.yaml')
     servos_path = lc['servos_file'] or os.path.join(
-        pkg_bringup, 'config', 'servos.yaml')
+        pkg_bringup, 'config', 'servos.7dof.yaml' if seven else 'servos.yaml')
     generated_path = lc['generated_servos_file'] or os.path.join(
         pkg_bringup, 'config', 'servos.generated.yaml')
 
@@ -240,6 +246,18 @@ def _build(context):
     servo_params = _servo_params(servos_path, generated_path,
                                  _load_calibration(calib_path, msgs), msgs,
                                  head=head_on)
+    tool_on = 'name="6"' in robot_description
+    if not tool_on:
+        servo_params['group_names'] = [g for g in servo_params['group_names'] if g != 'tool']
+        servo_params.pop('tool', None)
+        msgs.append('Passive end effector: tool servo group omitted.')
+    if not tool_on or not head_on:
+        count = 0
+        for group in servo_params['group_names']:
+            n = len(servo_params[group].get('joint_names', []))
+            servo_params[group]['state_indices'] = list(range(count, count+n))
+            count += n
+        servo_params['total_joints'] = count
     if lc['serial_port']:
         servo_params['port'] = lc['serial_port']
     servo_params['use_sim_time'] = False
@@ -272,7 +290,7 @@ def _build(context):
 
     # --- ros2_control --------------------------------------------------------
     controllers = lc['controllers_file'] or os.path.join(
-        pkg_bringup, 'config', 'controllers.yaml')
+        pkg_bringup, 'config', 'controllers.7dof.yaml' if seven else 'controllers.yaml')
 
     control_node = Node(
         package='controller_manager',
@@ -302,7 +320,8 @@ def _build(context):
     # position, so the controllers must not be spawned before the servo driver
     # has published a joint state — a controller activating against unseeded
     # commands is the moment an arm would otherwise jump to zero.
-    boot = [c for c in BOOT_CONTROLLERS if head_on or c not in HEAD_CONTROLLERS]
+    boot = [c for c in BOOT_CONTROLLERS
+            if (head_on or c not in HEAD_CONTROLLERS) and (tool_on or c != 'gripper_controller')]
     spawners = [spawner('joint_state_broadcaster', 4.0)]
     spawners += [spawner(c, 6.0) for c in boot]
 
@@ -310,6 +329,7 @@ def _build(context):
         PythonLaunchDescriptionSource(
             os.path.join(pkg_bringup, 'launch', 'cameras.launch.py')),
         condition=IfCondition(lc['cameras']),
+        launch_arguments={'wrist_camera': 'true' if 'name="wrist_camera_optical_frame"' in robot_description else 'false'}.items(),
     )
 
     return [*[LogInfo(msg=f'[mod101_hw_bringup] {m}') for m in msgs],

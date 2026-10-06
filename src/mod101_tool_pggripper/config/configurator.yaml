@@ -1,0 +1,5 @@
+schema_version: 1
+label: PGGripper
+actuated: true
+servo_count: 1
+options: {}

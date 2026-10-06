@@ -16,6 +16,8 @@
 
   <!-- Single revolute jaw. 0 rad closed, 2.14 rad open (tool.urdf.xacro:148). -->
   <group name="${prefix}gripper">
+    <!-- Include the fixed tool mount so the end-effector is adjacent to its parent flange. -->
+    <link name="${prefix}jaws_root"/>
     <joint name="${prefix}6"/>
   </group>
 

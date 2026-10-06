@@ -404,3 +404,84 @@ If you want to upgrade the motors for more payload, here are the options: [**STS
 
 ## License
 MIT
+
+## 6DOF / 7DOF arm variants
+
+Choose **Arm variant** in the configurator. The selector updates the preview,
+servo cost and payload estimate; **Save to xacro** persists it for ROS launches.
+Both variants use the same end-effector packages and `wrist_flange` interface.
+The project's names count the tool actuator: 6DOF has five arm axes; 7DOF adds
+`joint_wrist_yaw` before wrist pitch/roll, giving six arm axes. With `tool:=none`
+there is no tool actuator.
+
+```bash
+source /opt/ros/jazzy/setup.bash
+colcon build --symlink-install
+source install/setup.bash
+ros2 launch mod101_moveit_config mock.launch.py arm_dof:=7 tool:=pincopen
+# Other description, Gazebo, harness and hardware launches accept arm_dof too.
+```
+
+For an imported arm, pass `arm_dof="7"` to `mod101_arm` and the matching
+`mod101_arm_srdf`. The default remains 6, preserving existing consumers.
+Include `mod101_config.xacro` and pass `arm_dof="$(arg arm_dof)"` to follow the
+saved configuration. Each instance can select its own variant and tool.
+
+The added wrist geometry and shaft pivots come from `mod101_7DOF.step`; the STEP
+has 100 mm shoulder and 110 mm elbow rails. Rail lengths remain configurable.
+The added yaw servo is an STS3215, **56 g**, with provisional **±90°** limits.
+Default bus ID is **9**, preserving tool ID 6 and head IDs 7/8. Calibrate the new
+joint and write a matching servo map before hardware use; an old map with the
+wrong joint set is rejected by hardware bring-up.
+
+Payload estimates preserve the existing 6DOF/jaws reference calculation,
+including its joint-capacity and lumped-weight assumptions. The user confirmed
+the 140/140 mm jaws configuration lifts over 700 g on the bench; its previous
+calculator result remains unchanged (911 g duty/full with STS3250 selections).
+The 7DOF model applies differences calculated from both URDFs at identical rail
+lengths: the new actuator/printed masses, COMs and changed load-point leverage.
+Other tools use the same correction relative to jaws. This extrapolation needs
+its own bench validation; it does not establish a rated load. Existing estimated arm plastics and the new wrist use **PETG,
+1.27 g/cm³, 15% infill, 1.6 mm shell**. The separate tool packages retain their
+own authored mass estimates. New wrist mass/inertia provenance is recorded in
+`src/mod101_description/config/7dof_measurements.json`; print COM/inertia uses
+uniform effective density. Slicer or measured weights can improve these estimates.
+
+The calculator evaluates a horizontal extended pose. Tool reach uses its distal
+visual extent as a provisional load point; 70% reach scales the levers rather
+than solving a new pose. Stall-torque fractions are estimates, not rated payloads.
+After saving lengths/mounts, rebuild collision matrices from the configurator;
+its regeneration samples both arm variants independently for every tool.
+
+```bash
+python3 -m pytest tests/test_arm_variants.py
+python3 src/mod101_moveit_config/test/moveit_smoke.py --arm-dof 7
+# The second command needs the matching mock launch running.
+```
+
+The configurator's **Wrist camera** checkbox controls the camera, both printed
+mounts, sensor/frame definitions and MoveIt collision references on either arm
+variant. **Save to xacro** persists it. ROS launches also accept
+`wrist_camera:=false`; imported URDF and SRDF macros accept `wrist_camera="false"`.
+Hardware bring-up skips the wrist-camera driver when the option is disabled.
+
+The parallel tool now includes a black STS3215 servo visual in its existing
+body link. The mesh is reused from the repository's CAD extraction; the tool's
+existing combined body mass/inertia remains unchanged.
+
+## Camera mount tool and package-defined options
+
+Select **Camera mount** in the configurator to choose between **Luxonis (61 g)**
+and **RealSense (72 g)**, with an optional **GoPro (153 g)** above it. The PETG
+holder is approximately **46.2 g** at 15% infill with the 1.6 mm shell assumption.
+Both 6DOF and 7DOF variants support the same options and include their mass in
+the payload estimate. The existing jaws reference calculation is preserved.
+
+`mod101_tool_camera` includes the STEP-derived meshes, authored inertials and
+`camera_tool_gopro_optical_frame`. It is passive and requires no tool actuator.
+See [camera package notes](src/mod101_tool_camera/README.md) and the
+[tool options API](docs/tool-options.md) for the YAML schema and ROS arguments.
+
+### NormaCore PGGripper
+
+Select **PGGripper** in the configurator or pass `tool:=pggripper` to the existing launch commands. The [end-effector package](src/mod101_tool_pggripper/README.md) includes its ST3215 servo, rack-and-pinion jaw motion, ROS controllers and collision matrices for both arm variants. Estimated mass is 154g using PETG at 15% infill; rated aperture is 54mm.

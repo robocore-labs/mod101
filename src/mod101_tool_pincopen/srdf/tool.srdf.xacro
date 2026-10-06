@@ -12,6 +12,8 @@
        (tool.urdf.xacro:190, and the warning in config/controllers.yaml).
        The four 4-bar joints follow via URDF <mimic> — passive, not planned. -->
   <group name="${prefix}gripper">
+    <!-- Include the fixed tool mount so the end-effector is adjacent to its parent flange. -->
+    <link name="${prefix}pincopen_root"/>
     <joint name="${prefix}6"/>
   </group>
 

@@ -1,64 +1,39 @@
-from launch_ros.actions import Node
-from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
-from launch.substitutions import LaunchConfiguration
-from launch.conditions import IfCondition, UnlessCondition
-import xacro
+"""Display the configured arm; explicit build arguments override saved defaults."""
+from mod101_description.tool_config import tool_option_arguments
 import os
+import xacro
 from ament_index_python.packages import get_package_share_directory
+from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument, OpaqueFunction
+from launch.conditions import IfCondition, UnlessCondition
+from launch.substitutions import LaunchConfiguration
+from launch_ros.actions import Node
+
+BUILD_ARGS = (*tool_option_arguments(), 'wrist_camera', 'arm_dof', 'tool', 'shoulder_ext_length', 'elbow_ext_length',
+              'shoulder_mount', 'elbow_mount')
+
+
+def _build(context):
+    share = get_package_share_directory('mod101_description')
+    mappings = {key: LaunchConfiguration(key).perform(context) for key in BUILD_ARGS}
+    description = xacro.process_file(os.path.join(share, 'urdf', 'mod101.xacro'),
+                                     mappings={k: v for k, v in mappings.items() if v}).toxml()
+    gui = LaunchConfiguration('gui')
+    return [
+        Node(package='robot_state_publisher', executable='robot_state_publisher',
+             parameters=[{'robot_description': description}]),
+        Node(package='joint_state_publisher', executable='joint_state_publisher',
+             condition=UnlessCondition(gui)),
+        Node(package='joint_state_publisher_gui', executable='joint_state_publisher_gui',
+             condition=IfCondition(gui)),
+        Node(package='rviz2', executable='rviz2',
+             arguments=['-d', os.path.join(share, 'config', 'display.rviz')]),
+    ]
 
 
 def generate_launch_description():
-    share_dir = get_package_share_directory('mod101_description')
-
-    xacro_file = os.path.join(share_dir, 'urdf', 'mod101.xacro')
-    robot_description_config = xacro.process_file(xacro_file)
-    robot_urdf = robot_description_config.toxml()
-
-    rviz_config_file = os.path.join(share_dir, 'config', 'display.rviz')
-
-    gui_arg = DeclareLaunchArgument(
-        name='gui',
-        default_value='True'
-    )
-
-    show_gui = LaunchConfiguration('gui')
-
-    robot_state_publisher_node = Node(
-        package='robot_state_publisher',
-        executable='robot_state_publisher',
-        name='robot_state_publisher',
-        parameters=[
-            {'robot_description': robot_urdf}
-        ]
-    )
-
-    joint_state_publisher_node = Node(
-        condition=UnlessCondition(show_gui),
-        package='joint_state_publisher',
-        executable='joint_state_publisher',
-        name='joint_state_publisher'
-    )
-
-    joint_state_publisher_gui_node = Node(
-        condition=IfCondition(show_gui),
-        package='joint_state_publisher_gui',
-        executable='joint_state_publisher_gui',
-        name='joint_state_publisher_gui'
-    )
-
-    rviz_node = Node(
-        package='rviz2',
-        executable='rviz2',
-        name='rviz2',
-        arguments=['-d', rviz_config_file],
-        output='screen'
-    )
-
     return LaunchDescription([
-        gui_arg,
-        robot_state_publisher_node,
-        joint_state_publisher_node,
-        joint_state_publisher_gui_node,
-        rviz_node
+        DeclareLaunchArgument('gui', default_value='true'),
+        *(DeclareLaunchArgument(key, default_value='') for key in BUILD_ARGS),
+        OpaqueFunction(function=_build),
     ])

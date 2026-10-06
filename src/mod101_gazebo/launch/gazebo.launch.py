@@ -23,6 +23,7 @@ errored; the tool simply ended up somewhere other than where MoveIt thought.
 e.g.  ros2 launch mod101_gazebo gazebo.launch.py tool:=parallel shoulder_mount:=big
 """
 
+from mod101_description.tool_config import tool_option_arguments
 import os
 import re
 from ament_index_python.packages import (
@@ -44,7 +45,7 @@ from launch_ros.actions import Node
 import xacro
 
 
-BUILD_ARGS = ('tool', 'shoulder_ext_length', 'elbow_ext_length',
+BUILD_ARGS = (*tool_option_arguments(), 'wrist_camera', 'arm_dof', 'tool', 'shoulder_ext_length', 'elbow_ext_length',
               'shoulder_mount', 'elbow_mount')
 
 
@@ -213,6 +214,9 @@ def _build(context):
 
 def generate_launch_description():
     return LaunchDescription([
+        *(DeclareLaunchArgument(key, default_value='') for key in tool_option_arguments()),
+        DeclareLaunchArgument('wrist_camera', default_value=''),
+        DeclareLaunchArgument('arm_dof', default_value=''),
         # tool needs a concrete value here: it selects the resource path and the
         # tool-side launch, both resolved before xacro runs.
         DeclareLaunchArgument(

@@ -1,7 +1,7 @@
 <?xml version="1.0" ?>
 <robot name="mod101" xmlns:xacro="http://www.ros.org/wiki/xacro" >
 
-<xacro:macro name="mod101_arm_gazebo" params="prefix">
+<xacro:macro name="mod101_arm_gazebo" params="prefix wrist_camera:=true base_housing:=true arm_dof:=6">
 
 <xacro:property name="body_color" value="Gazebo/DarkGrey" />
 <xacro:property name="motor_color" value="Gazebo/Black" />
@@ -26,7 +26,9 @@
 </gazebo>
 
 <xacro:gz_link name="servo_base_1"             color="${motor_color}"/>
+<xacro:if value="${base_housing}">
 <xacro:gz_link name="base_cover_1"             color="${accent_color}"/>
+</xacro:if>
 <xacro:gz_link name="shoulder_rotation_link_1" color="${body_color}"/>
 <xacro:gz_link name="servo_shoulder_1"         color="${motor_color}"/>
 <xacro:gz_link name="shoulder_adapter_1"       color="${body_color}"/>
@@ -37,8 +39,13 @@
 <xacro:gz_link name="forearm_extrusion_1"      color="${silver_color}"/>
 <xacro:gz_link name="wrist_servo_adapter_1"    color="${body_color}"/>
 <xacro:gz_link name="servo_wrist_tilt_1"       color="${motor_color}"/>
+<xacro:if value="${int(arm_dof) == 7}">
+<xacro:gz_link name="servo_wrist_yaw_1" color="${motor_color}"/>
+<xacro:gz_link name="wrist_yaw_link_1" color="${body_color}"/>
+</xacro:if>
 <xacro:gz_link name="wrist_roll_adapter_1"     color="${body_color}"/>
 <xacro:gz_link name="servo_wrist_rotation_1"   color="${motor_color}"/>
+<xacro:if value="${wrist_camera}">
 <xacro:gz_link name="camera_adapter_1"         color="${accent_color}"/>
 <xacro:gz_link name="camera_wing_1"            color="${accent_color}"/>
 
@@ -71,6 +78,7 @@
     </camera>
   </sensor>
 </gazebo>
+</xacro:if>
 
 </xacro:macro>
 

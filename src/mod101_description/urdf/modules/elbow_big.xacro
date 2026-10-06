@@ -22,8 +22,8 @@
 <link name="${prefix}elbow_link_1">
   <inertial>
     <origin xyz="-0.010386839428546318 0.00039485016823848085 -0.0020812304383783786" rpy="0 0 0"/>
-    <mass value="0.0688074115"/>
-    <inertia ixx="2.11976393e-05" iyy="1.75493809e-05" izz="3.05698894e-05" ixy="-3.77406042e-07" iyz="1.88703021e-07" ixz="-6.2901007e-07"/>
+    <mass value="0.0704721069395"/>
+    <inertia ixx="2.17104854121e-05" iyy="1.7973962696e-05" izz="3.13094834984e-05" ixy="-3.86536833339e-07" iyz="1.93268416669e-07" ixz="-6.44228055565e-07"/>
   </inertial>
   <visual>
     <origin xyz="${0.093660+enx} ${0.003135+eny} ${-0.065996+enz}" rpy="0 0 0"/>
@@ -41,8 +41,8 @@
 <link name="${prefix}servo_elbow_1">
   <inertial>
     <origin xyz="0.010248900428017363 0.014922520716508098 0.018164022574663097" rpy="0 0 0"/>
-    <mass value="0.210"/>
-    <inertia ixx="5.7e-05" iyy="4.5e-05" izz="3.2e-05" ixy="0.0" iyz="0.0" ixz="-0.0"/>
+    <mass value="0.21"/>
+    <inertia ixx="5.7e-05" iyy="4.5e-05" izz="3.2e-05" ixy="0" iyz="0" ixz="-0"/>
   </inertial>
   <visual>
     <origin xyz="${0.128120+enx} ${0.018005+eny} ${-0.069671+enz}" rpy="0 0 0"/>
@@ -60,8 +60,8 @@
 <link name="${prefix}elbow_adapter_1">
   <inertial>
     <origin xyz="0.020137826276852483 0.018502164445195313 0.00029332039965654366" rpy="0 0 0"/>
-    <mass value="0.0407483489"/>
-    <inertia ixx="1.43694755e-05" iyy="8.79586074e-06" izz="1.85496865e-05" ixy="0" iyz="-0" ixz="-1.7417546e-07"/>
+    <mass value="0.0417341960508"/>
+    <inertia ixx="1.47171241008e-05" iyy="9.00866382242e-06" izz="1.89984692379e-05" ixy="0" iyz="-0" ixz="-1.78389382419e-07"/>
   </inertial>
   <visual>
     <origin xyz="${0.117870+enx} ${0.021405+eny} ${-0.098671+enz}" rpy="0 0 0"/>

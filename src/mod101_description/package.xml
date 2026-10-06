@@ -17,6 +17,9 @@
   <test_depend>ament_lint_common</test_depend>
   <test_depend>python3-pytest</test_depend>
 
+  <exec_depend>mod101_tool_camera</exec_depend>
+  <exec_depend>mod101_tool_pggripper</exec_depend>
+  <exec_depend>python3-yaml</exec_depend>
   <export>
     <build_type>ament_python</build_type>
   </export>

@@ -4,7 +4,7 @@
 
   These are the args the web configurator (configurator/server.py) reads and
   writes. Nothing else should hardcode them. Any robot that instantiates the
-  `mod101_arm` macro should include this file and pass these four values
+  `mod101_arm` macro should include this file and pass these build values
   through, so a configurator change reaches every consumer on the next build
   rather than only the standalone mod101.xacro.
 
@@ -22,7 +22,11 @@
      contributes its own joints, ros2_control hardware block, gazebo extensions,
      controllers, and (via the gazebo launch) its own launch fragment. Must
      match a package `mod101_tool_<tool>` shipping urdf/tool.urdf.xacro. -->
-<xacro:arg name="tool" default="jaws"/>
+<!-- Project naming includes the tool: 6DOF = 5 arm axes, 7DOF = 6 arm axes. -->
+<xacro:arg name="arm_dof" default="6"/>
+<xacro:arg name="wrist_camera" default="true"/>
+
+<xacro:arg name="tool" default="pggripper"/>
 
 <!-- Build parameters: two rail lengths (m) + two servo-mount variants
      (small = STS3215/STS3250, big = ST3120). -->

@@ -6,7 +6,7 @@
 -->
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
 
-<xacro:macro name="mod101_tool_none" params="prefix:='' use_sim:='true'">
+<xacro:macro name="mod101_tool_none" params="prefix:='' with_ros2_control:='true' use_sim:='true'">
 
   <link name="${prefix}end_cap">
     <inertial>

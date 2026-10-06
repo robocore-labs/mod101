@@ -2,11 +2,12 @@
 """mod101 configurator backend.
 
 Serves configurator/ as static files. Endpoints:
-  GET  /load              - read the four build args (shoulder/elbow rail
+  GET  /load              - read the arm variant and build args (shoulder/elbow rail
                             length + shoulder/elbow mount) from
                             src/mod101_description/urdf/mod101_config.xacro
-  POST /save              - write those four values back in-place (fast; does
+  POST /save              - write those build settings back in-place (fast; does
                             NOT rebuild the collision matrices)
+  GET  /payload           - existing 6DOF reference + CAD-derived variant/tool corrections
   GET  /masses            - return src/mod101_description/link_masses.json
                             (Part C output) so the page uses real printed masses
   GET  /tool, POST /tool  - active end-effector package + discovery
@@ -38,7 +39,7 @@ Servo bus (see motors.py — talks to the Feetech chain over USB-TTL directly):
   POST /servo/<id>/zero   - {target} define the current position as `target`
   POST /servo/<id>/id     - {to} reassign servo ID
 
-Stdlib only. Run from project root:
+Requires PyYAML, numpy and trimesh (payload geometry). Run from project root:
     python3 configurator/server.py
 """
 
@@ -61,6 +62,7 @@ from pathlib import Path
 # Run as `python3 configurator/server.py` this is already sys.path[0], but be
 # explicit so importing server.py as a module (tests) resolves motors too.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import tool_options
 from motors import BUS, BusError  # noqa: E402
 
 PORT = 8001
@@ -154,7 +156,7 @@ MOUNTS = ('small', 'big')
 
 
 def read_props() -> dict:
-    """Return the four build args: two lengths (m) + two mounts."""
+    """Return arm variant, two lengths (m), and two mounts."""
     text = CONFIG.read_text()
     lens: dict[str, float] = {}
     for m in LEN_ARG_RE.finditer(text):
@@ -167,6 +169,9 @@ def read_props() -> dict:
     if {'shoulder_mount', 'elbow_mount'} - mounts.keys():
         raise RuntimeError(f'Both mount args not found in {CONFIG}.')
     return {
+        'tool_options': tool_options.read_values(text, tool_options.specs(SRC)),
+        'wrist_camera': re.search(r'<xacro:arg\s+name="wrist_camera"\s+default="(true|false)"', text).group(1) == 'true',
+        'arm_dof': int(re.search(r'<xacro:arg\s+name="arm_dof"\s+default="([67])"', text).group(1)),
         'shoulder': lens['shoulder_ext_length'],
         'elbow': lens['elbow_ext_length'],
         'shoulder_mount': mounts['shoulder_mount'],
@@ -175,7 +180,12 @@ def read_props() -> dict:
 
 
 def write_props(shoulder_m: float, elbow_m: float,
-                shoulder_mount: str, elbow_mount: str) -> None:
+                shoulder_mount: str, elbow_mount: str, arm_dof: int = 6, wrist_camera: bool | None = None, extra_options: dict | None = None) -> None:
+    options = tool_options.validate(extra_options or {}, tool_options.specs(SRC))
+    if wrist_camera is not None and not isinstance(wrist_camera, bool):
+        raise ValueError("wrist_camera must be a boolean")
+    if arm_dof not in (6, 7):
+        raise ValueError("arm_dof must be 6 or 7")
     for label, v in (('shoulder', shoulder_m), ('elbow', elbow_m)):
         if not (0.05 <= v <= 0.40):
             raise ValueError(f'{label} length {v} m outside [0.05, 0.40]')
@@ -195,6 +205,13 @@ def write_props(shoulder_m: float, elbow_m: float,
         lambda m: f'{m.group(1)}{mounts[m["name"]]}{m.group(4)}', text)
     if n != 2:
         raise RuntimeError(f'Expected 2 mount replacements, did {n}')
+    text = re.sub(r'(<xacro:arg\s+name="arm_dof"\s+default=")[^"]+("/>)', lambda m: m[1] + str(arm_dof) + m[2], text)
+    if wrist_camera is not None:
+        text, n = re.subn(r'(<xacro:arg\s+name="wrist_camera"\s+default=")[^"]+("/>)',
+                         lambda m: m[1] + str(wrist_camera).lower() + m[2], text)
+        if n != 1:
+            raise RuntimeError('Expected exactly one wrist_camera argument')
+    text = tool_options.write_values(text, options, tool_options.specs(SRC))
     CONFIG.write_text(text)
 
 
@@ -353,7 +370,8 @@ def _authored_groups() -> dict:
             f'{SERVOS_YAML.relative_to(ROOT)} not found — it defines which '
             f'groups exist and which joints belong to them, and this server '
             f'only fills in the per-motor half')
-    doc = yaml.safe_load(SERVOS_YAML.read_text()) or {}
+    servos = SERVOS_YAML.with_name('servos.7dof.yaml') if read_props()['arm_dof'] == 7 else SERVOS_YAML
+    doc = yaml.safe_load(servos.read_text()) or {}
     params = (doc.get('servo_manager_node') or {}).get('ros__parameters') or {}
     groups = {}
     for name in params.get('group_names') or []:
@@ -492,14 +510,14 @@ def src_ament_overlay() -> str:
     return _SRC_OVERLAY
 
 
-ALLOWED_ARGS = ('shoulder_ext_length', 'elbow_ext_length',
+ALLOWED_ARGS = ('wrist_camera', 'tool', 'arm_dof', 'shoulder_ext_length', 'elbow_ext_length',
                 'shoulder_mount', 'elbow_mount')
 
 
 def expand_urdf(mappings: dict | None = None) -> str:
     """Run `xacro` (resolving packages from src/) and rewrite mesh URIs to web
     paths. `mappings` overrides the build args for a LIVE preview without
-    writing the file (only the four ALLOWED_ARGS are honoured)."""
+    writing the file (only ALLOWED_ARGS are honoured)."""
     xacro_bin = shutil.which('xacro')
     if not xacro_bin:
         raise RuntimeError(
@@ -513,10 +531,15 @@ def expand_urdf(mappings: dict | None = None) -> str:
     existing = env.get('AMENT_PREFIX_PATH', '')
     env['AMENT_PREFIX_PATH'] = overlay + (os.pathsep + existing if existing else '')
 
+    if mappings and mappings.get('tool') and mappings['tool'] not in list_tools():
+        raise ValueError('Unknown tool package')
+    option_definitions = tool_options.specs(SRC)
+    extra = tool_options.validate({k: v for k, v in (mappings or {}).items() if k in option_definitions and v not in (None, '')}, option_definitions)
+    effective = {**(mappings or {}), **extra}
     arg_pairs = []
-    for k, v in (mappings or {}).items():
-        if k in ALLOWED_ARGS and v not in (None, ''):
-            arg_pairs.append(f'{k}:={v}')
+    for k, v in effective.items():
+        if k in (*ALLOWED_ARGS, *option_definitions) and v not in (None, ''):
+            arg_pairs.append(f'{k}:={str(v).lower() if isinstance(v, bool) else v}')
 
     proc = subprocess.run(
         [xacro_bin, str(XACRO), *arg_pairs],
@@ -584,6 +607,17 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             try:    return self._json(200, read_props())
             except Exception as e: return self._json(500, {'error': str(e)})
 
+        if path.rstrip('/') == '/payload':
+            try:
+                from urllib.parse import parse_qs
+                from payload import calculate
+                q = parse_qs(self.path.split('?', 1)[1]) if '?' in self.path else {}
+                args = {k: v[0] for k, v in q.items()}
+                return self._json(200, calculate(expand_urdf(args), SRC, args,
+                    expand_urdf({**args, 'arm_dof': 6, 'tool': 'jaws', 'wrist_camera': 'true'})))
+            except Exception as e:
+                return self._json(400, {'error': str(e)})
+
         if path.rstrip('/') == '/masses':
             try:    return self._json(200, read_masses())
             except Exception as e: return self._json(500, {'error': str(e)})
@@ -594,7 +628,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self._json(200, regen_status())
 
         if path.rstrip('/') == '/tool':
-            try:    return self._json(200, {'tool': read_tool(), 'available': list_tools()})
+            try:    return self._json(200, {'tool': read_tool(), 'available': list_tools(), 'schemas': tool_options.discover(SRC), 'options': read_props()['tool_options']})
             except Exception as e: return self._json(500, {'error': str(e)})
 
         if path.rstrip('/') == '/calibration':
@@ -663,7 +697,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 write_props(
                     float(data['shoulder']), float(data['elbow']),
                     str(data.get('shoulder_mount', cur['shoulder_mount'])),
-                    str(data.get('elbow_mount', cur['elbow_mount'])))
+                    str(data.get('elbow_mount', cur['elbow_mount'])),
+                    int(data.get('arm_dof', cur['arm_dof'])),
+                    data.get('wrist_camera', cur['wrist_camera']),
+                    data.get('tool_options', {}))
                 # Deliberately does NOT regenerate. Writing the xacro is
                 # instant; rebuilding the matrices takes minutes at
                 # REGEN_TRIALS. They are separate buttons so the cost is

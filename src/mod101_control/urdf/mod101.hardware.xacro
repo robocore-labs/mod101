@@ -36,6 +36,11 @@
       <state_interface name="position"/>
       <state_interface name="velocity"/>
     </joint>
+    <xacro:if value="${int('$(arg arm_dof)') == 7}">
+      <joint name="joint_wrist_yaw">
+        <command_interface name="position"/><state_interface name="position"/><state_interface name="velocity"/>
+      </joint>
+    </xacro:if>
     <joint name="joint_wrist_tilt">
       <command_interface name="position"/>
       <state_interface name="position"/>

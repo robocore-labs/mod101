@@ -1,0 +1,5 @@
+cmake_minimum_required(VERSION 3.8)
+project(mod101_tool_camera)
+find_package(ament_cmake REQUIRED)
+install(DIRECTORY urdf srdf config meshes launch DESTINATION share/${PROJECT_NAME})
+ament_package()

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Estimate 3D-printed link masses from STL geometry (PLA-CF, sparse infill).
+"""Estimate 3D-printed link masses from STL geometry (PETG, sparse infill).
 
 Why this exists
 ---------------
@@ -13,7 +13,7 @@ that:
     A_model  = mesh surface area                       # cm^2
     V_shell  = min(V_model, A_model * T_WALL)          # cm^3  (perimeters+skins)
     V_infill = max(0, V_model - V_shell)
-    mass_g   = RHO_PLACF * (V_shell + INFILL * V_infill)
+    mass_g   = RHO_PETG * (V_shell + INFILL * V_infill)
 
 `V_shell = A_model * T_WALL` treats the shell as a uniform skin of thickness
 T_WALL over the whole surface; clamping with `min(V_model, ...)` keeps thin
@@ -23,10 +23,10 @@ Calibration (do not ship uncalibrated)
 --------------------------------------
 The shell model is first-order. Two ways to ground it:
 
-  1. Weigh ONE real print of a known part, then solve for RHO_PLACF (or apply
+  1. Weigh ONE real print of a known part, then solve for RHO_PETG (or apply
      an overall fudge factor) so this script matches the scale; reuse for all.
   2. Better: read the slicer's predicted grams for each part sliced at the real
-     profile (PLA-CF, 15%, actual walls) -- that's ground truth. Pass them via
+     profile (PETG, 15%, actual walls) -- that's ground truth. Pass them via
      `--from-slicer slicer_masses.csv` (columns: name,grams) and this script
      uses those directly, falling back to the geometric estimate only for parts
      the CSV doesn't list.
@@ -43,7 +43,7 @@ Usage
         -o src/mod101_description/link_masses.json
 
     # tune the print profile
-    python3 tools/estimate_masses.py MESHES --rho 1.24 --infill 0.15 --wall 0.16
+    python3 tools/estimate_masses.py MESHES --rho 1.27 --infill 0.15 --wall 0.16
 
     # ingest slicer ground-truth where available
     python3 tools/estimate_masses.py MESHES --from-slicer slicer_masses.csv
@@ -67,7 +67,7 @@ except ImportError:
     )
 
 # --- defaults (CLI-overridable) ---------------------------------------------
-RHO_PLACF = 1.24   # g/cm^3  printed-effective PLA-CF density (calibrate!)
+RHO_PETG = 1.27   # g/cm^3  printed-effective PETG density (calibrate!)
 INFILL = 0.15      # 15% infill, per spec
 T_WALL = 0.16      # cm -> 1.6 mm shell (4 perimeters @0.4 mm, folds in skins)
 
@@ -138,7 +138,7 @@ def main(argv=None):
     ap.add_argument("meshes_dir", type=Path, help="directory of STL meshes")
     ap.add_argument("-o", "--output", type=Path, default=None,
                     help="write link_masses.json here (default: <meshes_dir>/../link_masses.json)")
-    ap.add_argument("--rho", type=float, default=RHO_PLACF, help=f"filament density g/cm^3 (default {RHO_PLACF})")
+    ap.add_argument("--rho", type=float, default=RHO_PETG, help=f"filament density g/cm^3 (default {RHO_PETG})")
     ap.add_argument("--infill", type=float, default=INFILL, help=f"infill fraction (default {INFILL})")
     ap.add_argument("--wall", type=float, default=T_WALL, help=f"shell thickness cm (default {T_WALL})")
     ap.add_argument("--units", choices=("mm", "cm"), default="mm",

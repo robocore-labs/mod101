@@ -17,6 +17,9 @@
   The arm terminates at ${prefix}wrist_flange; the tool selected by the `tool`
   param bolts its root link there (see docs/tool-convention.md).
 
+  base_housing  Include the standalone base plate and cover (default true).
+                False retains a frame-only base_link and the base servo; used
+                when a host lift platform already provides the motor housing.
   prefix   prepended to every link/joint name (multiple instances coexist).
   parent   link to bolt the base onto via a fixed ${prefix}base_mount joint.
            Empty = caller anchors ${prefix}base_link (mod101.xacro does).
@@ -46,9 +49,11 @@
 <!-- Every tool macro is included unconditionally (xacro has no conditional
      include); only the one selected by `tool` is instantiated below. -->
 <xacro:include filename="$(find mod101_tool_parallel)/urdf/tool.urdf.xacro"/>
+<xacro:include filename="$(find mod101_tool_pggripper)/urdf/tool.urdf.xacro"/>
 <xacro:include filename="$(find mod101_tool_pincopen)/urdf/tool.urdf.xacro"/>
 <xacro:include filename="$(find mod101_tool_jaws)/urdf/tool.urdf.xacro"/>
 <xacro:include filename="$(find mod101_tool_none)/urdf/tool.urdf.xacro"/>
+<xacro:include filename="$(find mod101_tool_camera)/urdf/tool.urdf.xacro"/>
 
 <!-- Swappable joint modules (shoulder/elbow, small/big). Same pattern as the
      tools: each module is a self-contained sub-tree (prev link + servo + next
@@ -61,10 +66,15 @@
 <xacro:include filename="$(find mod101_description)/urdf/modules/elbow_big.xacro"/>
 
 <!-- 2020 aluminium extrusion cross-section + linear density (one rail). -->
+<xacro:include filename="$(find mod101_description)/urdf/modules/wrist_7dof.xacro"/>
+
 <xacro:property name="ext_cross"         value="0.020"/>  <!-- 20x20 mm -->
 <xacro:property name="extrusion_density" value="0.46"/>   <!-- kg/m -->
 
-<xacro:macro name="mod101_arm" params="prefix:='' parent:='' xyz:='0 0 0' rpy:='0 0 0' tool:='jaws' use_sim:='true' shoulder_ext_length:=0.082 elbow_ext_length:=0.098 shoulder_mount:='small' elbow_mount:='small'">
+<xacro:macro name="mod101_arm" params="prefix:='' parent:='' xyz:='0 0 0' rpy:='0 0 0' camera_sensor:='luxonis' camera_gopro:='false' arm_dof:=6 tool:='jaws' wrist_camera:='true' base_housing:='true' with_ros2_control:='true' use_sim:='true' shoulder_ext_length:=0.082 elbow_ext_length:=0.098 shoulder_mount:='small' elbow_mount:='small'">
+
+<xacro:property name="is_7dof" value="${dict([(6, False), (7, True)])[int(arm_dof)]}"/>
+<xacro:property name="has_wrist_camera" value="${str(wrist_camera).lower() == 'true'}"/>
 
 <!-- Rail length IS the joint advance along local X (1:1). The extrusion link is
      a box primitive of this length, so editing the length scales the rail AND
@@ -94,10 +104,11 @@
      every caller hand-tune its mount xyz. Callers can now bolt the arm down
      with the plain deck-centre / deck-top offset. -->
 <link name="${prefix}base_link">
+  <xacro:if value="${base_housing}">
   <inertial>
     <origin xyz="-0.008702404 0.000111487 0.00989655" rpy="0 0 0"/>
-    <mass value="0.0832840557"/>
-    <inertia ixx="9.7521062e-05" iyy="9.08915514e-05" izz="0.000162086731" ixy="3.84319456e-07" iyz="-2.88239592e-07" ixz="1.46041393e-05"/>
+    <mass value="0.0852989925315"/>
+    <inertia ixx="9.98804425323e-05" iyy="9.30905405468e-05" izz="0.000166008184169" ixy="3.93617507355e-07" iyz="-2.95213130516e-07" ixz="1.49574652508e-05"/>
   </inertial>
   <visual>
     <origin xyz="0.007380806 -0.073155779 -0.063973656" rpy="0 0 0"/>
@@ -110,13 +121,14 @@
       <box size="0.1 0.12 0.053"/>
     </geometry>
   </collision>
+  </xacro:if>
 </link>
 
 <link name="${prefix}servo_base_1">
   <inertial>
     <origin xyz="0.018164451014978943 -0.010249127257539445 -0.015123159345860906" rpy="0 0 0"/>
-    <mass value="0.0658962961901927"/>
-    <inertia ixx="1e-05" iyy="1.8e-05" izz="1.4e-05" ixy="0.0" iyz="0.0" ixz="-0.0"/>
+    <mass value="0.056"/>
+    <inertia ixx="8.49820145253e-06" iyy="1.52967626146e-05" izz="1.18974820335e-05" ixy="0" iyz="0" ixz="-0"/>
   </inertial>
   <visual>
     <origin xyz="0.033981 -0.084076 -0.113974" rpy="0 0 0"/>
@@ -131,11 +143,12 @@
   </collision>
 </link>
 
+<xacro:if value="${base_housing}">
 <link name="${prefix}base_cover_1">
   <inertial>
     <origin xyz="0.02230051687619229 0.01594291177721944 -3.4268786498758974e-07" rpy="0 0 0"/>
-    <mass value="0.0257291587"/>
-    <inertia ixx="8.20543276e-06" iyy="1.4769779e-05" izz="1.94195242e-05" ixy="1.36757213e-07" iyz="0" ixz="-0"/>
+    <mass value="0.026351638346"/>
+    <inertia ixx="8.40395129452e-06" iyy="1.51271123629e-05" izz="1.98893513984e-05" ixy="1.4006585525e-07" iyz="0" ixz="-0"/>
   </inertial>
   <visual>
     <origin xyz="0.045885 -0.058276 -0.097774" rpy="0 0 0"/>
@@ -149,6 +162,7 @@
     </geometry>
   </collision>
 </link>
+</xacro:if>
 
 <!-- Shoulder joint module (small|big): defines shoulder_rotation_link_1,
      servo_shoulder_1, shoulder_adapter_1 + fixed_servo_shoulder_1 + joint_shoulder. -->
@@ -212,11 +226,12 @@
   </collision>
 </link>
 
+<xacro:unless value="${is_7dof}">
 <link name="${prefix}wrist_servo_adapter_1">
   <inertial>
     <origin xyz="-0.0019161875719076876 -0.001239865018947961 -8.234763106684806e-07" rpy="0 0 0"/>
-    <mass value="0.0198664172"/>
-    <inertia ixx="6.06215668e-06" iyy="2.42486267e-06" izz="5.62127255e-06" ixy="1.1022103e-07" iyz="0" ixz="0"/>
+    <mass value="0.0203470563258"/>
+    <inertia ixx="6.20882176097e-06" iyy="2.48352870234e-06" izz="5.75727107944e-06" ixy="1.12887667823e-07" iyz="0" ixz="0"/>
   </inertial>
   <visual>
     <origin xyz="-0.035419 -0.074758 -0.173765" rpy="0 0 0"/>
@@ -234,8 +249,8 @@
 <link name="${prefix}servo_wrist_tilt_1">
   <inertial>
     <origin xyz="0.02191445288807735 -0.01687680721527879 -0.010249015260752697" rpy="0 0 0"/>
-    <mass value="0.0658962961901927"/>
-    <inertia ixx="1e-05" iyy="1.4e-05" izz="1.8e-05" ixy="0.0" iyz="-0.0" ixz="0.0"/>
+    <mass value="0.056"/>
+    <inertia ixx="8.49820145253e-06" iyy="1.18974820335e-05" izz="1.52967626146e-05" ixy="0" iyz="-0" ixz="0"/>
   </inertial>
   <visual>
     <origin xyz="-0.045069 -0.090758 -0.184015" rpy="0 0 0"/>
@@ -253,8 +268,8 @@
 <link name="${prefix}wrist_roll_adapter_1">
   <inertial>
     <origin xyz="0.0265390165786311 0.018652019649215763 0.02086935983869931" rpy="0 0 0"/>
-    <mass value="0.0264696078"/>
-    <inertia ixx="1.56325077e-05" iyy="1.77076194e-05" izz="1.27273514e-05" ixy="-0" iyz="0" ixz="-6.22533494e-06"/>
+    <mass value="0.0271100015371"/>
+    <inertia ixx="1.60107135315e-05" iyy="1.81360295468e-05" izz="1.30352711919e-05" ixy="-0" iyz="0" ixz="-6.3759478821e-06"/>
   </inertial>
   <visual>
     <origin xyz="-0.077819 -0.055558 -0.173765" rpy="0 0 0"/>
@@ -272,8 +287,8 @@
 <link name="${prefix}servo_wrist_rotation_1">
   <inertial>
     <origin xyz="-0.01512262078899361 -0.010248404686314716 -0.018164491466766297" rpy="0 0 0"/>
-    <mass value="0.0658962961901927"/>
-    <inertia ixx="1.4e-05" iyy="1.8e-05" izz="1e-05" ixy="0.0" iyz="-0.0" ixz="0.0"/>
+    <mass value="0.056"/>
+    <inertia ixx="1.18974820335e-05" iyy="1.52967626146e-05" izz="8.49820145253e-06" ixy="0" iyz="-0" ixz="0"/>
   </inertial>
   <visual>
     <origin xyz="-0.137219 -0.084458 -0.202765" rpy="0 0 0"/>
@@ -288,11 +303,13 @@
   </collision>
 </link>
 
+</xacro:unless>
+<xacro:if value="${has_wrist_camera}">
 <link name="${prefix}camera_adapter_1">
   <inertial>
     <origin xyz="-0.015133427944392153 -0.00999962387213657 0.00491529865458315" rpy="0 0 0"/>
-    <mass value="0.011514241"/>
-    <inertia ixx="2.68600122e-06" iyy="2.21200101e-06" izz="4.26600194e-06" ixy="0" iyz="-0" ixz="-0"/>
+    <mass value="0.0117928113468"/>
+    <inertia ixx="2.75098512048e-06" iyy="2.26551716347e-06" izz="4.36921166435e-06" ixy="0" iyz="-0" ixz="-0"/>
   </inertial>
   <visual>
     <origin xyz="-0.135219 -0.084908 -0.220165" rpy="0 0 0"/>
@@ -310,8 +327,8 @@
 <link name="${prefix}camera_wing_1">
   <inertial>
     <origin xyz="0.14361888944153076 0.3347919124721062 -0.15696687867817244" rpy="0 0 0"/>
-    <mass value="0.0104777712"/>
-    <inertia ixx="4.26511024e-06" iyy="3.94917615e-06" izz="1.42170341e-06" ixy="0" iyz="-0" ixz="7.89835229e-07"/>
+    <mass value="0.0107312656645"/>
+    <inertia ixx="4.36829839097e-06" iyy="4.04472073427e-06" izz="1.45609946024e-06" ixy="0" iyz="-0" ixz="8.08944145831e-07"/>
   </inertial>
   <visual>
     <origin xyz="0.025688 0.259707 -0.40513" rpy="0 0 0"/>
@@ -345,6 +362,8 @@
   </collision>
 </link>
 
+
+</xacro:if>
 <!-- Wrist flange: the mount contract for tool packages (docs/tool-convention.md).
      Massless frame on the wrist-roll servo's output horn; the active tool bolts
      its root link here with an identity fixed joint. +X outward, +Z up. -->
@@ -364,11 +383,13 @@
   <child link="${prefix}servo_base_1"/>
 </joint>
 
+<xacro:if value="${base_housing}">
 <joint name="${prefix}fixed_base_cover_1" type="fixed">
   <origin xyz="-0.038504194 -0.014879779 0.033800344" rpy="0 0 0"/>
   <parent link="${prefix}base_link"/>
   <child link="${prefix}base_cover_1"/>
 </joint>
+</xacro:if>
 
 <joint name="${prefix}joint_base" type="revolute">
   <origin xyz="0.029 -0.01025 0.0032" rpy="0 0 0"/>
@@ -403,6 +424,7 @@
 </joint>
 
 <!-- Forearm rail advance (editable via elbow_ext_length). -->
+<xacro:unless value="${is_7dof}">
 <joint name="${prefix}fixed_wrist_servo_adapter_1" type="fixed">
   <origin xyz="${forearm_advance} 0.0 0.0" rpy="0 0 0"/>
   <parent link="${prefix}forearm_extrusion_1"/>
@@ -465,6 +487,9 @@
   <dynamics damping="${joint_damping}" friction="${joint_friction}"/>
 </joint>
 
+</xacro:unless>
+<xacro:if value="${is_7dof}"><xacro:mod101_wrist_7dof prefix="${prefix}"/></xacro:if>
+<xacro:if value="${has_wrist_camera}">
 <joint name="${prefix}fixed_camera_adapter_1" type="fixed">
   <origin xyz="0.0574 0.02935 0.0464" rpy="0 0 0"/>
   <parent link="${prefix}wrist_roll_adapter_1"/>
@@ -499,27 +524,36 @@
   <parent link="${prefix}wrist_camera_v1_1"/>
   <child link="${prefix}wrist_camera_optical_frame"/>
 </joint>
+</xacro:if>
+
 
 <xacro:if value="${use_sim}">
-  <xacro:mod101_arm_ros2control prefix="${prefix}"/>
-  <xacro:mod101_arm_gazebo prefix="${prefix}"/>
+  <xacro:if value="${with_ros2_control}">
+    <xacro:mod101_arm_ros2control prefix="${prefix}" arm_dof="${arm_dof}"/>
+  </xacro:if>
+  <xacro:mod101_arm_gazebo prefix="${prefix}" arm_dof="${arm_dof}" wrist_camera="${has_wrist_camera}" base_housing="${base_housing}"/>
 </xacro:if>
 
 <!-- Active end-effector. Each tool macro bolts its root link to wrist_flange
      and contributes its own joints, ros2_control block and gazebo extensions.
      Its controllers come from mod101.xacro's plugin block; its runtime nodes
      from mod101_tool_<tool>/launch/tool.launch.py. -->
+<xacro:if value="${tool == 'pggripper'}"><xacro:mod101_tool_pggripper prefix="${prefix}" use_sim="${use_sim}" with_ros2_control="${with_ros2_control}"/></xacro:if>
 <xacro:if value="${tool == 'parallel'}">
-  <xacro:mod101_tool_parallel prefix="${prefix}" use_sim="${use_sim}"/>
+  <xacro:mod101_tool_parallel prefix="${prefix}" use_sim="${use_sim}" with_ros2_control="${with_ros2_control}"/>
 </xacro:if>
 <xacro:if value="${tool == 'pincopen'}">
-  <xacro:mod101_tool_pincopen prefix="${prefix}" use_sim="${use_sim}"/>
+  <xacro:mod101_tool_pincopen prefix="${prefix}" use_sim="${use_sim}" with_ros2_control="${with_ros2_control}"/>
 </xacro:if>
 <xacro:if value="${tool == 'jaws'}">
-  <xacro:mod101_tool_jaws prefix="${prefix}" use_sim="${use_sim}"/>
+  <xacro:mod101_tool_jaws prefix="${prefix}" use_sim="${use_sim}" with_ros2_control="${with_ros2_control}"/>
 </xacro:if>
 <xacro:if value="${tool == 'none'}">
-  <xacro:mod101_tool_none prefix="${prefix}" use_sim="${use_sim}"/>
+  <xacro:mod101_tool_none prefix="${prefix}" use_sim="${use_sim}" with_ros2_control="${with_ros2_control}"/>
+</xacro:if>
+
+<xacro:if value="${tool == 'camera'}">
+  <xacro:mod101_tool_camera prefix="${prefix}" use_sim="${use_sim}" with_ros2_control="${with_ros2_control}" sensor="${camera_sensor}" gopro="${camera_gopro}"/>
 </xacro:if>
 
 </xacro:macro>

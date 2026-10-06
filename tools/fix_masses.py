@@ -5,7 +5,7 @@ WHY
 ---
 The Fusion export assigned **steel (7.85 g/cm^3) to every part**. Check it:
 base_link 0.8668 kg / 110.5 cm^3 = 7.85; jaws_body 0.4470 / 57.0 = 7.85.
-Printed PLA-CF parts come out 6-11x too heavy, which makes every dynamics
+Printed PETG parts come out 6-11x too heavy, which makes every dynamics
 result and every MoveIt effort/acceleration limit wrong.
 
 mod101 already ships `tools/estimate_masses.py` and a generated
@@ -48,7 +48,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 
-RHO_PLACF = 1.24
+RHO_PETG = 1.27
 INFILL = 0.15
 T_WALL = 0.16
 
@@ -57,7 +57,7 @@ STEEL_LO, STEEL_HI = 7.4, 8.3     # implied-density window that marks a bad expo
 # Bought parts exported at steel density: force the datasheet value instead of
 # the printed-shell estimate.
 BOUGHT_G = {
-    'jaws_servo': 66.0,           # STS3215 on the jaws gripper, same as the arm servos
+    'jaws_servo': 56.0,           # STS3215 on the jaws gripper, same as the arm servos
     # Camera module (electronics), not a print. Its implied density lands in the
     # steel window only by coincidence — 2.1 cm^3 x 7.85 = 16.5 g — and 16.6 g
     # is the value the configurator already assumes (M_CAMERA). Listed here so
@@ -160,7 +160,7 @@ def main():
                 src = 'bought'
             else:
                 v_sh = min(v, a*T_WALL)
-                new = RHO_PLACF*(v_sh + INFILL*max(0.0, v - v_sh))/1000.0
+                new = RHO_PETG*(v_sh + INFILL*max(0.0, v - v_sh))/1000.0
                 src = 'printed'
             k = new/old
             rows.append((f, name, old, new, src, v))

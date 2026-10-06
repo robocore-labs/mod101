@@ -13,7 +13,7 @@
 -->
 <robot name="mod101" xmlns:xacro="http://www.ros.org/wiki/xacro">
 
-<xacro:arg name="tool"   default="jaws"/>
+<xacro:include filename="$(find mod101_description)/urdf/mod101_config.xacro"/>
 <xacro:arg name="prefix" default=""/>
 
 <xacro:include filename="$(find mod101_moveit_config)/srdf/mod101_arm_srdf.xacro"/>
@@ -23,6 +23,6 @@
      mod101_arm_srdf.xacro directly and declare their own virtual joint. -->
 <virtual_joint name="virtual_joint" type="fixed" parent_frame="world" child_link="world"/>
 
-<xacro:mod101_arm_srdf prefix="$(arg prefix)" tool="$(arg tool)"/>
+<xacro:mod101_arm_srdf prefix="$(arg prefix)" tool="$(arg tool)" camera_gopro="$(arg camera_gopro)" arm_dof="$(arg arm_dof)" wrist_camera="$(arg wrist_camera)"/>
 
 </robot>

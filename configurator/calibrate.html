@@ -655,6 +655,9 @@ const DEFAULT_MAP = {
   7: { ros:"hn_pan_joint",     lerobot:"head_pan",      sign:+1, model:"sts3215" },
   8: { ros:"hn_tilt_joint",    lerobot:"head_tilt",     sign:+1, model:"sts3215" },
 };
+// Reserved default ID for the additional 7DOF wrist actuator. IDs 1..8 keep
+// their existing roles; the mapping remains editable for a different bus.
+DEFAULT_MAP[9] = {ros:"joint_wrist_yaw", lerobot:"wrist_yaw", sign:+1, model:"sts3215"};
 const MAP_KEY = "mod101.calibration.map";
 let jointMap = loadMap();
 function loadMap(){

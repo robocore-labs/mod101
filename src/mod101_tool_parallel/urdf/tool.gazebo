@@ -4,7 +4,7 @@
 <xacro:macro name="mod101_tool_parallel_gazebo" params="prefix:=''">
 
   <gazebo reference="${prefix}Parallel_gripper_assembly_v1_1">
-    <material>Gazebo/Green</material>
+    <!-- Per-visual URDF materials keep the case green and the internal servo black. -->
     <mu1>0.2</mu1>
     <mu2>0.2</mu2>
     <self_collide>true</self_collide>

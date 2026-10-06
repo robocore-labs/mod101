@@ -60,3 +60,6 @@ dist/
 # either way they are not this repo's content.
 /src/hardware/ros2_control_bridge
 /src/hardware/ros2_feetech_manager
+
+# Local CAD validation, preview and runtime artifacts
+/tmp/

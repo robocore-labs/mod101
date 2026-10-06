@@ -18,6 +18,7 @@ claim rather than assuming it.
   4. Joint-space plan                      -> OMPL pipeline works end to end
 """
 
+import argparse
 import math
 import sys
 
@@ -52,7 +53,13 @@ def robot_state(positions):
 
 
 def main():
-    rclpy.init()
+    opts = argparse.ArgumentParser()
+    opts.add_argument('--arm-dof', type=int, choices=(6, 7), default=6)
+    variant, ros_args = opts.parse_known_args()
+    if variant.arm_dof == 7:
+        ARM.insert(3, 'joint_wrist_yaw')
+        READY.insert(3, 0.0)
+    rclpy.init(args=ros_args)
     node = Node('mod101_moveit_smoke')
 
     fk = node.create_client(GetPositionFK, '/compute_fk')
@@ -92,7 +99,7 @@ def main():
     req.ik_request.group_name = 'arm'
     req.ik_request.ik_link_name = TIP
     req.ik_request.pose_stamped = target
-    req.ik_request.robot_state = robot_state([0.0] * 5)
+    req.ik_request.robot_state = robot_state([0.0] * len(ARM))
     req.ik_request.timeout.sec = 2
     req.ik_request.avoid_collisions = True
     res = call(ik, req)
@@ -114,7 +121,7 @@ def main():
                   f'q=[{", ".join(f"{sol[j]:.3f}" for j in ARM)}]')
     else:
         detail = f'error_code={getattr(res, "error_code", None)}'
-    check('IK to reachable pose (position-only, 5-DOF)', ok, detail)
+    check(f'IK to reachable pose (position-only, {len(ARM)} arm axes)', ok, detail)
 
     # --- 3. IK to an unreachable pose ------------------------------------
     far = PoseStamped()
@@ -135,7 +142,7 @@ def main():
     mpr.allowed_planning_time = 10.0
     mpr.max_velocity_scaling_factor = 0.5
     mpr.max_acceleration_scaling_factor = 0.5
-    mpr.start_state = robot_state([0.0] * 5)
+    mpr.start_state = robot_state([0.0] * len(ARM))
     c = Constraints()
     for j, v in zip(ARM, READY):
         c.joint_constraints.append(JointConstraint(

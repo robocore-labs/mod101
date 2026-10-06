@@ -1,0 +1,14 @@
+{
+  "description": "Original configurator 6DOF reference model, retained after user confirmed the 140/140 jaws payload is bench-tested. These are reference lumped weights, not new CAD estimates. The original factor of two in pitch torque/servo/rail arithmetic is retained as a model assumption; it does not describe hardware wiring.",
+  "printed_groups_kg": {
+    "elbow": 0.156754,
+    "wrist": 0.041149,
+    "gripper": 0.071317
+  },
+  "pitch_capacity_multiplier": 2,
+  "rail_mass_multiplier": 2,
+  "pitch_servo_mass_multiplier": 2,
+  "shoulder_fixed_m": 0.05,
+  "elbow_fixed_m": 0.05,
+  "wrist_tool_m": 0.126
+}

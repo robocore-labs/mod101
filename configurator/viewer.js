@@ -14,7 +14,7 @@ import URDFLoader from 'urdf-loader';
 
 // Display order for the arm's canonical joints; tool joints sort after, by
 // name. Shared so the slider list and the calibration rail agree.
-export const ARM_ORDER = ['joint_base', 'joint_shoulder', 'joint_elbow',
+export const ARM_ORDER = ['joint_base', 'joint_shoulder', 'joint_elbow', 'joint_wrist_yaw',
                           'joint_wrist_tilt', 'joint_wrist_roll'];
 
 export function jointOrder(a, b) {

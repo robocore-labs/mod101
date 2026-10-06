@@ -34,6 +34,12 @@ joint_limits:
     has_acceleration_limits: true
     max_acceleration: 2.5
 
+  joint_wrist_yaw:
+    has_velocity_limits: true
+    max_velocity: 1.5
+    has_acceleration_limits: true
+    max_acceleration: 3.0
+
   joint_wrist_tilt:
     has_velocity_limits: true
     max_velocity: 1.5

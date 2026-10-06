@@ -36,7 +36,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT_DIR = ROOT / 'src' / 'mod101_moveit_config' / 'config' / 'collisions'
-TOOLS = ('jaws', 'parallel', 'pincopen', 'none')
+TOOLS = ('jaws', 'parallel', 'pincopen', 'none', 'camera', 'pggripper')
 
 # Build args forwarded to the URDF. The configurator owns them, so read them
 # back from the file it writes rather than hardcoding. They used to live in
@@ -66,7 +66,7 @@ HEADER = """<?xml version="1.0"?>
   why this can't be a static file.
 -->
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
-<xacro:macro name="mod101_collisions_{tool}" params="prefix:=''">
+<xacro:macro name="mod101_collisions_{tool}{suffix}" params="prefix:='' wrist_camera:='true'{options}">
 """
 
 FOOTER = """</xacro:macro>
@@ -216,6 +216,8 @@ def generate(tool, trials, args):
         pairs = re.findall(r'<disable_collisions[^/]*/>', srdf_out.read_text())
 
     # Re-emit prefix-parameterised so multi-arm robots can reuse the macro.
+    direct_pairs = {frozenset((j.find('parent').get('link'), j.find('child').get('link')))
+                    for j in ET.fromstring(urdf_text).findall('joint')}
     body = []
     counts = {'default': 0, 'never': 0, 'always': 0}
     sampled = set()
@@ -227,6 +229,8 @@ def generate(tool, trials, args):
         r = (reason.group(1) if reason else '').lower()
         counts['never' if r == 'never' else
                'always' if r == 'always' else 'default'] += 1
+        if r == 'adjacent' and frozenset((l1, l2)) not in direct_pairs:
+            p = p.replace('reason="Adjacent"', 'reason="Manual: fixed-component hinge neighbours"')
         p = re.sub(r'(link[12]=")', r'\1${prefix}', p)
         body.append('  ' + p)
 
@@ -245,16 +249,30 @@ def generate(tool, trials, args):
             f'link2="${{prefix}}{b}" reason="{why}"/>'
             for (a, b), why in extra] + [''] + body
 
+    # Rigid adjacency can span fixed joints; keep provenance truthful for
+    # consumers that reserve reason Adjacent for a direct URDF edge.
+    body = [line.replace('reason="Adjacent"', 'reason="Manual: fixed-component hinge neighbours"')
+            if 'reason="Adjacent"' in line and frozenset(re.findall(r'link[12]="\$\{prefix\}([^"]+)"', line)) not in direct_pairs
+            else line for line in body]
+    camera_links = {'camera_adapter_1', 'camera_wing_1', 'wrist_camera_v1_1', 'wrist_camera_optical_frame'}
+    body = [f'  <xacro:if value="${{str(wrist_camera).lower() == \'true\'}}">\n{line}\n  </xacro:if>'
+            if camera_links.intersection(re.findall(r'link[12]="\$\{prefix\}([^"]+)"', line)) else line
+            for line in body]
+    if tool == 'camera':
+        gopro_links = {'camera_tool_gopro', 'camera_tool_gopro_optical_frame'}
+        body = [f'  <xacro:if value="${{str(camera_gopro).lower() == \'true\'}}">\n{line}\n  </xacro:if>'
+                if gopro_links.intersection(re.findall(r'link[12]="\$\{prefix\}([^"]+)"', line)) else line
+                for line in body]
     ntotal = nlinks * (nlinks - 1) // 2
 
     header = HEADER.format(
-        tool=tool,
+        tool=tool, options=" camera_gopro:='true'" if tool == "camera" else "", suffix="_7dof" if args.get("arm_dof") == "7" else "",
         build=' '.join(f'{k}={v}' for k, v in args.items()),
         npairs=len(pairs) + len(extra), ntotal=ntotal or '?',
         ndefault=counts['default'] + counts['always'],
         nnever=counts['never'], nrigid=len(extra), trials=trials)
 
-    (OUT_DIR / f'{tool}.srdf.xacro').write_text(
+    (OUT_DIR / (f'{tool}.7dof.srdf.xacro' if args.get('arm_dof') == '7' else f'{tool}.srdf.xacro')).write_text(
         header + '\n'.join(body) + '\n' + FOOTER)
     print(f'    {len(pairs) + len(extra)} pairs disabled '
           f'({counts["default"] + counts["always"]} adjacent/always, '
@@ -263,6 +281,7 @@ def generate(tool, trials, args):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument('--arm-dof', choices=('6', '7'), action='append', help='variant (repeatable); default both')
     ap.add_argument('--tool', choices=TOOLS, action='append',
                     help='only this tool (repeatable); default all')
     ap.add_argument('--trials', type=int, default=10000,
@@ -292,8 +311,9 @@ def main():
     if opts.out_dir:
         OUT_DIR = pathlib.Path(opts.out_dir)
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    for tool in (opts.tool or TOOLS):
-        generate(tool, opts.trials, args)
+    for dof in (opts.arm_dof or ('6', '7')):
+        for tool in (opts.tool or TOOLS):
+            generate(tool, opts.trials, {**args, 'arm_dof': dof, 'wrist_camera': 'true', **({'camera_gopro': 'true'} if tool == 'camera' else {})})
 
 
 if __name__ == '__main__':

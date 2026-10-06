@@ -62,7 +62,7 @@
     grid-template-columns: minmax(0, 1fr) 452px;
     gap: 12px;
   }
-  .col { min-height: 0; display: flex; flex-direction: column; gap: 12px; }
+  .col { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 12px; }
   .col-right { overflow-y: auto; padding-right: 2px; }
   .col-viewer .panel { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 
@@ -154,7 +154,7 @@
     letter-spacing: 1.2px;
     font-weight: 500;
   }
-  .input-row input[type=range] { flex: 1; accent-color: var(--accent); }
+  .input-row input[type=range] { min-width: 0; flex: 1; accent-color: var(--accent); }
   .input-row input[type=number],
   .input-row select,
   #tool-select {
@@ -170,6 +170,47 @@
   .input-row select { flex: 1; min-width: 0; }
   #tool-select { flex: 1; min-width: 0; }
   .input-row > span { color: var(--text-quaternary); font-size: 11px; font-family: var(--font-mono); }
+
+  .toggle-setting { display: flex; align-items: center; gap: 10px; flex: 1; }
+  .switch {
+    appearance: none;
+    position: relative;
+    width: 34px;
+    height: 20px;
+    margin: 0;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-pill);
+    background: var(--bg-surface);
+    cursor: pointer;
+    transition: background .15s ease, border-color .15s ease;
+  }
+  .switch::after {
+    content: "";
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    top: 3px;
+    left: 3px;
+    border-radius: 50%;
+    background: var(--text-tertiary);
+    transition: transform .15s ease, background .15s ease;
+  }
+  .switch:checked { background: var(--accent); border-color: var(--accent); }
+  .switch:checked::after { transform: translateX(14px); background: #fff; }
+  .switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  .toggle-state { font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary); }
+  .toggle-state::after { content: "Disabled"; }
+  .switch:checked + .toggle-state::after { content: "Enabled"; }
+  .config-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    border-top: 1px solid var(--border-hairline);
+    margin-top: 16px;
+    padding-top: 15px;
+  }
+  .config-actions button { padding: 9px 12px; letter-spacing: 1px; }
+  .config-actions #save { grid-column: 1 / -1; }
 
   .presets { display: flex; gap: 8px; margin: 4px 0 2px; flex-wrap: wrap; }
   .presets button { padding: 6px 14px; font-size: 10px; }
@@ -360,7 +401,8 @@
     .col-viewer { min-height: 62vh; }
   }
   @media (max-width: 1000px) {
-    .cols { grid-template-columns: 1fr; }
+    header.top { flex-wrap: wrap; }
+    .cols { grid-template-columns: minmax(0, 1fr); }
     .numbers { grid-template-columns: 1fr; }
     #viewer { height: 55vh; flex: none; }
     /* stack the pose controls under the viewer on narrow screens */
@@ -402,26 +444,32 @@
             <button id="home" class="ghost" style="margin-top: 8px; width: 100%;">Home (ready pose)</button>
           </div>
         </div>
-        <div class="viewer-bar">
-          <button id="reload" class="ghost">Reload preview</button>
-          <button id="save">Save to xacro</button>
-          <button id="regen" class="ghost">Rebuild MoveIt config</button>
-          <span class="note" id="viewer-status">Loading URDF…</span>
-          <span class="note" id="copy-feedback"></span>
-        </div>
-        <div id="collision-status" hidden></div>
+        <p class="note" id="viewer-status">Loading URDF…</p>
       </div>
     </div>
 
     <!-- Right — configuration on top, the numbers below -->
     <div class="col col-right">
 
-      <div class="panel">
+      <div class="panel" id="configuration-panel">
         <h2>Configuration</h2>
+        <div class="input-row">
+          <label for="arm-dof">Arm variant</label>
+          <select id="arm-dof"><option value="6">6DOF</option><option value="7">7DOF · wrist yaw</option></select>
+        </div>
+        <div class="input-row">
+          <label for="wrist-camera">Wrist camera</label>
+          <div class="toggle-setting">
+            <input id="wrist-camera" class="switch" type="checkbox" checked>
+            <span class="toggle-state" aria-hidden="true"></span>
+          </div>
+        </div>
         <div class="input-row">
           <label>end-effector tool</label>
           <select id="tool-select"></select>
         </div>
+
+        <div id="tool-options" hidden></div>
 
         <h2 class="divide">Reference builds</h2>
         <div class="presets">
@@ -455,11 +503,19 @@
         </div>
         <p class="note">Practical bounds ~80–280 mm/segment. Below 80 the brackets collide; above 280 the shoulder stalls under arm weight alone.</p>
 
+        <div class="config-actions">
+          <button id="save">Save to xacro</button>
+          <button id="reload" class="ghost">Reload preview</button>
+          <button id="regen" class="ghost">Rebuild MoveIt</button>
+        </div>
+        <p class="note" id="copy-feedback"></p>
+        <div id="collision-status" hidden></div>
+
         <details class="footnote">
           <summary>xacro args</summary>
           <pre id="snippet"></pre>
           <button id="copy" class="ghost">Copy snippet</button>
-          <p class="note">Served by <code>configurator/server.py</code>, Save writes all four args to <code>src/mod101_description/urdf/mod101.xacro</code>; rebuild <code>mod101_description</code> for sim. Without the server, only Copy works.</p>
+          <p class="note">Served by <code>configurator/server.py</code>, Save writes the build settings to <code>src/mod101_description/urdf/mod101_config.xacro</code>; rebuild <code>mod101_description</code> for sim. Without the server, only Copy works.</p>
         </details>
       </div>
 
@@ -469,7 +525,7 @@
           <h2>Payload <span id="masses-badge"></span></h2>
           <table>
             <tr class="headline">
-              <td>Rated <span class="note" style="margin:0">(duty · full)</span></td>
+              <td>Estimate <span class="note" style="margin:0">(duty · full)</span></td>
               <td class="num" id="p-headline" colspan="2" style="white-space:nowrap;"></td>
             </tr>
             <tr><th>regime</th><th>full</th><th>@ 70 %</th></tr>
@@ -482,11 +538,12 @@
         <div class="panel">
           <h2>Reach</h2>
           <table class="reach-table">
-            <tr class="headline"><td>Max reach (full)</td>  <td class="num" id="r-full"></td></tr>
+            <tr class="headline"><td>Extended reach</td>  <td class="num" id="r-full"></td></tr>
             <tr><td>Working (70 %)</td>                       <td class="num" id="r-70"></td></tr>
-            <tr><td>Actuated mass</td>                        <td class="num" id="m-total"></td></tr>
+            <tr><td>Model mass estimate</td>                        <td class="num" id="m-total"></td></tr>
             <tr><td>Servo cost (est.)</td>                    <td class="num" id="cost-total"></td></tr>
           </table>
+          <p class="note">Existing 6DOF/jaws model retained. Other tools and 7DOF apply CAD mass and lever corrections. 70% scales levers. 7DOF predictions need bench validation.</p>
           <p class="note" id="cost-breakdown"></p>
         </div>
       </div>
@@ -509,8 +566,6 @@
 // CAD calibration — they are first-order placeholders kept in ONE place.
 // ============================================================================
 
-const G           = 9.81;     // m/s^2
-const EXT_DENSITY = 0.46;     // kg/m, one 2020 aluminium rail
 const KGCM        = 0.0980665; // kg·cm -> N·m
 
 // Motor table. stall torque (N·m), body mass (kg), price (USD), URDF mount.
@@ -520,10 +575,6 @@ const MOTORS = {
   ST3120:  { stall: 120 * KGCM, mass: 0.210, price: 60, mount: 'big'  },  // peak 120 kg·cm
 };
 const MOTOR_KEYS = ['STS3215', 'STS3250', 'ST3120'];
-
-// Mount-induced downstream lever extension Δ (m) when a joint is 'big'.
-// MUST match the URDF's delta_shoulder / delta_elbow (single source of truth).
-const DELTA = { shoulder: 0.015, elbow: 0.030 };
 
 // Regimes: fraction of stall torque. Lead with duty (rated headline).
 const REGIMES = [
@@ -539,102 +590,81 @@ const PRESETS = {
   L: { shoulder: 'ST3120',  elbow: 'ST3120'  },  // dual big
 };
 
-// First-order fixed geometry (m). Calibrate against CAD.
-const L1_FIXED = 0.050;  // shoulder axis -> upper-arm rail start + bracket
-const L2_FIXED = 0.050;  // elbow axis -> forearm rail start + bracket
-const W_WRIST  = 0.126;  // forearm tip -> payload point (wrist tilt+roll+gripper)
-
-// Printed-part groups -> link_masses.json stems (Part C output).
-const GROUP = {
-  elbow:   ['shoulder_elbow_body_1', 'elbow_fork_1', 'elbow_servo_adapter_L_1',
-            'elbow_servo_adapter_R_1', 'elbow_wrist_body_1'],
-  wrist:   ['wrist_tilt_body_1', 'camera_tilter_1', 'camera_mount_1'],
-  gripper: ['Parallel_gripper_assembly_v1_1', 'left_jaw_v1_1', 'right_jaw_v1_1'],
-};
-// Lumped fallbacks (kg) when link_masses.json is absent — sums of the geometric
-// estimate at default profile (shows an "estimated masses" badge in that case).
-const FALLBACK = { elbow: 0.157, wrist: 0.041, gripper: 0.071 };
-const M_CAMERA = 0.0166; // wrist camera PCB (electronics, not printed)
-
-let MASSES = null;       // {stem: {mass_g}} from /masses, or null
-let MASSES_REAL = false; // true once /masses returns real data
-
-// --- helpers ----------------------------------------------------------------
+// Payload comes from the same expanded URDF as the live preview: all link
+// masses, COMs, actual selected lengths, and the additional wrist are included.
 const $ = id => document.getElementById(id);
-const fmtG  = kg => (kg * 1000).toFixed(0) + ' g';
-const fmtMM = m  => (m * 1000).toFixed(0) + ' mm';
-
-// kg for one printed group: real JSON if present, else fallback constant.
-function groupMass(name) {
-  if (MASSES) {
-    let g = 0;
-    for (const stem of GROUP[name]) {
-      const e = MASSES[stem];
-      if (e && typeof e.mass_g === 'number') g += e.mass_g;
+const fmtG = kg => (kg * 1000).toFixed(0) + ' g';
+const fmtMM = m => (m * 1000).toFixed(0) + ' mm';
+let TOOL_SCHEMAS = {}, TOOL_VALUES = {};
+function activeToolOptions() {
+  const options = TOOL_SCHEMAS[$('tool-select').value]?.options || {};
+  return Object.fromEntries(Object.entries(options).map(([key, spec]) =>
+    [key, TOOL_VALUES[key] ?? spec.default]));
+}
+function renderToolOptions() {
+  const host = $('tool-options');
+  host.replaceChildren();
+  const options = TOOL_SCHEMAS[$('tool-select').value]?.options || {};
+  host.hidden = Object.keys(options).length === 0;
+  for (const [key, spec] of Object.entries(options)) {
+    const row = document.createElement('div'); row.className = 'input-row';
+    const label = document.createElement('label'); label.htmlFor = `tool-option-${key}`;
+    label.textContent = spec.label; row.append(label);
+    const value = TOOL_VALUES[key] ?? spec.default;
+    let input;
+    if (spec.type === 'enum') {
+      input = document.createElement('select');
+      for (const choice of spec.choices) {
+        const option = document.createElement('option'); option.value = choice.value;
+        option.textContent = choice.label; input.append(option);
+      }
+      input.value = value; row.append(input);
+    } else if (spec.type === 'boolean') {
+      const box = document.createElement('div'); box.className = 'toggle-setting';
+      input = document.createElement('input'); input.type = 'checkbox';
+      input.className = 'switch'; input.checked = value;
+      const state = document.createElement('span'); state.className = 'toggle-state';
+      state.setAttribute('aria-hidden', 'true'); box.append(input, state); row.append(box);
     }
-    if (g > 0) return g / 1000;
+    if (!input) continue;
+    input.id = `tool-option-${key}`;
+    input.addEventListener('change', () => {
+      TOOL_VALUES[key] = spec.type === 'boolean' ? input.checked : input.value;
+      update();
+    });
+    host.append(row);
   }
-  return FALLBACK[name];
 }
 
-// Core static model. Returns per-(regime,reach) binding payload + which joint
-// binds, plus the mass/reach breakdown.
+let MASSES = null, MASSES_REAL = false;
+let PAYLOAD = null, payloadTimer, payloadSequence = 0;
 function compute() {
-  const L_s = Number($('shoulder-num').value) / 1000;
-  const L_e = Number($('elbow-num').value) / 1000;
-  const shMotor = $('shoulder-motor').value;
-  const elMotor = $('elbow-motor').value;
-  const bigSh = MOTORS[shMotor].mount === 'big';
-  const bigEl = MOTORS[elMotor].mount === 'big';
-
-  // Effective link lengths (mount Δ lengthens the lever — physically correct).
-  const L1 = L1_FIXED + L_s + (bigSh ? DELTA.shoulder : 0);
-  const L2 = L2_FIXED + L_e + (bigEl ? DELTA.elbow : 0);
-  const w  = W_WRIST;
-  const reach = L1 + L2 + w;
-
-  // Masses (kg).
-  const mRailS  = 2 * EXT_DENSITY * L_s;        // two single rails
-  const mRailE  = 2 * EXT_DENSITY * L_e;        // dual rail
-  const mElbow  = groupMass('elbow')   + 2 * MOTORS[elMotor].mass;   // 2 elbow servos
-  const mWrist  = groupMass('wrist')   + groupMass('gripper')
-                + 2 * MOTORS.STS3215.mass       // wrist tilt + roll servos
-                + MOTORS.STS3215.mass            // gripper servo
-                + M_CAMERA;
-  const mTotal  = mRailS + mRailE + mElbow + mWrist;
-
-  // Self-weight moment about each pitch axis at FULL extension (k=1).
-  const bracketS = mRailS * (L1 / 2) + mElbow * L1
-                 + mRailE * (L1 + L2 / 2) + mWrist * (L1 + L2 + w / 2);
-  const bracketE = mRailE * (L2 / 2) + mWrist * (L2 + w / 2);
-
-  // Two pitch servos share each joint.
-  const Tsh = 2 * MOTORS[shMotor].stall;
-  const Tel = 2 * MOTORS[elMotor].stall;
-  const leverS = reach;       // shoulder axis -> payload
-  const leverE = L2 + w;      // elbow axis -> payload
-
-  // P(k) = (T*f/(G*k) - bracket) / lever, levers scale with reach ratio k.
-  function cap(T, f, k, bracket, lever) {
-    return (T * f / (G * k) - bracket) / lever;
-  }
-
   const out = {};
-  for (const { key, factor } of REGIMES) {
-    for (const [k, tag] of [[1.0, 'full'], [0.7, '70']]) {
-      const ps = cap(Tsh, factor, k, bracketS, leverS);
-      const pe = cap(Tel, factor, k, bracketE, leverE);
-      const binding = Math.min(ps, pe);
-      out[`${key}-${tag}`] = {
-        payload: binding,
-        joint: ps <= pe ? 'shoulder' : 'elbow',
-        ps, pe,
-      };
+  for (const {key} of REGIMES) for (const tag of ['full', '70'])
+    out[`${key}-${tag}`] = {payload: null, joint: '', ps: null, pe: null};
+  return {...(PAYLOAD || {out, reach: 0, mTotal: 0}),
+    shMotor: $('shoulder-motor').value, elMotor: $('elbow-motor').value};
+}
+function requestPayload() {
+  clearTimeout(payloadTimer);
+  const sequence = ++payloadSequence;
+  PAYLOAD = null;
+  update(false);
+  payloadTimer = setTimeout(async () => {
+    try {
+      const q = new URLSearchParams({...window.previewConfig,
+        shoulder_motor: $('shoulder-motor').value, elbow_motor: $('elbow-motor').value});
+      const response = await fetch('/payload?' + q);
+      const data = await response.json();
+      if (sequence !== payloadSequence) return;
+      if (!response.ok) throw new Error(data.error);
+      PAYLOAD = data;
+      update(false);
+      $('masses-badge').textContent = '6DOF reference · PETG 15% for new wrist';
+    } catch (error) {
+      if (sequence === payloadSequence) $('masses-badge').textContent = 'Payload unavailable: ' + error.message;
     }
-  }
-
-  return { out, reach, mRailS, mRailE, mElbow, mWrist, mTotal,
-           shMotor, elMotor };
+  }, 250);
 }
 
 // --- render -----------------------------------------------------------------
@@ -651,7 +681,7 @@ function cell(id, kg) {
   }
 }
 
-function update() {
+function update(refresh = true) {
   const r = compute();
   const o = r.out;
 
@@ -666,7 +696,9 @@ function update() {
   // Headline = duty @ full.
   const head = o['duty-full'];
   const hEl = $('p-headline');
-  if (head.payload > 0) {
+  if (head.payload === null) {
+    hEl.textContent = 'Calculating…';
+  } else if (head.payload > 0) {
     hEl.textContent = fmtG(head.payload);   // binding joint shown in the note below
     hEl.classList.remove('bad'); hEl.classList.add('num');
   } else {
@@ -687,29 +719,39 @@ function update() {
   const base = MOTORS.STS3215.price;   // joint_base
   const tilt = MOTORS.STS3215.price;   // joint_wrist_tilt
   const roll = MOTORS.STS3215.price;   // joint_wrist_roll
-  const grip = MOTORS.STS3215.price;   // gripper
-  const total = base + p(r.shMotor) + p(r.elMotor) + tilt + roll + grip;
+  const toolServos = TOOL_SCHEMAS[$('tool-select').value]?.servo_count ?? ($('tool-select').value === 'none' ? 0 : 1);
+  const grip = toolServos * MOTORS.STS3215.price;   // gripper
+  const yaw = $('arm-dof').value === '7' ? base : 0;
+  const total = yaw + base + p(r.shMotor) + p(r.elMotor) + tilt + roll + grip;
   $('cost-total').textContent = `$${total}`;
   $('cost-breakdown').textContent =
-    `base 3215 ($${base}) · shoulder ${r.shMotor} ($${p(r.shMotor)}) · ` +
-    `elbow ${r.elMotor} ($${p(r.elMotor)}) · 3× wrist/gripper 3215 ($${tilt + roll + grip})`;
+    `${yaw ? 'wrist yaw 3215 ($' + yaw + ') · ' : ''}base 3215 ($${base}) · shoulder ${r.shMotor} ($${p(r.shMotor)}) · ` +
+    `elbow ${r.elMotor} ($${p(r.elMotor)}) · ${2 + toolServos}× wrist${toolServos ? "/tool" : ""} 3215 ($${tilt + roll + grip})`;
 
   // xacro snippet (the four args).
   const L_s = (Number($('shoulder-num').value) / 1000).toFixed(3);
   const L_e = (Number($('elbow-num').value) / 1000).toFixed(3);
   $('snippet').textContent =
-`<xacro:arg name="shoulder_ext_length" default="${L_s}"/>
+`<xacro:arg name="wrist_camera" default="${$('wrist-camera').checked}"/>
+<xacro:arg name="arm_dof" default="${$('arm-dof').value}"/>
+<xacro:arg name="shoulder_ext_length" default="${L_s}"/>
 <xacro:arg name="elbow_ext_length"    default="${L_e}"/>
 <xacro:arg name="shoulder_mount"      default="${MOTORS[r.shMotor].mount}"/>
 <xacro:arg name="elbow_mount"         default="${MOTORS[r.elMotor].mount}"/>`;
 
+  for (const [key, value] of Object.entries(activeToolOptions()))
+    $('snippet').textContent += `\n<xacro:arg name="${key}" default="${value}"/>`;
+
   // Publish the live config for the preview (loadUrdf reads this to render the
   // current UI state without writing the file) and schedule a debounced reload.
   window.previewConfig = {
+    arm_dof: $('arm-dof').value, wrist_camera: String($('wrist-camera').checked),
+    ...($('tool-select').value ? {tool: $('tool-select').value} : {}),
+    ...Object.fromEntries(Object.entries(activeToolOptions()).map(([k, v]) => [k, String(v)])),
     shoulder_ext_length: L_s, elbow_ext_length: L_e,
     shoulder_mount: MOTORS[r.shMotor].mount, elbow_mount: MOTORS[r.elMotor].mount,
   };
-  schedulePreview();
+  if (refresh) { requestPayload(); schedulePreview(); }
 }
 
 // Debounced live-preview reload (rebuilds the 3D view from the current config).
@@ -780,7 +822,7 @@ function renderCollisions(state) {
 
   if (btn) {
     btn.disabled    = running;
-    btn.textContent = running ? 'Rebuilding…' : 'Rebuild MoveIt config';
+    btn.textContent = running ? 'Rebuilding…' : 'Rebuild MoveIt';
     btn.classList.toggle('due', stale && !running);
   }
 
@@ -886,6 +928,9 @@ $('copy').addEventListener('click', async () => {
   }
 });
 
+$('arm-dof').addEventListener('change', () => update());
+$('wrist-camera').addEventListener('change', () => update());
+
 $('save').addEventListener('click', async () => {
   const L_s = Number($('shoulder-num').value) / 1000;
   const L_e = Number($('elbow-num').value) / 1000;
@@ -896,7 +941,7 @@ $('save').addEventListener('click', async () => {
     const resp = await fetch('/save', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ shoulder: L_s, elbow: L_e, shoulder_mount, elbow_mount }),
+      body:    JSON.stringify({ tool_options: activeToolOptions(), wrist_camera: $('wrist-camera').checked, arm_dof: Number($('arm-dof').value), shoulder: L_s, elbow: L_e, shoulder_mount, elbow_mount }),
     });
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.error || resp.statusText);
@@ -925,6 +970,8 @@ $('tool-select').addEventListener('change', async () => {
     if (!resp.ok) throw new Error(data.error || resp.statusText);
     setFeedback(`Tool set to "${data.tool}". Viewer reloaded.`, 'ok');
     pollCollisions();
+    renderToolOptions();
+    update();
     window.dispatchEvent(new CustomEvent('xacro-saved'));
   } catch (e) {
     setFeedback(`Tool switch failed: ${e.message || e}. Backend needs python3 configurator/server.py.`, 'bad');
@@ -949,6 +996,9 @@ $('tool-select').addEventListener('change', async () => {
     const [propsResp, toolResp] = await Promise.all([fetch('/load'), fetch('/tool')]);
     if (!propsResp.ok) throw new Error('load failed');
     const cfg = await propsResp.json();
+    $('arm-dof').value = String(cfg.arm_dof || 6);
+    $('wrist-camera').checked = cfg.wrist_camera !== false;
+    TOOL_VALUES = cfg.tool_options || {};
     $('shoulder-num').value    = (cfg.shoulder * 1000).toFixed(0);
     $('shoulder-slider').value = (cfg.shoulder * 1000).toFixed(0);
     $('elbow-num').value       = (cfg.elbow * 1000).toFixed(0);
@@ -958,18 +1008,21 @@ $('tool-select').addEventListener('change', async () => {
     if (cfg.elbow_mount === 'big')    $('elbow-motor').value = 'ST3120';
 
     if (toolResp.ok) {
-      const { tool, available } = await toolResp.json();
+      const { tool, available, schemas, options } = await toolResp.json();
+      TOOL_SCHEMAS = schemas || {};
+      TOOL_VALUES = {...(options || {}), ...TOOL_VALUES};
       const sel = $('tool-select');
       sel.innerHTML = '';
       for (const t of available) {
         const opt = document.createElement('option');
-        opt.value = t; opt.textContent = t;
+        opt.value = t; opt.textContent = TOOL_SCHEMAS[t]?.label || t;
         if (t === tool) opt.selected = true;
         sel.appendChild(opt);
       }
     }
+    renderToolOptions();
     setFeedback(MASSES_REAL
-      ? 'Loaded current args + real masses from disk.'
+      ? 'Loaded saved configuration. Payload uses URDF masses and estimated print weights.'
       : 'Loaded current args (using estimated masses — run tools/estimate_masses.py).',
       'ok');
     pollCollisions();
@@ -979,7 +1032,7 @@ $('tool-select').addEventListener('change', async () => {
     sel.innerHTML = '';
     for (const t of ['jaws', 'parallel', 'pincopen', 'none']) {
       const opt = document.createElement('option');
-      opt.value = t; opt.textContent = t;
+      opt.value = t; opt.textContent = TOOL_SCHEMAS[t]?.label || t;
       sel.appendChild(opt);
     }
   }

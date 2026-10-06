@@ -11,6 +11,8 @@
        so MoveIt must not plan for it — declared passive below. Range is
        -0.013 .. 0.013 m (tool.urdf.xacro:121); positive = open. -->
   <group name="${prefix}gripper">
+    <!-- Include the fixed tool mount so the end-effector is adjacent to its parent flange. -->
+    <link name="${prefix}parallel_root"/>
     <joint name="${prefix}6"/>
   </group>
 

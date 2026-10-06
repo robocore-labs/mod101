@@ -17,6 +17,7 @@ bench with graspable objects laid out in front of the arm (worlds/table.sdf).
 world:=empty restores the bare ground plane.
 """
 
+from mod101_description.tool_config import tool_option_arguments
 import os
 import re
 
@@ -38,7 +39,7 @@ from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 import xacro
 
-BUILD_ARGS = ('tool', 'shoulder_ext_length', 'elbow_ext_length',
+BUILD_ARGS = (*tool_option_arguments(), 'wrist_camera', 'arm_dof', 'tool', 'shoulder_ext_length', 'elbow_ext_length',
               'shoulder_mount', 'elbow_mount')
 
 # The bench world is the default because that is what this robot IS - an arm
@@ -212,6 +213,9 @@ def _build(context):
 
 def generate_launch_description():
     return LaunchDescription([
+        *(DeclareLaunchArgument(key, default_value='') for key in tool_option_arguments()),
+        DeclareLaunchArgument('wrist_camera', default_value=''),
+        DeclareLaunchArgument('arm_dof', default_value=''),
         DeclareLaunchArgument('tool', default_value=_configured_tool()),
         DeclareLaunchArgument('shoulder_ext_length', default_value=''),
         DeclareLaunchArgument('elbow_ext_length', default_value=''),

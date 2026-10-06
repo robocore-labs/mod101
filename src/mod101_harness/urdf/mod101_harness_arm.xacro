@@ -83,7 +83,7 @@
 
   <xacro:mod101_arm prefix="" parent="${hp}mod_101_adapter_1"
                     xyz="${arm_mount_xyz}" rpy="${arm_mount_rpy}"
-                    tool="$(arg tool)" use_sim="$(arg use_sim)"
+                    camera_sensor="$(arg camera_sensor)" camera_gopro="$(arg camera_gopro)" arm_dof="$(arg arm_dof)" wrist_camera="$(arg wrist_camera)" tool="$(arg tool)" use_sim="$(arg use_sim)"
                     shoulder_ext_length="$(arg shoulder_ext_length)"
                     elbow_ext_length="$(arg elbow_ext_length)"
                     shoulder_mount="$(arg shoulder_mount)"
@@ -153,6 +153,7 @@
       <xacro:hw_joint name="joint_base"       group="arm"/>
       <xacro:hw_joint name="joint_shoulder"   group="arm"/>
       <xacro:hw_joint name="joint_elbow"      group="arm"/>
+      <xacro:if value="${int('$(arg arm_dof)') == 7}"><xacro:hw_joint name="joint_wrist_yaw" group="arm"/></xacro:if>
       <xacro:hw_joint name="joint_wrist_tilt" group="arm"/>
       <xacro:hw_joint name="joint_wrist_roll" group="arm"/>
       <xacro:if value="$(arg head)">
@@ -169,7 +170,8 @@
   <xacro:if value="$(arg use_sim)">
     <gazebo>
       <plugin filename="gz_ros2_control-system" name="gz_ros2_control::GazeboSimROS2ControlPlugin">
-        <parameters>$(find mod101_control)/config/controllers.sim.yaml</parameters>
+        <xacro:if value="${int('$(arg arm_dof)') == 6}"><parameters>$(find mod101_control)/config/controllers.sim.yaml</parameters></xacro:if>
+        <xacro:if value="${int('$(arg arm_dof)') == 7}"><parameters>$(find mod101_control)/config/controllers.sim.7dof.yaml</parameters></xacro:if>
         <parameters>$(find mod101_harness)/config/pan_tilt_controllers.yaml</parameters>
         <xacro:if value="${'$(arg tool)' == 'parallel'}">
           <parameters>$(find mod101_tool_parallel)/config/controllers.yaml</parameters>

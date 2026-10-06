@@ -20,7 +20,7 @@
 <xacro:include filename="$(find mod101_tool_pincopen)/urdf/tool.ros2control"/>
 <xacro:include filename="$(find mod101_tool_pincopen)/urdf/tool.gazebo"/>
 
-<xacro:macro name="mod101_tool_pincopen" params="prefix:='' use_sim:='true'">
+<xacro:macro name="mod101_tool_pincopen" params="prefix:='' with_ros2_control:='true' use_sim:='true'">
 
   <xacro:property name="mesh_scale" value="0.001 0.001 0.001"/>
 
@@ -230,7 +230,9 @@
        ros2_control + gazebo extensions
        ============================================================ -->
 
+<xacro:if value="${with_ros2_control}">
 <xacro:mod101_tool_pincopen_ros2control prefix="${prefix}" use_sim="${use_sim}"/>
+</xacro:if>
 <xacro:mod101_tool_pincopen_gazebo prefix="${prefix}"/>
 
 </xacro:macro>

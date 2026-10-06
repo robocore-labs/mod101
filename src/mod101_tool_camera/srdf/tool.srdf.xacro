@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+<xacro:include filename="$(find mod101_tool_camera)/urdf/tool_config.xacro"/>
+<!-- PLANNING LEDGER: passive rigid camera tool; arm chain still terminates at
+     wrist_flange. These fixed links form a separate end-effector group, with
+     no controller/active joint. The optional GoPro links follow its URDF flag.
+     Names copied from the camera_tool URDF; sampled collision data lives in
+     the arm MoveIt package and uses the common primary-camera envelope. -->
+<xacro:macro name="mod101_tool_camera_srdf" params="prefix:='' gopro:='false'">
+  <group name="${prefix}camera_tool">
+    <link name="${prefix}camera_tool_root"/>
+    <link name="${prefix}camera_tool_holder"/>
+    <link name="${prefix}camera_tool_primary"/>
+    <xacro:if value="${str(gopro).lower() == 'true'}">
+      <link name="${prefix}camera_tool_gopro"/>
+      <link name="${prefix}camera_tool_gopro_optical_frame"/>
+    </xacro:if>
+  </group>
+  <end_effector name="${prefix}camera_tool_ee" parent_link="${prefix}wrist_flange" group="${prefix}camera_tool" parent_group="${prefix}arm"/>
+</xacro:macro>
+</robot>

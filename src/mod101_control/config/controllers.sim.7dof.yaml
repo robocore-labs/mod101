@@ -1,0 +1,43 @@
+# Six arm axes; tool package controller is unchanged.
+controller_manager:
+  ros__parameters:
+    update_rate: 100
+    use_sim_time: true
+    catch_exceptions: true
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+    arm_controller:
+      type: position_controllers/JointGroupPositionController
+    arm_trajectory_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+arm_controller:
+  ros__parameters:
+    joints:
+    - joint_base
+    - joint_shoulder
+    - joint_elbow
+    - joint_wrist_yaw
+    - joint_wrist_tilt
+    - joint_wrist_roll
+    command_interfaces:
+    - position
+    state_interfaces:
+    - position
+    open_loop_control: true
+arm_trajectory_controller:
+  ros__parameters:
+    joints:
+    - joint_base
+    - joint_shoulder
+    - joint_elbow
+    - joint_wrist_yaw
+    - joint_wrist_tilt
+    - joint_wrist_roll
+    command_interfaces:
+    - position
+    state_interfaces:
+    - position
+    - velocity
+    open_loop_control: true
+    allow_partial_joints_goal: false
+    allow_integration_in_goal_trajectories: true

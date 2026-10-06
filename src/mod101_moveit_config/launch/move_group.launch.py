@@ -17,6 +17,7 @@ Launch args:
     rviz                                      launch RViz too, default true
 """
 
+from mod101_description.tool_config import tool_option_arguments
 import os
 import re
 
@@ -30,7 +31,7 @@ from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 from moveit_configs_utils import MoveItConfigsBuilder
 
-BUILD_ARGS = ('shoulder_ext_length', 'elbow_ext_length',
+BUILD_ARGS = (*tool_option_arguments(), 'wrist_camera', 'arm_dof', 'shoulder_ext_length', 'elbow_ext_length',
               'shoulder_mount', 'elbow_mount')
 
 
@@ -72,7 +73,7 @@ def build_moveit_config(context):
         # the URDF here is byte-identical to the one the sim spawned.
         .robot_description(file_path=urdf,
                            mappings={**mappings, 'tool': tool, 'use_sim': 'true'})
-        .robot_description_semantic(file_path=srdf, mappings={'tool': tool})
+        .robot_description_semantic(file_path=srdf, mappings={**mappings, 'tool': tool})
         .robot_description_kinematics(file_path='config/kinematics.yaml')
         .joint_limits(file_path='config/joint_limits.yaml')
         .trajectory_execution(file_path='config/moveit_controllers.yaml')
@@ -80,6 +81,11 @@ def build_moveit_config(context):
         .to_moveit_configs()
     )
 
+    import xml.etree.ElementTree as ET
+    arm_dof = 7 if ET.fromstring(moveit_config.robot_description['robot_description']).find("joint[@name='joint_wrist_yaw']") is not None else 6
+    if arm_dof == 7:
+        controller = moveit_config.trajectory_execution['moveit_simple_controller_manager']['arm_trajectory_controller']
+        controller['joints'].insert(3, 'joint_wrist_yaw')
     _merge_tool_controllers(moveit_config, tool)
     return moveit_config
 
@@ -155,6 +161,9 @@ def _build(context):
 
 def generate_launch_description():
     args = [
+        *(DeclareLaunchArgument(key, default_value='') for key in tool_option_arguments()),
+        DeclareLaunchArgument("wrist_camera", default_value=""),
+        DeclareLaunchArgument("arm_dof", default_value=""),
         DeclareLaunchArgument('tool', default_value=_configured_tool()),
         # Empty = "whatever the configurator last saved": mod101_config.xacro
         # holds the defaults, and _drop_unset() below keeps unset args out of

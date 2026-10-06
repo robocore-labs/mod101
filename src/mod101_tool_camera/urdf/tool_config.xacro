@@ -1,0 +1,6 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:property name="camera_tool_schema" value="${xacro.load_yaml('$(find mod101_tool_camera)/config/configurator.yaml')}"/>
+  <xacro:arg name="camera_sensor" default="${camera_tool_schema['options']['camera_sensor']['default']}"/>
+  <xacro:arg name="camera_gopro" default="${camera_tool_schema['options']['camera_gopro']['default']}"/>
+</robot>

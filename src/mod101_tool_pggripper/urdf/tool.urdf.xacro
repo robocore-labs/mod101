@@ -1,0 +1,72 @@
+<?xml version="1.0"?>
+<!-- DESIGN LEDGER
+  Source: NormaCore hardware/pgripper/STEP/Gripper.stp, Apache-2.0 (LICENSE).
+  mm CAD assembly -> metre tool frame: X=-CAD Z, Y=CAD Y, Z=CAD X.
+  Root datum: flange contact Z=62.526906611007mm, bolt circle centre
+  CAD (24.780656572828,-2.539420714208). Identity wrist_flange mount.
+  Joint 6 is the ST3215 pinion rotation about -tool X (CAD +Z).
+  18 pinion teeth; measured rack pitch 4.15mm => pitch radius 11.888874mm.
+  Both sliders mimic motor radians into metres with opposite signs.
+  Measured STEP rib gap 50mm: meshes shifted inwards 25mm per jaw for q=0.
+  Rated stroke 27mm per jaw gives 54mm aperture. STEP pose q=25mm/radius.
+  Drive mesh phase compensates that STEP pose; jaws remain parallel throughout.
+  PETG 15% infill, 1.6mm shell, 1270kg/m3; ST3215 mass assumed 56g.
+  Hardware steel 7850kg/m3. CAD-derived COM/tensors in measurements.json.
+  Servo is explicit, counted once. Upstream optional webcam/mount excluded;
+  mod101's independent wrist-camera toggle remains available.
+  Motor torque 1.9Nm and velocity 2rad/s are provisional STS3215-family limits.
+  Uniform mass distribution and shell estimator are approximations, not weighed parts.
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:include filename="$(find mod101_tool_pggripper)/urdf/tool.ros2control"/>
+  <xacro:macro name="pggripper_physical_link" params="prefix stem material phase:=0">
+    <xacro:property name="p" value="${pg_data['parts'][stem]}"/>
+    <link name="${prefix}pggripper_${stem}">
+      <inertial>
+        <origin xyz="${p['com_m'][0]} ${cos(phase)*p['com_m'][1]-sin(phase)*p['com_m'][2]} ${sin(phase)*p['com_m'][1]+cos(phase)*p['com_m'][2]}" rpy="${phase} 0 0"/>
+        <mass value="${p['mass_kg']}"/>
+        <inertia ixx="${p['inertia']['ixx']}" iyy="${p['inertia']['iyy']}" izz="${p['inertia']['izz']}"
+                 ixy="${p['inertia']['ixy']}" ixz="${p['inertia']['ixz']}" iyz="${p['inertia']['iyz']}"/>
+      </inertial>
+      <visual><origin xyz="0 0 0" rpy="${phase} 0 0"/>
+        <geometry><mesh filename="package://mod101_tool_pggripper/meshes/${stem}.stl" scale="0.001 0.001 0.001"/></geometry>
+        <material name="${prefix}${material}"/>
+      </visual>
+      <collision><origin xyz="0 0 0" rpy="${phase} 0 0"/>
+        <geometry><mesh filename="package://mod101_tool_pggripper/meshes/${stem}.stl" scale="0.001 0.001 0.001"/></geometry>
+      </collision>
+    </link>
+  </xacro:macro>
+  <xacro:macro name="mod101_tool_pggripper" params="prefix:='' with_ros2_control:='true' use_sim:='true'">
+    <xacro:property name="pg_data" value="${xacro.load_yaml('$(find mod101_tool_pggripper)/config/measurements.json')}"/>
+    <material name="${prefix}pggripper_plastic"><color rgba="0.18 0.55 0.40 1"/></material>
+    <material name="${prefix}pggripper_motor"><color rgba="0.10 0.11 0.12 1"/></material>
+    <link name="${prefix}pggripper_root"/>
+    <joint name="${prefix}pggripper_mount" type="fixed">
+      <parent link="${prefix}wrist_flange"/><child link="${prefix}pggripper_root"/><origin xyz="0 0 0" rpy="0 0 0"/>
+    </joint>
+    <xacro:pggripper_physical_link prefix="${prefix}" stem="body" material="pggripper_plastic"/>
+    <joint name="${prefix}pggripper_body_mount" type="fixed"><parent link="${prefix}pggripper_root"/><child link="${prefix}pggripper_body"/></joint>
+    <xacro:pggripper_physical_link prefix="${prefix}" stem="servo" material="pggripper_motor"/>
+    <joint name="${prefix}pggripper_servo_mount" type="fixed"><parent link="${prefix}pggripper_body"/><child link="${prefix}pggripper_servo"/></joint>
+    <xacro:pggripper_physical_link prefix="${prefix}" stem="drive" material="pggripper_plastic" phase="${pg_data['export_angle_rad']}"/>
+    <joint name="${prefix}6" type="revolute">
+      <parent link="${prefix}pggripper_body"/><child link="${prefix}pggripper_drive"/>
+      <origin xyz="0.0482 0 0" rpy="0 0 0"/><axis xyz="-1 0 0"/>
+      <limit lower="0" upper="${pg_data['max_angle_rad']}" effort="1.9" velocity="2"/>
+    </joint>
+    <xacro:pggripper_physical_link prefix="${prefix}" stem="left_jaw" material="pggripper_plastic"/>
+    <joint name="${prefix}pggripper_left_slider" type="prismatic">
+      <parent link="${prefix}pggripper_body"/><child link="${prefix}pggripper_left_jaw"/>
+      <axis xyz="0 1 0"/><limit lower="0" upper="0.027" effort="40" velocity="${2*pg_data['pitch_radius_m']}"/>
+      <mimic joint="${prefix}6" multiplier="${pg_data['pitch_radius_m']}" offset="0"/>
+    </joint>
+    <xacro:pggripper_physical_link prefix="${prefix}" stem="right_jaw" material="pggripper_plastic"/>
+    <joint name="${prefix}pggripper_right_slider" type="prismatic">
+      <parent link="${prefix}pggripper_body"/><child link="${prefix}pggripper_right_jaw"/>
+      <axis xyz="0 1 0"/><limit lower="-0.027" upper="0" effort="40" velocity="${2*pg_data['pitch_radius_m']}"/>
+      <mimic joint="${prefix}6" multiplier="${-pg_data['pitch_radius_m']}" offset="0"/>
+    </joint>
+    <xacro:if value="${with_ros2_control}"><xacro:mod101_tool_pggripper_ros2control prefix="${prefix}" use_sim="${use_sim}" max_angle="${pg_data['max_angle_rad']}"/></xacro:if>
+  </xacro:macro>
+</robot>

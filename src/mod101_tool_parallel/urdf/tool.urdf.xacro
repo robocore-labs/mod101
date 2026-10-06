@@ -1,5 +1,16 @@
 <?xml version="1.0" ?>
 <!--
+  DESIGN LEDGER — parallel servo visual: reuses the STS3215 CAD mesh extracted
+  from mod101_7DOF.step (servo_wrist_yaw_7dof.stl), vendored as parallel_servo.stl.
+  Source mesh units mm, shaft datum at origin, shaft +Z; align with the tool X axis,
+  servo case reversed 180 degrees around tool Z through its case centre.
+  The shaft centreline remains Y=0/Z=10.7445 mm; output now faces -X.
+  Case centre and occupied bounds stay unchanged inside the cavity; the shaft
+  output face moves along its centreline from X=43.4305 to X=5.6305 mm. Placement derives from
+  mean jaw rack datums X=43.4305/Z=20.3445 mm and 9.6mm shaft-horn radius.
+  The existing combined 78g body inertial is retained; this adds visual and
+  collision geometry to that rigid link, not another actuator mass or joint.
+
   Parallel-jaw gripper tool. Follows docs/tool-convention.md:
 
     wrist_flange
@@ -16,7 +27,7 @@
 <xacro:include filename="$(find mod101_tool_parallel)/urdf/tool.ros2control"/>
 <xacro:include filename="$(find mod101_tool_parallel)/urdf/tool.gazebo"/>
 
-<xacro:macro name="mod101_tool_parallel" params="prefix:='' use_sim:='true'">
+<xacro:macro name="mod101_tool_parallel" params="prefix:='' with_ros2_control:='true' use_sim:='true'">
 
   <!-- ============================================================
        Convention root: at the bolt pattern, +X outward, +Z up.
@@ -64,6 +75,15 @@
       <geometry>
         <mesh filename="package://mod101_tool_parallel/meshes/Parallel_gripper_assembly_v1_1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
+    </collision>
+    <visual name="${prefix}parallel_servo_visual">
+      <origin xyz="0.0056305 0 0.0107445" rpy="0 -1.5707963267948966 0"/>
+      <geometry><mesh filename="package://mod101_tool_parallel/meshes/parallel_servo.stl" scale="0.001 0.001 0.001"/></geometry>
+      <material name="motor_black"/>
+    </visual>
+    <collision>
+      <origin xyz="0.0056305 0 0.0107445" rpy="0 -1.5707963267948966 0"/>
+      <geometry><mesh filename="package://mod101_tool_parallel/meshes/parallel_servo.stl" scale="0.001 0.001 0.001"/></geometry>
     </collision>
   </link>
 
@@ -134,7 +154,9 @@
        ros2_control + gazebo extensions
        ============================================================ -->
 
+<xacro:if value="${with_ros2_control}">
 <xacro:mod101_tool_parallel_ros2control prefix="${prefix}" use_sim="${use_sim}"/>
+</xacro:if>
 <xacro:mod101_tool_parallel_gazebo prefix="${prefix}"/>
 
 </xacro:macro>

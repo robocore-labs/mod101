@@ -15,6 +15,8 @@ blocks), this passes `spawn_controllers:=false` to the gazebo launch and brings
 up only the trajectory controllers.
 """
 
+import yaml
+from mod101_description.tool_config import tool_option_arguments
 import os
 import re
 
@@ -26,8 +28,16 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
-BUILD_ARGS = ('tool', 'shoulder_ext_length', 'elbow_ext_length',
+BUILD_ARGS = (*tool_option_arguments(), 'wrist_camera', 'arm_dof', 'tool', 'shoulder_ext_length', 'elbow_ext_length',
               'shoulder_mount', 'elbow_mount')
+
+
+def _tool_actuated(tool):
+    path = os.path.join(get_package_share_directory(f'mod101_tool_{tool}'), 'config', 'controllers.yaml')
+    if not os.path.exists(path):
+        return False
+    with open(path) as stream:
+        return bool(yaml.safe_load(stream))
 
 
 def _configured_tool():
@@ -74,7 +84,7 @@ def _build(context):
 
     # mod101_tool_none has no actuated end-effector.
     controllers = ['arm_trajectory_controller']
-    if tool != 'none':
+    if _tool_actuated(tool):
         controllers.append('gripper_trajectory_controller')
 
     # Timed, not event-chained — see the note in mock.launch.py and
@@ -95,6 +105,9 @@ def _build(context):
 
 def generate_launch_description():
     return LaunchDescription([
+        *(DeclareLaunchArgument(key, default_value='') for key in tool_option_arguments()),
+        DeclareLaunchArgument('wrist_camera', default_value=''),
+        DeclareLaunchArgument('arm_dof', default_value=''),
         DeclareLaunchArgument('tool', default_value=_configured_tool()),
         # Empty = "whatever the configurator last saved": mod101_config.xacro
         # holds the defaults, and _drop_unset() below keeps unset args out of
